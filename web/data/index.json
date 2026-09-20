@@ -1,0 +1,29 @@
+{
+ "region": "province-de-barcelone",
+ "generated_at": "2026-09-20T04:48:03Z",
+ "osm_data_date": "1970-01-01T00:00:00Z",
+ "durations_h": [
+  1.0
+ ],
+ "levels": {
+  "facile": {
+   "label": "tranquille"
+  },
+  "modere": {
+   "label": "soutenu modéré"
+  },
+  "soutenu": {
+   "label": "sportif"
+  }
+ },
+ "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
+ "starts": [
+  {
+   "id": "montcada-i-reixac",
+   "name": "Montcada i Reixac",
+   "lon": 2.18682,
+   "lat": 41.47998,
+   "options": 6
+  }
+ ]
+}
