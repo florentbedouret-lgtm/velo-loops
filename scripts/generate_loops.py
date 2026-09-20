@@ -166,6 +166,7 @@ class GraphHopper:
     def __init__(self, base_url: str):
         self.base = base_url.rstrip("/")
         self.http = requests.Session()
+        self.last_error = ""
 
     def info(self) -> dict:
         try:
@@ -198,10 +199,12 @@ class GraphHopper:
         try:
             r = self.http.post(f"{self.base}/route", json=body, timeout=120)
         except requests.RequestException as e:
-            print(f"    ! requête échouée : {e}", file=sys.stderr)
+            self.last_error = f"requête échouée : {e}"
             return None
         if r.status_code != 200:
+            self.last_error = f"HTTP {r.status_code} : {r.text[:200]}"
             return None
+        self.last_error = ""
         paths = r.json().get("paths") or []
         return paths[0] if paths else None
 
@@ -310,23 +313,42 @@ def score(l: Loop) -> float:
 
 # --------------------------------------------------------------------------- génération
 def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h: float, candidates, log):
+    """Retourne (candidats valides, compteur des raisons de rejet)."""
     lon, lat = start["lon"], start["lat"]
     watts = LEVELS[level]["watts"]
     target_s = duration_h * 3600.0
+    rejects = {"pas de boucle": 0, "durée": 0, "tronçons répétés": 0, "non goudronné": 0}
     flat_ms = speed_from_power(watts, 0.0) * REAL_WORLD_FACTOR
     dist = 0.8 * flat_ms * target_s            # GraphHopper dépasse souvent la distance demandée
 
-    # 1) ajustement de la distance demandée avec le 1er candidat
-    seed0, head0 = candidates[0]
+    # 1) trouver un premier candidat qui fonctionne (GraphHopper échoue parfois : départ près de la côte,
+    #    du bord de la carte, distance trop grande…), puis ajuster la distance pour viser la durée
+    fit_cand = None
+    loop = None
+    for factor in (1.0, 0.7, 0.5):
+        for seed, heading in candidates:
+            path = gh.round_trip(lon, lat, profile, dist * factor, seed, heading)
+            loop = analyse(path, level, profile, duration_h, seed, heading) if path else None
+            if loop is not None:
+                fit_cand, dist = (seed, heading), dist * factor
+                break
+        if fit_cand:
+            break
+    if fit_cand is None:
+        rejects["pas de boucle"] += 1
+        log("    GraphHopper n'a renvoyé aucune boucle exploitable pour le premier calcul"
+            + (f" ({gh.last_error})" if gh.last_error else " (boucle trop courte ou invalide)"))
+        return [], rejects
     for _ in range(4):
-        path = gh.round_trip(lon, lat, profile, dist, seed0, head0)
-        loop = analyse(path, level, profile, duration_h, seed0, head0) if path else None
-        if loop is None:
-            return []
         ratio = loop.time_s / target_s
         if abs(ratio - 1.0) <= 0.05:
             break
         dist = min(250_000.0, max(3_000.0, dist / ratio))
+        path = gh.round_trip(lon, lat, profile, dist, fit_cand[0], fit_cand[1])
+        new_loop = analyse(path, level, profile, duration_h, fit_cand[0], fit_cand[1]) if path else None
+        if new_loop is None:
+            break
+        loop = new_loop
     log(f"    paramètre de distance GraphHopper ajusté : {dist / 1000:.1f} km (la boucle réelle peut différer)")
 
     # 2) tirage des autres candidats à la distance ajustée
@@ -335,17 +357,23 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
         path = gh.round_trip(lon, lat, profile, dist, seed, heading)
         cand = analyse(path, level, profile, duration_h, seed, heading) if path else None
         if cand is None:
+            rejects["pas de boucle"] += 1
             continue
         ratio = cand.time_s / target_s
         if abs(ratio - 1.0) > TIME_TOLERANCE:          # une seule retouche de la distance par candidat
             path = gh.round_trip(lon, lat, profile, min(250_000.0, max(3_000.0, dist / ratio)), seed, heading)
             cand = analyse(path, level, profile, duration_h, seed, heading) if path else None
             if cand is None or abs(cand.time_s / target_s - 1.0) > TIME_TOLERANCE:
+                rejects["durée"] += 1
                 continue
-        if cand.overlap > MAX_OVERLAP or cand.shares["unpaved"] > MAX_UNPAVED:
+        if cand.overlap > MAX_OVERLAP:
+            rejects["tronçons répétés"] += 1
+            continue
+        if cand.shares["unpaved"] > MAX_UNPAVED:
+            rejects["non goudronné"] += 1
             continue
         pool.append(cand)
-    return pool
+    return pool, rejects
 
 
 def similarity(a: Loop, b: Loop) -> float:
@@ -363,12 +391,12 @@ def pick_options(pool: list[Loop]) -> list[tuple[str, Loop]]:
     if rest:
         flat = min(rest, key=lambda l: l.dplus_per_km)
         if flat.dplus_per_km <= best.dplus_per_km - 3.0:
-            chosen.append(("plat", flat))
+            chosen.append(("moins_de_relief", flat))
             rest = [l for l in rest if l is not flat and similarity(l, flat) < 0.6]
         if rest:
             hilly = max(rest, key=lambda l: l.dplus_per_km)
             if hilly.dplus_per_km >= best.dplus_per_km + 3.0:
-                chosen.append(("vallonne", hilly))
+                chosen.append(("plus_de_relief", hilly))
     if len(chosen) == 1 and len(pool) > 1:      # pas de contraste de relief : on propose une variante
         for l in pool[1:]:
             if similarity(l, best) < 0.6:
@@ -377,22 +405,41 @@ def pick_options(pool: list[Loop]) -> list[tuple[str, Loop]]:
     return chosen
 
 
+def relief_category(dplus_per_100km: float) -> str:
+    if dplus_per_100km < 500:
+        return "plat"
+    if dplus_per_100km < 1000:
+        return "peu vallonné"
+    if dplus_per_100km < 1600:
+        return "vallonné"
+    return "très vallonné"
+
+
+def format_duration(minutes: int) -> str:
+    return f"{minutes} min" if minutes < 60 else f"{minutes // 60} h {minutes % 60:02d}"
+
+
 def pitch(l: Loop, label: str) -> list[str]:
+    """Phrases construites uniquement à partir de mesures (aucune affirmation non vérifiée)."""
     s = l.shares
     urban = s["urban"]
     minutes = round(l.time_s / 60.0)
+    per100 = l.dplus_per_km * 100.0
     lines = [
-        f"{l.distance_m / 1000:.0f} km et {l.ascend_m:.0f} m de dénivelé positif, "
-        f"environ {minutes // 60} h {minutes % 60:02d} à un rythme « {LEVELS[l.level]['label']} »."
+        f"{l.distance_m / 1000:.0f} km, {l.ascend_m:.0f} m de dénivelé positif, "
+        f"environ {format_duration(minutes)} à un rythme « {LEVELS[l.level]['label']} »."
     ]
+    lines.append(f"Profil {relief_category(per100)} : {per100:.0f} m de D+ pour 100 km.")
     if urban["rural"] >= 0.6:
         lines.append(f"{urban['rural'] * 100:.0f} % du parcours en zone rurale.")
     if urban["city"] <= 0.05:
         lines.append("Évite les zones urbaines denses (moins de 5 % du parcours).")
     else:
-        lines.append(f"{urban['city'] * 100:.0f} % en zone urbaine dense, surtout autour du départ.")
-    if s["main_roads"] <= 0.10:
-        lines.append(f"Évite les routes principales ({s['main_roads'] * 100:.0f} % seulement).")
+        lines.append(f"{urban['city'] * 100:.0f} % du parcours en zone urbaine dense.")
+    if s["main_roads"] < 0.01:
+        lines.append("Aucune route principale sur le parcours.")
+    elif s["main_roads"] <= 0.10:
+        lines.append(f"Peu de routes principales ({s['main_roads'] * 100:.0f} % du parcours).")
     else:
         lines.append(f"{s['main_roads'] * 100:.0f} % sur des routes principales : à parcourir avec vigilance.")
     if s["dedicated_cycleway"] >= 0.10:
@@ -401,10 +448,6 @@ def pitch(l: Loop, label: str) -> list[str]:
         lines.append(f"{s['unpaved'] * 100:.0f} % sur revêtement non goudronné.")
     if l.overlap > 0.10:
         lines.append(f"{l.overlap * 100:.0f} % de tronçons empruntés deux fois.")
-    if label == "plat":
-        lines.append(f"Option plutôt plate : {l.dplus_per_km * 100:.0f} m de D+ pour 100 km.")
-    elif label == "vallonne":
-        lines.append(f"Option plus vallonnée : {l.dplus_per_km * 100:.0f} m de D+ pour 100 km.")
     return lines
 
 
@@ -515,8 +558,9 @@ def main() -> int:
                 pool: list[Loop] = []
                 for profile in LEVELS[level]["profiles"]:
                     log(f"  {duration:g} h / {level} / {profile}")
-                    found = fit_and_sample(gh, st, level, profile, duration, candidates, log)
-                    log(f"    {len(found)} candidats valides")
+                    found, rejects = fit_and_sample(gh, st, level, profile, duration, candidates, log)
+                    why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
+                    log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
                     pool.extend(found)
                 for i, (label, loop) in enumerate(pick_options(pool), start=1):
                     options.append(to_json(loop, label, sid, i))
@@ -534,7 +578,7 @@ def main() -> int:
     meta = {
         "region": region.get("name"),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "osm_data_date": info.get("data_date"),
+        "osm_data_date": (info.get("data_date") if not str(info.get("data_date", "")).startswith("1970") else None),
         "durations_h": durations,
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
         "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
