@@ -1,6 +1,6 @@
 {
  "region": "province-de-barcelone",
- "generated_at": "2026-09-20T04:48:03Z",
+ "generated_at": "2026-09-20T11:17:56Z",
  "osm_data_date": "1970-01-01T00:00:00Z",
  "durations_h": [
   1.0
@@ -24,6 +24,20 @@
    "lon": 2.18682,
    "lat": 41.47998,
    "options": 6
+  },
+  {
+   "id": "cerdanyola-del-valles",
+   "name": "Cerdanyola del Vallès",
+   "lon": 2.14051,
+   "lat": 41.49099,
+   "options": 6
+  },
+  {
+   "id": "sant-cugat-del-valles",
+   "name": "Sant Cugat del Vallès",
+   "lon": 2.085,
+   "lat": 41.47061,
+   "options": 7
   }
  ]
 }
