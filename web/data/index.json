@@ -1,6 +1,6 @@
 {
  "region": "province-de-barcelone",
- "generated_at": "2026-09-20T13:51:15Z",
+ "generated_at": "2026-09-20T15:12:09Z",
  "osm_data_date": null,
  "durations_h": [
   2.0
@@ -23,7 +23,7 @@
    "name": "Barcelona",
    "lon": 2.17703,
    "lat": 41.38261,
-   "options": 6
+   "options": 8
   },
   {
    "id": "badalona",
