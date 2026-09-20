@@ -47,6 +47,9 @@ LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTE
 # Candidats testés pour chaque combinaison : (seed, cap souhaité ou None)
 CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270)]
 
+PROFILE_STEP_M = 100.0        # pas de ré-échantillonnage du profil altimétrique
+SMOOTH_WINDOW = 5             # moyenne mobile (5 pas = 500 m) : les données SRTM sont bruitées, surtout en ville
+ASCENT_THRESHOLD_M = 3.0      # une variation < 3 m n'est pas comptée comme montée ou descente (comme un GPS/baromètre)
 TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
@@ -129,35 +132,64 @@ def speed_from_power(power_w: float, grade: float, mass: float = TOTAL_MASS_KG) 
     return min(lo, DESCENT_CAP_MS)
 
 
-def estimate_time_s(coords, cum, watts: float, city_share: float, resid_share: float) -> float:
-    """Temps estimé en intégrant la vitesse sur le profil altimétrique, ré-échantillonné tous les 100 m."""
+def elevation_profile(coords, cum, step=PROFILE_STEP_M, window=SMOOTH_WINDOW):
+    """Altitude ré-échantillonnée tous les `step` m puis lissée (moyenne mobile centrée).
+    Retourne (pas réel en m, liste d'altitudes lissées)."""
     total = cum[-1]
-    if total <= 0:
-        return 0.0
-    step = 100.0
-    n = max(1, int(total // step))
+    n = max(1, int(round(total / step)))
     ds = total / n
     zs = [c[2] if len(c) > 2 else 0.0 for c in coords]
-
-    def elev_at(s):
-        i = bisect.bisect_right(cum, s)
+    raw = []
+    for k in range(n + 1):
+        sdist = k * ds
+        i = bisect.bisect_right(cum, sdist)
         if i <= 0:
-            return zs[0]
-        if i >= len(cum):
-            return zs[-1]
-        s0, s1 = cum[i - 1], cum[i]
-        if s1 == s0:
-            return zs[i]
-        t = (s - s0) / (s1 - s0)
-        return zs[i - 1] + t * (zs[i] - zs[i - 1])
+            raw.append(zs[0])
+        elif i >= len(cum):
+            raw.append(zs[-1])
+        else:
+            s0, s1 = cum[i - 1], cum[i]
+            t = 0.0 if s1 == s0 else (sdist - s0) / (s1 - s0)
+            raw.append(zs[i - 1] + t * (zs[i] - zs[i - 1]))
+    half = window // 2
+    smooth = [sum(raw[max(0, i - half): i + half + 1]) / len(raw[max(0, i - half): i + half + 1])
+              for i in range(len(raw))]
+    return ds, smooth
 
+
+def gain_loss(values, threshold=ASCENT_THRESHOLD_M):
+    """Dénivelé positif / négatif avec seuil d'hystérésis : ignore les oscillations < threshold (bruit)."""
+    gain = loss = 0.0
+    low = high = values[0]
+    direction = 0
+    for v in values[1:]:
+        if direction == 0:
+            if v - low >= threshold:
+                direction, gain, high = 1, gain + (v - low), v
+            elif high - v >= threshold:
+                direction, loss, low = -1, loss + (high - v), v
+            else:
+                low, high = min(low, v), max(high, v)
+        elif direction == 1:
+            if v > high:
+                gain, high = gain + (v - high), v
+            elif high - v >= threshold:
+                direction, loss, low = -1, loss + (high - v), v
+        else:
+            if v < low:
+                loss, low = loss + (low - v), v
+            elif v - low >= threshold:
+                direction, gain, high = 1, gain + (v - low), v
+    return gain, loss
+
+
+def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_share: float) -> float:
+    """Temps estimé en intégrant la vitesse sur le profil altimétrique lissé (un point tous les ~100 m).
+    Ajout forcé pour la ville : +15 % (zone dense) / +6 % (zone bâtie) : approximation, les feux ne sont pas comptés."""
     t = 0.0
-    prev = elev_at(0.0)
-    for k in range(1, n + 1):
-        cur = elev_at(k * ds)
-        grade = max(-0.20, min(0.20, (cur - prev) / ds))
+    for k in range(1, len(profile)):
+        grade = max(-0.20, min(0.20, (profile[k] - profile[k - 1]) / ds))
         t += ds / (speed_from_power(watts, grade) * REAL_WORLD_FACTOR)
-        prev = cur
     return t * (1.0 + 0.15 * city_share + 0.06 * resid_share)
 
 
@@ -221,6 +253,7 @@ class Loop:
     distance_m: float
     ascend_m: float
     descend_m: float
+    ascend_gh_m: float
     time_s: float
     shares: dict
     overlap: float
@@ -287,11 +320,13 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         "unpaved": frac(surf, list(UNPAVED)),
     }
     watts = LEVELS[level]["watts"]
+    ds, prof = elevation_profile(coords, cum)
+    ascend, descend = gain_loss(prof)
     loop = Loop(
         profile=profile, level=level, duration_h=duration_h, seed=seed, heading=heading,
         coords=coords, distance_m=total,
-        ascend_m=float(path.get("ascend", 0.0)), descend_m=float(path.get("descend", 0.0)),
-        time_s=estimate_time_s(coords, cum, watts, city, resid),
+        ascend_m=ascend, descend_m=descend, ascend_gh_m=float(path.get("ascend", 0.0)),
+        time_s=estimate_time_s(ds, prof, watts, city, resid),
         shares=shares, overlap=repeated / total,
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
@@ -463,6 +498,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "distance_km": round(l.distance_m / 1000.0, 1),
         "ascend_m": round(l.ascend_m),
         "descend_m": round(l.descend_m),
+        "ascend_graphhopper_raw_m": round(l.ascend_gh_m),
         "shares": {
             "urban": {k: round(v, 3) for k, v in l.shares["urban"].items()},
             "dedicated_cycleway": round(l.shares["dedicated_cycleway"], 3),
