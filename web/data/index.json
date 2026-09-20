@@ -1,6 +1,6 @@
 {
  "region": "province-de-barcelone",
- "generated_at": "2026-09-20T15:12:09Z",
+ "generated_at": "2026-09-20T16:11:38Z",
  "osm_data_date": null,
  "durations_h": [
   2.0
@@ -23,14 +23,14 @@
    "name": "Barcelona",
    "lon": 2.17703,
    "lat": 41.38261,
-   "options": 8
+   "options": 6
   },
   {
    "id": "badalona",
    "name": "Badalona",
    "lon": 2.2481,
    "lat": 41.44926,
-   "options": 6
+   "options": 7
   },
   {
    "id": "montcada-i-reixac",
