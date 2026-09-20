@@ -28,6 +28,7 @@
   <div id="map"></div>
   <div id="list">Chargement…</div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+  <script src="gpx.js"></script>
   <script>
     const LABELS = {
       equilibre: 'Équilibrée',
@@ -128,6 +129,7 @@
           Montées : ${o.terrain.n_climbs}
         </div>
         <ul class="climbs">${climbs}</ul>
+        <button onclick="downloadGpx(startData, shown[current])" style="font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 0">Télécharger le GPX</button><br>
         <small>Durée et dénivelé : des estimations, pas des promesses.</small>`;
     }
 
