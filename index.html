@@ -6,30 +6,131 @@
   <title>velo-loops</title>
   <link href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" rel="stylesheet">
   <style>
-    html, body { margin: 0; height: 100%; }
-    #map { position: absolute; inset: 0; }
+    html, body { margin: 0; }
+    body { height: 100dvh; display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+    #controls { display: flex; gap: 8px; padding: 8px; }
+    #controls select { flex: 1; font-size: 16px; padding: 8px; }
+    #map { flex: 0 0 45%; }
+    #list { flex: 1; overflow: auto; padding: 8px; }
+    .card { border: 2px solid #ddd; border-radius: 10px; padding: 10px; margin-bottom: 8px; line-height: 1.5; }
+    .card.active { border-color: #e8590c; }
+    .card small { color: #555; }
   </style>
 </head>
 <body>
+  <div id="controls">
+    <select id="start"></select>
+    <select id="level"></select>
+  </div>
   <div id="map"></div>
+  <div id="list">Chargement…</div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
   <script>
+    const LABELS = {
+      equilibre: 'Équilibrée',
+      moins_de_relief: 'Moins de relief',
+      plus_de_relief: 'Plus de relief',
+      variante: 'Variante'
+    };
+    const EMPTY = { type: 'FeatureCollection', features: [] };
+
+    const startSel = document.getElementById('start');
+    const levelSel = document.getElementById('level');
+    const list = document.getElementById('list');
+
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: [2.19, 41.42],
       zoom: 10
     });
-    fetch('web/data/index.json')
-      .then(r => r.json())
-      .then(data => {
-        data.starts.forEach(s => {
-          new maplibregl.Marker()
-            .setLngLat([s.lon, s.lat])
-            .setPopup(new maplibregl.Popup().setText(s.name + ' : ' + s.options + ' options'))
-            .addTo(map);
-        });
+
+    let startData = null;  // données du départ choisi
+    let shown = [];        // options affichées (niveau choisi)
+    let current = 0;       // option sélectionnée
+    let marker = null;
+
+    const km = n => n.toFixed(1).replace('.', ',');
+    function hm(min) {
+      const t = Math.round(min);
+      return Math.floor(t / 60) + ' h ' + String(t % 60).padStart(2, '0');
+    }
+
+    async function init() {
+      const [index] = await Promise.all([
+        fetch('web/data/index.json').then(r => r.json()),
+        new Promise(ok => map.once('load', ok))
+      ]);
+      index.starts.forEach(s => startSel.add(new Option(s.name, s.id)));
+      Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
+      levelSel.value = 'modere';
+
+      map.addSource('routes', { type: 'geojson', data: EMPTY });
+      map.addLayer({
+        id: 'routes', type: 'line', source: 'routes',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['case', ['get', 'selected'], '#e8590c', '#7a8fa6'],
+          'line-width': ['case', ['get', 'selected'], 5, 3]
+        }
       });
+
+      startSel.onchange = loadStart;
+      levelSel.onchange = showLevel;
+      list.onclick = e => {
+        const card = e.target.closest('.card');
+        if (card) select(Number(card.dataset.i));
+      };
+      loadStart();
+    }
+
+    async function loadStart() {
+      list.textContent = 'Chargement…';
+      const res = await fetch('web/data/starts/' + startSel.value + '.json');
+      if (!res.ok) { list.textContent = 'Erreur de chargement (' + res.status + ')'; return; }
+      startData = await res.json();
+      if (marker) marker.remove();
+      marker = new maplibregl.Marker()
+        .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
+      showLevel();
+    }
+
+    function showLevel() {
+      shown = startData.options.filter(o => o.level === levelSel.value);
+      if (!shown.length) {
+        list.textContent = 'Aucune option pour ce niveau.';
+        map.getSource('routes').setData(EMPTY);
+        return;
+      }
+      const i = shown.findIndex(o => o.label === 'equilibre');
+      select(i >= 0 ? i : 0);
+    }
+
+    function select(i) {
+      current = i;
+      list.innerHTML = shown.map((o, k) => `
+        <div class="card ${k === current ? 'active' : ''}" data-i="${k}">
+          <b>${LABELS[o.label] || o.label}</b><br>
+          ${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m<br>
+          <small>≈ ${hm(o.time_est_min)} · en ville ${Math.round(o.shares.urban.city * 100)} %</small>
+        </div>`).join('');
+
+      // le tracé sélectionné est dessiné en dernier, donc au-dessus
+      const features = shown
+        .map((o, k) => ({
+          type: 'Feature',
+          properties: { selected: k === current },
+          geometry: { type: 'LineString', coordinates: o.coords }
+        }))
+        .sort((a, b) => a.properties.selected - b.properties.selected);
+      map.getSource('routes').setData({ type: 'FeatureCollection', features });
+
+      const bounds = new maplibregl.LngLatBounds();
+      shown[current].coords.forEach(c => bounds.extend([c[0], c[1]]));
+      map.fitBounds(bounds, { padding: 40, duration: 500 });
+    }
+
+    init();
   </script>
 </body>
 </html>
