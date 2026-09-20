@@ -1,9 +1,12 @@
 {
  "region": "province-de-barcelone",
- "generated_at": "2026-09-20T16:11:38Z",
+ "generated_at": "2026-09-20T20:15:13Z",
  "osm_data_date": null,
  "durations_h": [
-  2.0
+  1.0,
+  1.5,
+  2.0,
+  3.0
  ],
  "levels": {
   "facile": {
@@ -17,27 +20,77 @@
   }
  },
  "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
+ "stats": {
+  "starts_requested": 3,
+  "starts_generated": 3,
+  "starts_skipped": 0,
+  "skipped_examples": [],
+  "generation_seconds": 67,
+  "seconds_per_start": 22.4,
+  "workers": 1,
+  "cpu_count": 4,
+  "ram_gb": 15.6
+ },
  "starts": [
   {
    "id": "barcelona",
    "name": "Barcelona",
    "lon": 2.17703,
    "lat": 41.38261,
-   "options": 6
+   "kind": "place",
+   "options": 26,
+   "durations_h": [
+    1.0,
+    1.5,
+    2.0,
+    3.0
+   ],
+   "options_by_duration": {
+    "1": 6,
+    "1.5": 7,
+    "2": 6,
+    "3": 7
+   }
   },
   {
    "id": "badalona",
    "name": "Badalona",
    "lon": 2.2481,
    "lat": 41.44926,
-   "options": 7
+   "kind": "place",
+   "options": 23,
+   "durations_h": [
+    1.0,
+    1.5,
+    2.0,
+    3.0
+   ],
+   "options_by_duration": {
+    "1": 6,
+    "1.5": 6,
+    "2": 7,
+    "3": 4
+   }
   },
   {
    "id": "montcada-i-reixac",
    "name": "Montcada i Reixac",
    "lon": 2.18682,
    "lat": 41.47998,
-   "options": 6
+   "kind": "place",
+   "options": 23,
+   "durations_h": [
+    1.0,
+    1.5,
+    2.0,
+    3.0
+   ],
+   "options_by_duration": {
+    "1": 6,
+    "1.5": 6,
+    "2": 6,
+    "3": 5
+   }
   }
  ]
 }
