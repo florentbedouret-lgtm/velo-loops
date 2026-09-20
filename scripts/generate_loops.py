@@ -18,6 +18,7 @@ import argparse
 import bisect
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -899,10 +900,76 @@ def load_starts(places_path: Path, names: list[str] | None, bbox, max_starts: in
     return chosen[:max_starts]
 
 
+def load_starts_file(path: Path, bbox=None) -> list[dict]:
+    """Départs fournis par un fichier JSON [{name, lon, lat, kind?}] (ex. produit par plan_starts.py)."""
+    out = []
+    for e in json.loads(path.read_text(encoding="utf-8")):
+        if bbox and not (bbox[0] <= e["lon"] <= bbox[2] and bbox[1] <= e["lat"] <= bbox[3]):
+            continue
+        out.append({"name": e["name"], "lon": e["lon"], "lat": e["lat"], "kind": e.get("kind", "place")})
+    return out
+
+
+def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates, out: Path):
+    """Calcule toutes les options d'un départ. Retourne (entrée d'index ou None, lignes de journal, secondes)."""
+    t0 = time.time()
+    buf: list[str] = []
+    log = buf.append
+    gh = GraphHopper(gh_url)
+    snapped = gh.nearest(st["lat"], st["lon"])
+    if snapped is None or snapped[2] > 400:
+        log(f"- {st['name']} : pas de route à moins de 400 m, ignoré")
+        return None, buf, time.time() - t0
+    st = {**st, "lon": snapped[0], "lat": snapped[1]}
+    log(f"- {st['name']}")
+    options = []
+    for duration in durations:
+        for level in levels:
+            pool: list[Loop] = []
+            for profile in LEVELS[level]["profiles"]:
+                log(f"  {duration:g} h / {level} / {profile}")
+                found, rejects = fit_and_sample(gh, st, level, profile, duration, candidates, log)
+                why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
+                log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
+                pool.extend(found)
+            for i, (label, loop) in enumerate(pick_options(pool), start=1):
+                options.append(to_json(loop, label, sid, i))
+    if not options:
+        log("  aucune option valide, départ ignoré")
+        return None, buf, time.time() - t0
+    payload = {"start": {"id": sid, "name": st["name"], "lon": round(st["lon"], 5), "lat": round(st["lat"], 5)},
+               "options": options}
+    (out / "starts" / f"{sid}.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                                                 encoding="utf-8")
+    by_dur: dict[str, int] = {}
+    for o in options:
+        key = f"{o['duration_target_min'] / 60:g}"
+        by_dur[key] = by_dur.get(key, 0) + 1
+    entry = {"id": sid, "name": st["name"], "lon": payload["start"]["lon"], "lat": payload["start"]["lat"],
+             "kind": st.get("kind", "place"), "options": len(options),
+             "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur}
+    log(f"  {len(options)} options, durées disponibles : {', '.join(by_dur)} h ({time.time() - t0:.0f} s)")
+    return entry, buf, time.time() - t0
+
+
+def machine_resources() -> dict:
+    ram = None
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal"):
+                ram = round(int(line.split()[1]) / 1024 / 1024, 1)
+    except OSError:
+        pass
+    return {"cpu_count": os.cpu_count(), "ram_gb": ram}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--region", required=True, help="fichier JSON de région (config/region_*.json)")
     ap.add_argument("--places", required=True, help="GeoJSON des lieux OSM (osmium export)")
+    ap.add_argument("--starts-file", default=None, help="JSON de départs [{name, lon, lat, kind}] (remplace la sélection par noms)")
+    ap.add_argument("--shard", default=None, help="i/N : ne traite que les départs d'indice i modulo N (calcul en parallèle)")
+    ap.add_argument("--workers", type=int, default=1, help="départs traités en parallèle (threads)")
     ap.add_argument("--out", default="web/data", help="dossier de sortie")
     ap.add_argument("--gh", default="http://localhost:8989", help="URL du serveur GraphHopper")
     ap.add_argument("--max-starts", type=int, default=None)
@@ -919,6 +986,8 @@ def main() -> int:
     levels = args.levels or region.get("levels", list(LEVELS))
     max_starts = args.max_starts or region.get("max_starts", 30)
     candidates = CANDIDATES[: max(1, args.candidates)]
+    res = machine_resources()
+    print(f"Machine : {res['cpu_count']} CPU, {res['ram_gb']} Go de RAM ; {args.workers} départ(s) en parallèle", flush=True)
 
     global SIGNALS, STOPS, LANDSCAPE
     places_path = Path(args.places)
@@ -940,59 +1009,62 @@ def main() -> int:
               "Vérifie graph.elevation.provider (ou utilise --allow-no-elevation pour un simple test).",
               file=sys.stderr)
         return 2
-    starts = load_starts(Path(args.places), region.get("start_names"), region.get("bbox"), max_starts)
+    if args.starts_file:
+        starts = load_starts_file(Path(args.starts_file), region.get("bbox"))
+    else:
+        starts = load_starts(places_path, region.get("start_names"), region.get("bbox"), max_starts)
+    if args.shard:
+        i, n = (int(x) for x in args.shard.split("/"))
+        starts = starts[i::n]
+    starts = starts[:max_starts] if not args.starts_file else starts[: args.max_starts or len(starts)]
     if not starts:
         print("Aucun point de départ trouvé.", file=sys.stderr)
         return 1
 
     out = Path(args.out)
     (out / "starts").mkdir(parents=True, exist_ok=True)
-    log = lambda m: print(m, flush=True)  # noqa: E731
+    used: dict[str, int] = {}
+    ids = []
+    for st in starts:                                   # identifiants uniques et stables
+        base = slugify(st["name"])
+        used[base] = used.get(base, 0) + 1
+        ids.append(base if used[base] == 1 else f"{base}-{used[base]}")
     t0 = time.time()
-    index = []
-
-    for st in starts:
-        snapped = gh.nearest(st["lat"], st["lon"])
-        if snapped is None or snapped[2] > 400:
-            log(f"- {st['name']} : pas de route à moins de 400 m, ignoré")
-            continue
-        st = {**st, "lon": snapped[0], "lat": snapped[1]}
-        sid = slugify(st["name"])
-        log(f"- {st['name']}")
-        options = []
-        for duration in durations:
-            for level in levels:
-                pool: list[Loop] = []
-                for profile in LEVELS[level]["profiles"]:
-                    log(f"  {duration:g} h / {level} / {profile}")
-                    found, rejects = fit_and_sample(gh, st, level, profile, duration, candidates, log)
-                    why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
-                    log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
-                    pool.extend(found)
-                for i, (label, loop) in enumerate(pick_options(pool), start=1):
-                    options.append(to_json(loop, label, sid, i))
-        if not options:
-            log("  aucune option valide, départ ignoré")
-            continue
-        payload = {"start": {"id": sid, "name": st["name"], "lon": round(st["lon"], 5), "lat": round(st["lat"], 5)},
-                   "options": options}
-        (out / "starts" / f"{sid}.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                                                     encoding="utf-8")
-        index.append({"id": sid, "name": st["name"], "lon": payload["start"]["lon"], "lat": payload["start"]["lat"],
-                      "options": len(options)})
+    results = []
+    if args.workers > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            futures = [ex.submit(process_start, st, sid, args.gh, durations, levels, candidates, out)
+                       for st, sid in zip(starts, ids)]
+            for f in futures:
+                results.append(f.result())
+                print("\n".join(results[-1][1]), flush=True)
+    else:
+        for st, sid in zip(starts, ids):
+            results.append(process_start(st, sid, args.gh, durations, levels, candidates, out))
+            print("\n".join(results[-1][1]), flush=True)
+    index = [r[0] for r in results if r[0]]
+    skipped = [st["name"] for st, r in zip(starts, results) if not r[0]]
+    elapsed = time.time() - t0
 
     info = gh.info()
+    available = sorted({d for e in index for d in e["durations_h"]})
     meta = {
         "region": region.get("name"),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "osm_data_date": (info.get("data_date") if not str(info.get("data_date", "")).startswith("1970") else None),
-        "durations_h": durations,
+        "durations_h": available,
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
         "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
+        "stats": {"starts_requested": len(starts), "starts_generated": len(index),
+                  "starts_skipped": len(skipped), "skipped_examples": skipped[:30],
+                  "generation_seconds": round(elapsed), "seconds_per_start": round(elapsed / max(1, len(starts)), 1),
+                  "workers": args.workers, **res},
         "starts": index,
     }
     (out / "index.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
-    log(f"Terminé : {len(index)} départs en {time.time() - t0:.0f} s -> {out}")
+    print(f"Terminé : {len(index)} départs sur {len(starts)} en {elapsed:.0f} s "
+          f"({elapsed / max(1, len(starts)):.0f} s par départ) -> {out}", flush=True)
     return 0
 
 
