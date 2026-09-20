@@ -15,6 +15,9 @@
     .card { border: 2px solid #ddd; border-radius: 10px; padding: 10px; margin-bottom: 8px; line-height: 1.5; }
     .card.active { border-color: #e8590c; }
     .card small { color: #555; }
+    .pitch { margin: 8px 0; padding-left: 18px; }
+    .facts, .climbs { font-size: 14px; }
+    .climbs { margin: 6px 0; padding-left: 18px; }
   </style>
 </head>
 <body>
@@ -45,9 +48,9 @@
       zoom: 10
     });
 
-    let startData = null;  // données du départ choisi
-    let shown = [];        // options affichées (niveau choisi)
-    let current = 0;       // option sélectionnée
+    let startData = null;
+    let shown = [];
+    let current = 0;
     let marker = null;
 
     const km = n => n.toFixed(1).replace('.', ',');
@@ -55,6 +58,9 @@
       const t = Math.round(min);
       return Math.floor(t / 60) + ' h ' + String(t % 60).padStart(2, '0');
     }
+    // neutralise le HTML dans un texte (bonne habitude)
+    const esc = s => String(s).replace(/[&<>"]/g,
+      c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
     async function init() {
       const [index] = await Promise.all([
@@ -79,7 +85,7 @@
       levelSel.onchange = showLevel;
       list.onclick = e => {
         const card = e.target.closest('.card');
-        if (card) select(Number(card.dataset.i));
+        if (card && Number(card.dataset.i) !== current) select(Number(card.dataset.i));
       };
       loadStart();
     }
@@ -106,6 +112,25 @@
       select(i >= 0 ? i : 0);
     }
 
+    // détail affiché sous la carte sélectionnée
+    function detailHtml(o) {
+      const pct = f => Math.round(f * 100) + ' %';
+      const pitch = (o.pitch || []).map(p => '<li>' + esc(p) + '</li>').join('');
+      const climbs = (o.terrain.climbs || []).map(c =>
+        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km à ' +
+        km(c.avg_grade_pct) + ' %, +' + Math.round(c.gain_m) + ' m</li>').join('');
+      return `
+        <ul class="pitch">${pitch}</ul>
+        <div class="facts">
+          Pistes cyclables : ${pct(o.shares.dedicated_cycleway)}<br>
+          Routes principales : ${pct(o.shares.main_roads)}<br>
+          Feux recensés dans OSM : ${o.traffic_lights}<br>
+          Montées : ${o.terrain.n_climbs}
+        </div>
+        <ul class="climbs">${climbs}</ul>
+        <small>Durée et dénivelé : des estimations, pas des promesses.</small>`;
+    }
+
     function select(i) {
       current = i;
       list.innerHTML = shown.map((o, k) => `
@@ -113,9 +138,10 @@
           <b>${LABELS[o.label] || o.label}</b><br>
           ${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m<br>
           <small>≈ ${hm(o.time_est_min)} · en ville ${Math.round(o.shares.urban.city * 100)} %</small>
+          ${k === current ? detailHtml(o) : ''}
         </div>`).join('');
+      list.querySelector('.card.active').scrollIntoView({ block: 'nearest' });
 
-      // le tracé sélectionné est dessiné en dernier, donc au-dessus
       const features = shown
         .map((o, k) => ({
           type: 'Feature',
