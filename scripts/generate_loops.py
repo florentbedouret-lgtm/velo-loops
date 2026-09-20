@@ -44,8 +44,13 @@ LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTE
     "soutenu": {"watts": 190, "label": "sportif", "profiles": ["sport"]},
 }
 
-# Candidats testés pour chaque combinaison : (seed, cap souhaité ou None)
-CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270)]
+# Candidats testés pour chaque combinaison : (seed, cap souhaité ou None). Les 8 caps permettent de trouver
+# des boucles qui sortent plus vite de la zone urbaine dense.
+CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270), (7, 45), (8, 135), (9, 225), (10, 315)]
+
+SIGNAL_DELAY_S = 15.0         # attente moyenne attendue par feu tricolore franchi (arrêt 1 fois sur 2 + relance) : à calibrer
+SIGNAL_RADIUS_M = 15.0        # un feu OSM à moins de 15 m du tracé est considéré comme franchi
+SIGNAL_CLUSTER_M = 60.0       # feux de sens différents d'un même carrefour : comptés une seule fois
 
 PROFILE_STEP_M = 100.0        # pas de ré-échantillonnage du profil altimétrique
 SMOOTH_WINDOW = 5             # moyenne mobile (5 pas = 500 m) : les données SRTM sont bruitées, surtout en ville
@@ -53,7 +58,9 @@ ASCENT_THRESHOLD_M = 3.0      # une variation < 3 m n'est pas comptée comme mon
 TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
-WEIGHTS = {"calm": 0.35, "axes": 0.25, "infra": 0.15, "flow": 0.25}
+WEIGHTS = {"calm": 0.25, "lights": 0.25, "axes": 0.15, "infra": 0.15, "flow": 0.20}
+LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km ou plus, le sous-score "feux" tombe à 0
+SIGNALS = None                  # SignalIndex chargé dans main()
 UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand"}
 DETAILS = ["road_class", "surface", "urban_density", "bike_network"]
 
@@ -110,6 +117,69 @@ def simplify(coords, tolerance_m=10.0):
 def slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "x"
+
+
+# --------------------------------------------------------------------------- feux tricolores (OSM)
+class SignalIndex:
+    """Index spatial des feux tricolores OSM (highway=traffic_signals, crossing=traffic_signals)."""
+
+    CELL = 0.0004  # ~ 30-45 m
+
+    def __init__(self, points):
+        self.points = points
+        self.grid: dict = {}
+        for idx, (lon, lat) in enumerate(points):
+            self.grid.setdefault((int(lon // self.CELL), int(lat // self.CELL)), []).append(idx)
+
+    def count_along(self, coords, cum) -> int:
+        """Nombre de carrefours à feux franchis par le tracé (feux voisins fusionnés)."""
+        positions = []
+        for i in range(1, len(coords)):
+            (lo0, la0), (lo1, la1) = coords[i - 1][:2], coords[i][:2]
+            kx, ky = 111320.0 * math.cos(math.radians(la0)), 110540.0
+            dx, dy = (lo1 - lo0) * kx, (la1 - la0) * ky
+            seg2 = dx * dx + dy * dy
+            pad = SIGNAL_RADIUS_M / 90000.0
+            for cx in range(int((min(lo0, lo1) - pad) // self.CELL), int((max(lo0, lo1) + pad) // self.CELL) + 1):
+                for cy in range(int((min(la0, la1) - pad) // self.CELL), int((max(la0, la1) + pad) // self.CELL) + 1):
+                    for idx in self.grid.get((cx, cy), ()):
+                        px = (self.points[idx][0] - lo0) * kx
+                        py = (self.points[idx][1] - la0) * ky
+                        t = 0.0 if seg2 == 0 else max(0.0, min(1.0, (px * dx + py * dy) / seg2))
+                        if math.hypot(px - t * dx, py - t * dy) <= SIGNAL_RADIUS_M:
+                            pos = cum[i - 1] + t * (cum[i] - cum[i - 1])
+                            positions.append(pos)
+        positions.sort()
+        count, last = 0, None
+        for pos in positions:
+            if last is None or pos - last > SIGNAL_CLUSTER_M:
+                count += 1
+            last = pos
+        return count
+
+
+def load_signals(pbf: Path, workdir: Path):
+    """Extrait les feux tricolores du fichier .pbf avec osmium (installé sur le runner GitHub)."""
+    import shutil
+    import subprocess
+    if not pbf.exists() or not shutil.which("osmium"):
+        print(f"! feux tricolores non chargés (fichier {pbf} ou osmium introuvable)", file=sys.stderr)
+        return None
+    filt, out = workdir / "signals.osm.pbf", workdir / "signals.geojson"
+    try:
+        subprocess.run(["osmium", "tags-filter", str(pbf), "n/highway=traffic_signals", "n/crossing=traffic_signals",
+                        "-o", str(filt), "--overwrite"], check=True, capture_output=True)
+        subprocess.run(["osmium", "export", str(filt), "-f", "geojson", "-o", str(out), "--overwrite"],
+                       check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! extraction des feux échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
+        return None
+    pts = []
+    for f in json.loads(out.read_text(encoding="utf-8")).get("features", []):
+        g = f.get("geometry", {})
+        if g.get("type") == "Point":
+            pts.append((g["coordinates"][0], g["coordinates"][1]))
+    return SignalIndex(pts) if pts else None
 
 
 # --------------------------------------------------------------------------- modèle physique
@@ -183,14 +253,18 @@ def gain_loss(values, threshold=ASCENT_THRESHOLD_M):
     return gain, loss
 
 
-def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_share: float) -> float:
-    """Temps estimé en intégrant la vitesse sur le profil altimétrique lissé (un point tous les ~100 m).
-    Ajout forcé pour la ville : +15 % (zone dense) / +6 % (zone bâtie) : approximation, les feux ne sont pas comptés."""
+def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_share: float,
+                    n_signals: int | None = None) -> float:
+    """Temps estimé : vitesse déduite de la puissance sur le profil lissé (un point tous les ~100 m),
+    + attente moyenne par feu tricolore (SIGNAL_DELAY_S). Sans données de feux, on garde une majoration
+    forfaitaire plus forte en ville."""
     t = 0.0
     for k in range(1, len(profile)):
         grade = max(-0.20, min(0.20, (profile[k] - profile[k - 1]) / ds))
         t += ds / (speed_from_power(watts, grade) * REAL_WORLD_FACTOR)
-    return t * (1.0 + 0.15 * city_share + 0.06 * resid_share)
+    if n_signals is None:
+        return t * (1.0 + 0.15 * city_share + 0.06 * resid_share)
+    return t * (1.0 + 0.05 * city_share + 0.03 * resid_share) + n_signals * SIGNAL_DELAY_S
 
 
 # --------------------------------------------------------------------------- client GraphHopper
@@ -260,6 +334,8 @@ class Loop:
     score: float = 0.0
     cells: set = field(default_factory=set)
     wind_bins: dict = field(default_factory=dict)
+    signals: int | None = None
+    exit_dense_m: float | None = None
 
     @property
     def dplus_per_km(self) -> float:
@@ -322,12 +398,23 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     watts = LEVELS[level]["watts"]
     ds, prof = elevation_profile(coords, cum)
     ascend, descend = gain_loss(prof)
+    n_signals = SIGNALS.count_along(coords, cum) if SIGNALS is not None else None
+    exit_dense = None
+    ud = det.get("urban_density") or []
+    if ud and str(ud[0][2]).lower() == "city":
+        exit_dense = total
+        for a, b, val in ud:
+            if str(val).lower() != "city":
+                exit_dense = cum[min(a, len(cum) - 1)]
+                break
+    else:
+        exit_dense = 0.0
     loop = Loop(
         profile=profile, level=level, duration_h=duration_h, seed=seed, heading=heading,
         coords=coords, distance_m=total,
         ascend_m=ascend, descend_m=descend, ascend_gh_m=float(path.get("ascend", 0.0)),
-        time_s=estimate_time_s(ds, prof, watts, city, resid),
-        shares=shares, overlap=repeated / total,
+        time_s=estimate_time_s(ds, prof, watts, city, resid, n_signals),
+        shares=shares, overlap=repeated / total, signals=n_signals, exit_dense_m=exit_dense,
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
@@ -337,11 +424,19 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
 
 def score(l: Loop) -> float:
     s = l.shares
-    calm = 1.0 - (s["urban"]["city"] + 0.4 * s["urban"]["residential"])
-    axes = 1.0 - min(1.0, 2.0 * s["main_roads"])
-    infra = min(1.0, 2.0 * s["dedicated_cycleway"])
-    flow = 1.0 - min(1.0, 2.0 * l.overlap)
-    total = (WEIGHTS["calm"] * calm + WEIGHTS["axes"] * axes + WEIGHTS["infra"] * infra + WEIGHTS["flow"] * flow)
+    parts = {
+        "calm": 1.0 - (s["urban"]["city"] + 0.4 * s["urban"]["residential"]),
+        "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
+        "infra": min(1.0, 2.0 * s["dedicated_cycleway"]),
+        "flow": 1.0 - min(1.0, 2.0 * l.overlap),
+    }
+    weights = dict(WEIGHTS)
+    if l.signals is not None:
+        per_km = l.signals / max(l.distance_m / 1000.0, 0.1)
+        parts["lights"] = 1.0 - min(1.0, per_km / LIGHTS_PER_KM_ZERO_SCORE)
+    else:
+        weights.pop("lights")
+    total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
     total -= min(0.3, max(0.0, s["unpaved"] - 0.03) * 2.0)
     return round(100 * max(0.0, total), 1)
 
@@ -471,6 +566,17 @@ def pitch(l: Loop, label: str) -> list[str]:
         lines.append("Évite les zones urbaines denses (moins de 5 % du parcours).")
     else:
         lines.append(f"{urban['city'] * 100:.0f} % du parcours en zone urbaine dense.")
+    if l.exit_dense_m is not None and l.exit_dense_m > 0:
+        if l.exit_dense_m >= l.distance_m * 0.98:
+            lines.append("Reste en zone urbaine dense sur tout le parcours.")
+        else:
+            lines.append(f"Sort de la zone urbaine dense après {l.exit_dense_m / 1000:.1f} km.")
+    if l.signals is not None:
+        per_km = l.signals / max(l.distance_m / 1000.0, 0.1)
+        if l.signals == 0:
+            lines.append("Aucun feu tricolore recensé dans OpenStreetMap sur le parcours.")
+        else:
+            lines.append(f"{l.signals} carrefours à feux tricolores ({per_km:.1f} par km).")
     if s["main_roads"] < 0.01:
         lines.append("Aucune route principale sur le parcours.")
     elif s["main_roads"] <= 0.10:
@@ -507,6 +613,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
             "unpaved": round(l.shares["unpaved"], 3),
         },
         "overlap": round(l.overlap, 3),
+        "traffic_lights": l.signals,
+        "exit_dense_km": None if l.exit_dense_m is None else round(l.exit_dense_m / 1000.0, 1),
         "score": l.score,
         "pitch": pitch(l, label),
         "wind_bins_km": l.wind_bins,
@@ -553,6 +661,7 @@ def main() -> int:
     ap.add_argument("--max-starts", type=int, default=None)
     ap.add_argument("--durations", type=float, nargs="*", default=None, help="durées en heures (surcharge la config)")
     ap.add_argument("--levels", nargs="*", default=None, choices=list(LEVELS), help="niveaux (surcharge la config)")
+    ap.add_argument("--pbf", default=None, help="fichier .pbf de la région (par défaut : region.osm.pbf à côté de --places)")
     ap.add_argument("--allow-no-elevation", action="store_true", help="test uniquement : accepte un graphe sans altitude")
     ap.add_argument("--candidates", type=int, default=len(CANDIDATES), help="nombre de candidats par combinaison")
     args = ap.parse_args()
@@ -563,6 +672,10 @@ def main() -> int:
     max_starts = args.max_starts or region.get("max_starts", 30)
     candidates = CANDIDATES[: max(1, args.candidates)]
 
+    global SIGNALS
+    places_path = Path(args.places)
+    SIGNALS = load_signals(Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf", places_path.parent)
+    print(f"Feux tricolores OSM chargés : {len(SIGNALS.points) if SIGNALS else 0}", flush=True)
     gh = GraphHopper(args.gh)
     if not gh.info().get("elevation") and not args.allow_no_elevation:
         print("Le serveur GraphHopper n'a pas de données d'altitude : D+ et durées seraient faux.\n"
