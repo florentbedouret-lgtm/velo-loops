@@ -1,0 +1,9 @@
+{
+  "distance_influence": 15,
+  "priority": [
+    { "if": "urban_density == CITY", "multiply_by": "0.5" },
+    { "else_if": "urban_density == RESIDENTIAL", "multiply_by": "0.9" },
+    { "if": "road_class == PRIMARY", "multiply_by": "0.6" },
+    { "else_if": "road_class == SECONDARY", "multiply_by": "0.9" }
+  ]
+}

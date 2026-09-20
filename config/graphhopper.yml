@@ -1,0 +1,44 @@
+# Configuration GraphHopper 11.0 pour la génération de boucles vélo (route).
+# Le fichier .pbf est passé en ligne de commande : -Ddw.graphhopper.datareader.file=region.osm.pbf
+graphhopper:
+  datareader.file: ""
+  graph.location: graph-cache
+  custom_models.directory: config/custom_models
+
+  profiles:
+    - name: calm
+      custom_model_files: [racingbike.json, bike_elevation.json, loop_calm.json]
+    - name: sport
+      custom_model_files: [racingbike.json, bike_elevation.json, loop_sport.json]
+
+  graph.encoded_values: racingbike_priority, racingbike_access, roundabout, racingbike_average_speed, bike_road_access, average_slope, mtb_rating, hike_rating, country, road_class, road_environment, surface, bike_network, urban_density
+
+  # % en zone bâtie (rural / résidentiel / ville) calculé à l import
+  graph.urban_density.threads: 2
+
+  # Altitude : SRTM 30 m depuis les tuiles publiques AWS (skadi). Lissage pour un D+ réaliste.
+  graph.elevation.provider: skadi
+  graph.elevation.cache_dir: ./elevation-cache
+  graph.elevation.interpolate: bilinear
+  graph.elevation.edge_smoothing: moving_average
+  graph.elevation.edge_smoothing.moving_average.window_size: 150
+
+  import.osm.ignored_highways: motorway,trunk
+  prepare.min_network_size: 200
+  graph.dataaccess.default_type: RAM_STORE
+
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: localhost
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: localhost
+  request_log:
+    appenders: []
+logging:
+  level: WARN
+  appenders:
+    - type: console

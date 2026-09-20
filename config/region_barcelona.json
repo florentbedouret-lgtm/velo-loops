@@ -1,0 +1,16 @@
+{
+  "name": "province-de-barcelone",
+  "geofabrik_url": "https://download.geofabrik.de/europe/spain/cataluna-latest.osm.pbf",
+  "bbox": [1.30, 41.20, 2.75, 42.35],
+  "durations_h": [1, 2, 3],
+  "levels": ["facile", "modere", "soutenu"],
+  "max_starts": 30,
+  "start_names": [
+    "Barcelona", "Badalona", "Montcada i Reixac", "Cerdanyola del Vallès", "Sant Cugat del Vallès",
+    "Rubí", "Sabadell", "Terrassa", "Granollers", "Cardedeu", "Sant Celoni", "Montseny",
+    "Mataró", "El Masnou", "Arenys de Mar", "Calella",
+    "Sant Boi de Llobregat", "Castelldefels", "Sitges", "Vilanova i la Geltrú",
+    "Martorell", "Olesa de Montserrat", "Collbató", "Vilafranca del Penedès",
+    "Sant Sadurní d'Anoia", "Igualada", "Manresa", "Vic", "Berga"
+  ]
+}

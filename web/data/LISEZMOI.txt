@@ -1,0 +1,1 @@
+Les fichiers générés par le workflow (index.json et le dossier starts/) arrivent ici.
