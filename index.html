@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>velo-loops</title>
+  <link href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #map { position: absolute; inset: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+  <script>
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [2.19, 41.42],
+      zoom: 10
+    });
+    fetch('web/data/index.json')
+      .then(r => r.json())
+      .then(data => {
+        data.starts.forEach(s => {
+          new maplibregl.Marker()
+            .setLngLat([s.lon, s.lat])
+            .setPopup(new maplibregl.Popup().setText(s.name + ' : ' + s.options + ' options'))
+            .addTo(map);
+        });
+      });
+  </script>
+</body>
+</html>
