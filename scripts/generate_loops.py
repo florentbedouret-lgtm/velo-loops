@@ -48,7 +48,7 @@ LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTE
 # des boucles qui sortent plus vite de la zone urbaine dense.
 CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270), (7, 45), (8, 135), (9, 225), (10, 315)]
 
-SIGNAL_DELAY_S = 15.0         # attente moyenne attendue par feu tricolore franchi (arrêt 1 fois sur 2 + relance) : à calibrer
+SIGNAL_DELAY_S = 10.0         # attente moyenne attendue par feu tricolore franchi (arrêt 1 fois sur 2 + relance) : à calibrer
 SIGNAL_RADIUS_M = 15.0        # un feu OSM à moins de 15 m du tracé est considéré comme franchi
 SIGNAL_CLUSTER_M = 60.0       # feux de sens différents d'un même carrefour : comptés une seule fois
 
@@ -58,10 +58,17 @@ ASCENT_THRESHOLD_M = 3.0      # une variation < 3 m n'est pas comptée comme mon
 TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
-WEIGHTS = {"calm": 0.25, "lights": 0.25, "axes": 0.15, "infra": 0.15, "flow": 0.20}
+MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
+WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}
 LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km ou plus, le sous-score "feux" tombe à 0
-SIGNALS = None                  # SignalIndex chargé dans main()
+SIGNALS = None                  # SignalIndex des feux tricolores, chargé dans main()
+STOPS = None                    # SignalIndex des panneaux stop
+LANDSCAPE = None                # LandscapeIndex (forêts, eau, parcs, points de vue), chargé dans main()
+# Proxy "paysage" : distances (en degrés, ~100 m = 0,0009 à cette latitude) et pondération PROVISOIRE
+SCENERY_FOREST_DEG, SCENERY_WATER_DEG, SCENERY_PROTECTED_DEG, SCENERY_VIEW_DEG = 0.0004, 0.001, 0.0002, 0.003
 UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand"}
+COBBLES = {"cobblestone", "sett", "paving_stones"}
+ASPHALT = {"asphalt", "concrete", "paved"}
 DETAILS = ["road_class", "surface", "urban_density", "bike_network"]
 
 
@@ -158,21 +165,21 @@ class SignalIndex:
         return count
 
 
-def load_signals(pbf: Path, workdir: Path):
-    """Extrait les feux tricolores du fichier .pbf avec osmium (installé sur le runner GitHub)."""
+def load_points(pbf: Path, workdir: Path, filters: list, name: str):
+    """Extrait des nœuds OSM (feux, stops…) du fichier .pbf avec osmium (installé sur le runner GitHub)."""
     import shutil
     import subprocess
     if not pbf.exists() or not shutil.which("osmium"):
-        print(f"! feux tricolores non chargés (fichier {pbf} ou osmium introuvable)", file=sys.stderr)
+        print(f"! {name} non chargés (fichier {pbf} ou osmium introuvable)", file=sys.stderr)
         return None
-    filt, out = workdir / "signals.osm.pbf", workdir / "signals.geojson"
+    filt, out = workdir / f"{name}.osm.pbf", workdir / f"{name}.geojson"
     try:
-        subprocess.run(["osmium", "tags-filter", str(pbf), "n/highway=traffic_signals", "n/crossing=traffic_signals",
-                        "-o", str(filt), "--overwrite"], check=True, capture_output=True)
+        subprocess.run(["osmium", "tags-filter", str(pbf), *filters, "-o", str(filt), "--overwrite"],
+                       check=True, capture_output=True)
         subprocess.run(["osmium", "export", str(filt), "-f", "geojson", "-o", str(out), "--overwrite"],
                        check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        print(f"! extraction des feux échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
+        print(f"! extraction de {name} échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
         return None
     pts = []
     for f in json.loads(out.read_text(encoding="utf-8")).get("features", []):
@@ -180,6 +187,102 @@ def load_signals(pbf: Path, workdir: Path):
         if g.get("type") == "Point":
             pts.append((g["coordinates"][0], g["coordinates"][1]))
     return SignalIndex(pts) if pts else None
+
+
+def load_signals(pbf: Path, workdir: Path):
+    return load_points(pbf, workdir, ["n/highway=traffic_signals", "n/crossing=traffic_signals"], "signals")
+
+
+# --------------------------------------------------------------------------- proxy "paysage" (OSM)
+class LandscapeIndex:
+    """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
+
+    def __init__(self, forests, waters, protected, viewpoints):
+        import numpy as np  # noqa: F401
+        from shapely.strtree import STRtree
+        self.trees = {k: (STRtree(v) if v else None)
+                      for k, v in (("forest", forests), ("water", waters), ("protected", protected),
+                                   ("view", viewpoints))}
+        self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
+                       "view": len(viewpoints)}
+
+    def measure(self, coords, cum) -> dict:
+        import numpy as np
+        import shapely
+        xy = sample_points(coords, cum, 100.0)
+        pts = shapely.points(np.array(xy))
+
+        def share(key, dist):
+            tree = self.trees[key]
+            if tree is None:
+                return 0.0
+            hit = tree.query(pts, predicate="dwithin", distance=dist)[0]
+            return len(set(hit.tolist())) / len(xy)
+
+        views = 0
+        if self.trees["view"] is not None:
+            views = len(set(self.trees["view"].query(pts, predicate="dwithin", distance=SCENERY_VIEW_DEG)[1].tolist()))
+        forest = share("forest", SCENERY_FOREST_DEG)
+        water = share("water", SCENERY_WATER_DEG)
+        protected = share("protected", SCENERY_PROTECTED_DEG)
+        index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
+        return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
+                "score": round(100 * index)}
+
+
+def load_landscape(pbf: Path, workdir: Path):
+    """Extrait forêts, eau, parcs, points de vue du .pbf (osmium) et construit l'index spatial (shapely)."""
+    import shutil
+    import subprocess
+    try:
+        from shapely.geometry import shape
+    except ImportError:
+        print("! paysage non chargé : shapely absent (ajoute-le à scripts/requirements.txt)", file=sys.stderr)
+        return None
+    if not pbf.exists() or not shutil.which("osmium"):
+        print(f"! paysage non chargé (fichier {pbf} ou osmium introuvable)", file=sys.stderr)
+        return None
+    filt, out = workdir / "landscape.osm.pbf", workdir / "landscape.geojsonseq"
+    filters = ["nwr/landuse=forest", "nwr/natural=wood", "nwr/natural=water", "nwr/waterway=river",
+               "w/natural=coastline", "nwr/natural=beach", "nwr/leisure=park", "nwr/leisure=nature_reserve",
+               "nwr/boundary=protected_area", "nwr/boundary=national_park", "n/tourism=viewpoint"]
+    try:
+        subprocess.run(["osmium", "tags-filter", str(pbf), *filters, "-o", str(filt), "--overwrite"],
+                       check=True, capture_output=True)
+        subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"],
+                       check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! extraction du paysage échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
+        return None
+    forests, waters, protected, views = [], [], [], []
+    with out.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip("\x1e\n ")
+            if not line:
+                continue
+            try:
+                feat = json.loads(line)
+                geom = shape(feat["geometry"])
+            except (ValueError, KeyError):
+                continue
+            props = feat.get("properties", {})
+            if geom.is_empty:
+                continue
+            if geom.geom_type == "Point":
+                if props.get("tourism") == "viewpoint":
+                    views.append(geom)
+                continue
+            if geom.geom_type in ("Polygon", "MultiPolygon") and geom.area < 2e-7 and not props.get("boundary"):
+                continue                                   # ignore les surfaces < ~1 700 m²
+            geom = geom.simplify(0.00005, preserve_topology=True)   # ~5 m : allège l'index
+            if props.get("natural") in ("water", "coastline", "beach") or props.get("waterway") == "river":
+                waters.append(geom)
+            elif props.get("landuse") == "forest" or props.get("natural") == "wood":
+                forests.append(geom)
+            elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
+                    "protected_area", "national_park"):
+                protected.append(geom)
+    return LandscapeIndex(forests, waters, protected, views)
 
 
 # --------------------------------------------------------------------------- modèle physique
@@ -251,6 +354,87 @@ def gain_loss(values, threshold=ASCENT_THRESHOLD_M):
             elif v - low >= threshold:
                 direction, gain, high = 1, gain + (v - low), v
     return gain, loss
+
+
+def sample_points(coords, cum, step):
+    """Points (lon, lat) espacés de `step` m le long du tracé."""
+    total = cum[-1]
+    n = max(1, int(total // step))
+    out, j = [], 1
+    for k in range(n + 1):
+        d = min(total, k * step)
+        while j < len(cum) - 1 and cum[j] < d:
+            j += 1
+        s0, s1 = cum[j - 1], cum[j]
+        t = 0.0 if s1 == s0 else (d - s0) / (s1 - s0)
+        out.append((coords[j - 1][0] + t * (coords[j][0] - coords[j - 1][0]),
+                    coords[j - 1][1] + t * (coords[j][1] - coords[j - 1][1])))
+    return out
+
+
+def slope_stats(ds, prof):
+    """Pente max (lissée), répartition de la distance par classe de pente, et montées significatives."""
+    grades = [(prof[k] - prof[k - 1]) / ds for k in range(1, len(prof))]
+    if not grades:
+        return {"max_grade_pct": 0.0, "bands": {}, "climbs": [], "n_climbs": 0}
+    bands = {"descent": 0, "flat": 0, "up_3_6": 0, "up_6_9": 0, "up_9_plus": 0}
+    for g in grades:
+        key = ("descent" if g < -0.03 else "flat" if g < 0.03 else "up_3_6" if g < 0.06
+               else "up_6_9" if g < 0.09 else "up_9_plus")
+        bands[key] += 1
+    n = len(grades)
+    # montées : suites monotones dont la remontée dépasse 5 m, gardées si gain >= 20 m
+    runs, direction, low_i, high_i, start_i = [], 0, 0, 0, 0
+    for i in range(1, len(prof)):
+        v = prof[i]
+        if direction == 0:
+            if v - prof[low_i] >= 5.0:
+                direction, start_i, high_i = 1, low_i, i
+            elif prof[high_i] - v >= 5.0:
+                direction, low_i = -1, i
+            else:
+                low_i = i if v <= prof[low_i] else low_i
+                high_i = i if v >= prof[high_i] else high_i
+        elif direction == 1:
+            if v > prof[high_i]:
+                high_i = i
+            elif prof[high_i] - v >= 5.0:
+                runs.append((start_i, high_i))
+                direction, low_i = -1, i
+        else:
+            if v <= prof[low_i]:
+                low_i = i
+            elif v - prof[low_i] >= 5.0:
+                direction, start_i, high_i = 1, low_i, i
+    if direction == 1:
+        runs.append((start_i, high_i))
+    climbs = []
+    for a, b in runs:
+        gain, length = prof[b] - prof[a], (b - a) * ds
+        if gain >= 20.0 and length > 0:
+            climbs.append({"start_km": round(a * ds / 1000.0, 1), "length_km": round(length / 1000.0, 1),
+                           "gain_m": round(gain), "avg_grade_pct": round(100.0 * gain / length, 1)})
+    climbs.sort(key=lambda c: -c["gain_m"])
+    return {"max_grade_pct": round(100.0 * max(grades), 1), "bands": {k: round(v / n, 3) for k, v in bands.items()},
+            "climbs": climbs[:5], "n_climbs": len(climbs)}
+
+
+def count_uturns(coords, min_seg=8.0, angle=150.0) -> int:
+    """Demi-tours : inversions de cap >= 150° (impasses, aller-retour), en ignorant les micro-segments."""
+    kept = [coords[0]]
+    for c in coords[1:]:
+        if haversine(kept[-1][0], kept[-1][1], c[0], c[1]) >= min_seg:
+            kept.append(c)
+    n, i = 0, 1
+    while i < len(kept) - 1:
+        b1 = bearing(kept[i - 1][0], kept[i - 1][1], kept[i][0], kept[i][1])
+        b2 = bearing(kept[i][0], kept[i][1], kept[i + 1][0], kept[i + 1][1])
+        if abs((b2 - b1 + 180) % 360 - 180) >= angle:
+            n += 1
+            i += 2
+        else:
+            i += 1
+    return n
 
 
 def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_share: float,
@@ -336,6 +520,12 @@ class Loop:
     wind_bins: dict = field(default_factory=dict)
     signals: int | None = None
     exit_dense_m: float | None = None
+    stops: int | None = None
+    surface_mix: dict = field(default_factory=dict)
+    terrain: dict = field(default_factory=dict)
+    u_turns: int = 0
+    longest_repeat_m: float = 0.0
+    scenery: dict | None = None
 
     @property
     def dplus_per_km(self) -> float:
@@ -378,6 +568,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         keys.append(k)
         seen[k] = seen.get(k, 0) + 1
     repeated = sum(cum[i + 1] - cum[i] for i, k in enumerate(keys) if seen[k] > 1)
+    longest_repeat, run = 0.0, 0.0
+    for i, k in enumerate(keys):                     # plus long tronçon consécutif emprunté deux fois
+        run = run + (cum[i + 1] - cum[i]) if seen[k] > 1 else 0.0
+        longest_repeat = max(longest_repeat, run)
 
     # répartition des caps (8 secteurs) sur la 1re / 2e moitié : score de vent calculé côté navigateur
     bins = {"first": [0.0] * 8, "second": [0.0] * 8}
@@ -399,6 +593,15 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     ds, prof = elevation_profile(coords, cum)
     ascend, descend = gain_loss(prof)
     n_signals = SIGNALS.count_along(coords, cum) if SIGNALS is not None else None
+    n_stops = STOPS.count_along(coords, cum) if STOPS is not None else None
+    surface_mix = {
+        "asphalt": frac(surf, list(ASPHALT)), "cobbles": frac(surf, list(COBBLES)),
+        "unpaved": frac(surf, list(UNPAVED)),
+    }
+    surface_mix["unknown"] = max(0.0, 1.0 - sum(surface_mix.values()))
+    terrain = slope_stats(ds, prof)
+    u_turns = count_uturns(coords)
+    scenery = LANDSCAPE.measure(coords, cum) if LANDSCAPE is not None else None
     exit_dense = None
     ud = det.get("urban_density") or []
     if ud and str(ud[0][2]).lower() == "city":
@@ -415,6 +618,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         ascend_m=ascend, descend_m=descend, ascend_gh_m=float(path.get("ascend", 0.0)),
         time_s=estimate_time_s(ds, prof, watts, city, resid, n_signals),
         shares=shares, overlap=repeated / total, signals=n_signals, exit_dense_m=exit_dense,
+        stops=n_stops, surface_mix=surface_mix, terrain=terrain, u_turns=u_turns, longest_repeat_m=longest_repeat,
+        scenery=scenery,
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
@@ -428,7 +633,7 @@ def score(l: Loop) -> float:
         "calm": 1.0 - (s["urban"]["city"] + 0.4 * s["urban"]["residential"]),
         "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
         "infra": min(1.0, 2.0 * s["dedicated_cycleway"]),
-        "flow": 1.0 - min(1.0, 2.0 * l.overlap),
+        "flow": 1.0 - min(1.0, 2.0 * l.overlap + 0.15 * l.u_turns),
     }
     weights = dict(WEIGHTS)
     if l.signals is not None:
@@ -436,6 +641,10 @@ def score(l: Loop) -> float:
         parts["lights"] = 1.0 - min(1.0, per_km / LIGHTS_PER_KM_ZERO_SCORE)
     else:
         weights.pop("lights")
+    if l.scenery is not None:
+        parts["scenery"] = l.scenery["score"] / 100.0
+    else:
+        weights.pop("scenery")
     total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
     total -= min(0.3, max(0.0, s["unpaved"] - 0.03) * 2.0)
     return round(100 * max(0.0, total), 1)
@@ -447,7 +656,7 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
     lon, lat = start["lon"], start["lat"]
     watts = LEVELS[level]["watts"]
     target_s = duration_h * 3600.0
-    rejects = {"pas de boucle": 0, "durée": 0, "tronçons répétés": 0, "non goudronné": 0}
+    rejects = {"pas de boucle": 0, "durée": 0, "tronçons répétés": 0, "demi-tours": 0, "non goudronné": 0}
     flat_ms = speed_from_power(watts, 0.0) * REAL_WORLD_FACTOR
     dist = 0.8 * flat_ms * target_s            # GraphHopper dépasse souvent la distance demandée
 
@@ -498,6 +707,9 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
                 continue
         if cand.overlap > MAX_OVERLAP:
             rejects["tronçons répétés"] += 1
+            continue
+        if cand.u_turns > MAX_UTURNS:
+            rejects["demi-tours"] += 1
             continue
         if cand.shares["unpaved"] > MAX_UNPAVED:
             rejects["non goudronné"] += 1
@@ -577,6 +789,28 @@ def pitch(l: Loop, label: str) -> list[str]:
             lines.append("Aucun feu tricolore recensé dans OpenStreetMap sur le parcours.")
         else:
             lines.append(f"{l.signals} carrefours à feux tricolores ({per_km:.1f} par km).")
+    tr = l.terrain
+    if tr.get("climbs"):
+        c = tr["climbs"][0]
+        lines.append(f"Plus longue montée : {c['length_km']:.1f} km à {c['avg_grade_pct']:.1f} % (+{c['gain_m']} m) ; "
+                     f"{tr['n_climbs']} montée(s) de plus de 20 m au total, pente max lissée {tr['max_grade_pct']:.0f} %.")
+    elif tr:
+        lines.append("Aucune montée significative (plus de 20 m d'un seul tenant).")
+    if l.u_turns:
+        lines.append(f"{l.u_turns} demi-tour(s) sur le parcours.")
+    sc = l.scenery
+    if sc:
+        if sc["forest"] >= 0.15:
+            lines.append(f"{sc['forest'] * 100:.0f} % du parcours dans ou en bordure de forêt.")
+        if sc["water"] >= 0.05:
+            lines.append(f"{sc['water'] * 100:.0f} % à moins de 100 m d'un plan d'eau, d'une rivière ou de la mer.")
+        if sc["protected"] >= 0.15:
+            lines.append(f"{sc['protected'] * 100:.0f} % dans un parc ou un espace protégé.")
+        if sc["viewpoints"] >= 1:
+            lines.append(f"{sc['viewpoints']} point(s) de vue référencé(s) à moins de 300 m.")
+    sm = l.surface_mix
+    if sm and sm.get("unknown", 0) >= 0.3:
+        lines.append(f"Surface non renseignée dans OpenStreetMap sur {sm['unknown'] * 100:.0f} % du parcours.")
     if s["main_roads"] < 0.01:
         lines.append("Aucune route principale sur le parcours.")
     elif s["main_roads"] <= 0.10:
@@ -613,7 +847,20 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
             "unpaved": round(l.shares["unpaved"], 3),
         },
         "overlap": round(l.overlap, 3),
+        "bike": "route",
         "traffic_lights": l.signals,
+        "traffic_lights_per_km": (None if l.signals is None else round(l.signals / max(l.distance_m / 1000.0, 0.1), 2)),
+        "stop_signs": l.stops,
+        "stop_signs_per_km": (None if l.stops is None else round(l.stops / max(l.distance_m / 1000.0, 0.1), 2)),
+        "surface": {k: round(v, 3) for k, v in l.surface_mix.items()},
+        "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
+                    "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs")},
+        "u_turns": l.u_turns,
+        "longest_repeat_km": round(l.longest_repeat_m / 1000.0, 2),
+        "scenery": (None if l.scenery is None else {
+            "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
+            "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
+            "score": l.scenery["score"]}),
         "exit_dense_km": None if l.exit_dense_m is None else round(l.exit_dense_m / 1000.0, 1),
         "score": l.score,
         "pitch": pitch(l, label),
@@ -662,6 +909,7 @@ def main() -> int:
     ap.add_argument("--durations", type=float, nargs="*", default=None, help="durées en heures (surcharge la config)")
     ap.add_argument("--levels", nargs="*", default=None, choices=list(LEVELS), help="niveaux (surcharge la config)")
     ap.add_argument("--pbf", default=None, help="fichier .pbf de la région (par défaut : region.osm.pbf à côté de --places)")
+    ap.add_argument("--no-landscape", action="store_true", help="ne pas calculer le proxy paysage (dépannage mémoire)")
     ap.add_argument("--allow-no-elevation", action="store_true", help="test uniquement : accepte un graphe sans altitude")
     ap.add_argument("--candidates", type=int, default=len(CANDIDATES), help="nombre de candidats par combinaison")
     args = ap.parse_args()
@@ -672,10 +920,20 @@ def main() -> int:
     max_starts = args.max_starts or region.get("max_starts", 30)
     candidates = CANDIDATES[: max(1, args.candidates)]
 
-    global SIGNALS
+    global SIGNALS, STOPS, LANDSCAPE
     places_path = Path(args.places)
-    SIGNALS = load_signals(Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf", places_path.parent)
+    pbf_path = Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf"
+    SIGNALS = load_signals(pbf_path, places_path.parent)
     print(f"Feux tricolores OSM chargés : {len(SIGNALS.points) if SIGNALS else 0}", flush=True)
+    STOPS = load_points(pbf_path, places_path.parent, ["n/highway=stop"], "stops")
+    print(f"Panneaux stop OSM chargés : {len(STOPS.points) if STOPS else 0}", flush=True)
+    try:
+        LANDSCAPE = None if args.no_landscape else load_landscape(pbf_path, places_path.parent)
+    except Exception as e:  # noqa: BLE001 : le paysage est facultatif, on continue sans
+        print(f"! paysage ignoré ({type(e).__name__}: {e})", file=sys.stderr)
+        LANDSCAPE = None
+    print("Paysage OSM chargé : " + (", ".join(f"{k} {v}" for k, v in LANDSCAPE.counts.items()) if LANDSCAPE
+                                     else "non disponible"), flush=True)
     gh = GraphHopper(args.gh)
     if not gh.info().get("elevation") and not args.allow_no_elevation:
         print("Le serveur GraphHopper n'a pas de données d'altitude : D+ et durées seraient faux.\n"
