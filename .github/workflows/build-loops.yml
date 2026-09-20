@@ -1,0 +1,113 @@
+name: Générer les boucles vélo
+
+# Lancement manuel : onglet Actions > "Générer les boucles vélo" > Run workflow.
+# Les valeurs par défaut correspondent à un TEST RAPIDE (3 départs, 1 h, Barcelone + Vallès).
+# Pour la génération complète : max_starts = 30, durations = "1 2 3", bbox = (champ vide).
+on:
+  workflow_dispatch:
+    inputs:
+      max_starts:
+        description: "Nombre maximum de points de départ"
+        default: "3"
+      durations:
+        description: "Durées en heures, séparées par des espaces"
+        default: "1"
+      bbox:
+        description: "Emprise lon_min,lat_min,lon_max,lat_max (vide = toute la province de Barcelone)"
+        default: "1.95,41.30,2.35,41.60"
+
+permissions:
+  contents: write        # pour committer web/data
+
+concurrency:
+  group: build-loops
+  cancel-in-progress: true
+
+env:
+  GH_VERSION: "11.0"
+  REGION_FILE: config/region_barcelona.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Outils (osmium, jq, requests)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q osmium-tool jq
+          pip install -r scripts/requirements.txt
+
+      - name: Cache altitude (tuiles SRTM) et jar GraphHopper
+        uses: actions/cache@v4
+        with:
+          path: |
+            elevation-cache
+            graphhopper-web.jar
+          key: gh-${{ env.GH_VERSION }}-elevation-v1
+
+      - name: Télécharger GraphHopper
+        run: |
+          [ -f graphhopper-web.jar ] || curl -fL --retry 3 -o graphhopper-web.jar \
+            "https://github.com/graphhopper/graphhopper/releases/download/${GH_VERSION}/graphhopper-web-${GH_VERSION}.jar"
+
+      - name: Télécharger l'extrait OSM (Geofabrik) et le découper
+        env:
+          BBOX_INPUT: ${{ inputs.bbox }}
+        run: |
+          mkdir -p data
+          curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
+          BBOX="$BBOX_INPUT"
+          [ -n "$BBOX" ] || BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"
+          echo "Emprise utilisée : $BBOX"
+          osmium extract --bbox "$BBOX" --strategy=smart data/source.osm.pbf -o data/region.osm.pbf --overwrite
+          osmium tags-filter data/region.osm.pbf n/place=city,town,village -o data/places.osm.pbf --overwrite
+          osmium export data/places.osm.pbf -f geojson -o data/places.geojson --overwrite
+          ls -lh data
+
+      - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
+        run: |
+          nohup java -Xmx6g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
+            -jar graphhopper-web.jar server config/graphhopper.yml > gh.log 2>&1 &
+          echo $! > gh.pid
+          for i in $(seq 1 360); do
+            if curl -fs http://localhost:8989/health > /dev/null; then echo "GraphHopper prêt"; exit 0; fi
+            if ! kill -0 "$(cat gh.pid)" 2>/dev/null; then echo "GraphHopper s'est arrêté :"; tail -50 gh.log; exit 1; fi
+            sleep 10
+          done
+          echo "Délai dépassé"; tail -50 gh.log; exit 1
+
+      - name: Générer les boucles
+        env:
+          MAX_STARTS: ${{ inputs.max_starts }}
+          DURATIONS: ${{ inputs.durations }}
+        run: |
+          python scripts/generate_loops.py \
+            --region "$REGION_FILE" \
+            --places data/places.geojson \
+            --out web/data \
+            --max-starts "$MAX_STARTS" \
+            --durations $DURATIONS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loops-data
+          path: web/data
+
+      - name: Committer les données générées
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/data
+          git diff --cached --quiet && echo "Rien de nouveau" || (git commit -m "Boucles générées ($(date -u +%F))" && git push)
