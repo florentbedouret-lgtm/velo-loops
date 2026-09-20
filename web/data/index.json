@@ -1,6 +1,6 @@
 {
  "region": "province-de-barcelone",
- "generated_at": "2026-09-20T12:06:09Z",
+ "generated_at": "2026-09-20T13:51:15Z",
  "osm_data_date": null,
  "durations_h": [
   2.0
@@ -23,14 +23,14 @@
    "name": "Barcelona",
    "lon": 2.17703,
    "lat": 41.38261,
-   "options": 4
+   "options": 6
   },
   {
    "id": "badalona",
    "name": "Badalona",
    "lon": 2.2481,
    "lat": 41.44926,
-   "options": 5
+   "options": 6
   },
   {
    "id": "montcada-i-reixac",
@@ -38,27 +38,6 @@
    "lon": 2.18682,
    "lat": 41.47998,
    "options": 6
-  },
-  {
-   "id": "cerdanyola-del-valles",
-   "name": "Cerdanyola del Vallès",
-   "lon": 2.14051,
-   "lat": 41.49099,
-   "options": 6
-  },
-  {
-   "id": "sant-cugat-del-valles",
-   "name": "Sant Cugat del Vallès",
-   "lon": 2.085,
-   "lat": 41.47061,
-   "options": 7
-  },
-  {
-   "id": "rubi",
-   "name": "Rubí",
-   "lon": 2.03164,
-   "lat": 41.49362,
-   "options": 7
   }
  ]
 }
