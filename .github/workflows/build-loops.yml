@@ -7,19 +7,21 @@ name: Générer les boucles vélo
 # Modes (champ "mode") :
 #  - plan             : plan de départs + mesure de la couverture par zone (scénarios A et B). Rapide, rien n'est publié.
 #  - detour           : plan + mesure du détour et de la vitesse d'approche avec GraphHopper. Rien n'est publié.
+#  - pilot            : pilote complet (aucun autre réglage à faire) : plan sur la province, environ 35 à 60 départs choisis
+#                       (dont 5 ruraux, 2 au nord-ouest, 2 gares, des paires dense/voisin), toutes durées, puis publication.
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Mode : plan, detour, generate_names ou generate_planned"
+        description: "Mode : plan, detour, pilot (pilote complet), generate_names ou generate_planned"
         type: choice
-        options: [plan, detour, generate_names, generate_planned]
+        options: [plan, detour, pilot, generate_names, generate_planned]
         default: plan
       scenario:
         description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
-        default: "A"
+        default: "2,3,3"
       max_starts:
         description: "Nombre maximum de points de départ à générer (generate_*)"
         default: "3"
@@ -30,8 +32,8 @@ on:
         description: "Durées en heures, séparées par des espaces (ex. 1 1.5 2 3)"
         default: "1 1.5 2 3"
       bbox:
-        description: "Emprise lon_min,lat_min,lon_max,lat_max (vide = toute la province de Barcelone)"
-        default: "1.65,41.20,2.65,41.85"
+        description: "Emprise lon_min,lat_min,lon_max,lat_max, ou province. auto = province pour plan et pilot, centre pour les autres modes"
+        default: "auto"
       detour_cases:
         description: "Mode detour : trajets à mesurer « Départ A>Départ B » séparés par ; (noms du plan)"
         default: "Barcelona>Montcada i Reixac"
@@ -101,11 +103,15 @@ jobs:
       - name: Télécharger l'extrait OSM (Geofabrik) et le découper
         env:
           BBOX_INPUT: ${{ inputs.bbox }}
+          MODE: ${{ inputs.mode }}
         run: |
           mkdir -p data
           curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
           BBOX="$BBOX_INPUT"
-          [ -n "$BBOX" ] || BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"
+          if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
+            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
+          fi
+          if [ "$BBOX" = "province" ]; then BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"; fi
           echo "Emprise utilisée : $BBOX"
           osmium extract --bbox "$BBOX" --strategy=smart data/source.osm.pbf -o data/region.osm.pbf --overwrite
           osmium tags-filter data/region.osm.pbf n/place=city,town,village -o data/places.osm.pbf --overwrite
@@ -172,7 +178,7 @@ jobs:
           retention-days: 30
 
       - name: Générer les boucles
-        if: ${{ startsWith(inputs.mode, 'generate') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
         env:
           MAX_STARTS: ${{ inputs.max_starts }}
           DURATIONS: ${{ inputs.durations }}
@@ -183,7 +189,8 @@ jobs:
         run: |
           rm -rf web/data
           EXTRA=""
-          if [ "$MODE" = "generate_planned" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
+          if [ "$MODE" = "generate_planned" ] || [ "$MODE" = "pilot" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
+          if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
           if [ "$REUSE" = "true" ]; then
             OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
@@ -200,7 +207,7 @@ jobs:
             --durations $DURATIONS
 
       - name: Publier les mesures du pilote (temps de calcul, gain des départs voisins)
-        if: ${{ startsWith(inputs.mode, 'generate') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
         uses: actions/upload-artifact@v4
         with:
           name: pilote-mesures
@@ -211,7 +218,7 @@ jobs:
           retention-days: 30
 
       - name: Archiver les données générées (14 jours)
-        if: ${{ startsWith(inputs.mode, 'generate') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
         uses: actions/upload-artifact@v4
         with:
           name: loops-data
@@ -219,7 +226,7 @@ jobs:
           retention-days: 14
 
       - name: Assembler le site (web app + données fraîches)
-        if: ${{ startsWith(inputs.mode, 'generate') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
         run: |
           mkdir -p _site
           rsync -a \
@@ -231,17 +238,17 @@ jobs:
           du -sh _site _site/web/data
 
       - name: Préparer GitHub Pages
-        if: ${{ startsWith(inputs.mode, 'generate') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
         uses: actions/configure-pages@v5
 
       - name: Envoyer le site
-        if: ${{ startsWith(inputs.mode, 'generate') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    if: ${{ startsWith(inputs.mode, 'generate') }}
+    if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
