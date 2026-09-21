@@ -4,33 +4,37 @@ name: Générer les boucles vélo
 # Les données générées ne sont PAS commitées : elles sont publiées directement sur GitHub Pages (l'historique Git
 # ne grossit donc pas à chaque génération). Réglage unique : Settings > Pages > Source = "GitHub Actions".
 #
-# Modes :
-#  - génération normale : starts_mode = names (départs de config/region_barcelona.json) ou planned (plan de couverture)
-#  - plan_only = true : calcule seulement le plan de départs et la couverture (rapide, rien n'est publié)
+# Modes (champ "mode") :
+#  - plan             : plan de départs + mesure de la couverture par zone (scénarios A et B). Rapide, rien n'est publié.
+#  - detour           : plan + mesure du détour et de la vitesse d'approche avec GraphHopper. Rien n'est publié.
+#  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
+#  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Mode : plan, detour, generate_names ou generate_planned"
+        type: choice
+        options: [plan, detour, generate_names, generate_planned]
+        default: plan
+      scenario:
+        description: "Scénario de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km (ex. 2.5,3,4)"
+        default: "A"
       max_starts:
-        description: "Nombre maximum de points de départ"
+        description: "Nombre maximum de points de départ à générer (generate_*)"
         default: "3"
+      per_zone:
+        description: "generate_planned : pilote avec N départs par zone (dense, peri, rural) ; vide = utiliser max_starts"
+        default: ""
       durations:
         description: "Durées en heures, séparées par des espaces (ex. 1 1.5 2 3)"
         default: "1 1.5 2 3"
       bbox:
         description: "Emprise lon_min,lat_min,lon_max,lat_max (vide = toute la province de Barcelone)"
         default: "1.65,41.20,2.65,41.85"
-      starts_mode:
-        description: "Départs : names (liste du fichier de région) ou planned (plan de couverture automatique)"
-        type: choice
-        options: [names, planned]
-        default: names
-      dmax_km:
-        description: "Plan de couverture : distance maximale visée entre un lieu habité et un départ (km)"
-        default: "2"
-      plan_only:
-        description: "Ne faire que le plan de couverture (rien n'est généré ni publié)"
-        type: boolean
-        default: false
+      detour_cases:
+        description: "Mode detour : trajets à mesurer « Départ A>Départ B » séparés par ; (noms du plan)"
+        default: "Barcelona>Montcada i Reixac"
       workers:
         description: "Départs calculés en parallèle"
         default: "3"
@@ -101,26 +105,28 @@ jobs:
           osmium export data/places.osm.pbf -f geojson -o data/places.geojson --overwrite
           ls -lh data
 
-      - name: Plan de couverture des départs
-        if: ${{ inputs.plan_only || inputs.starts_mode == 'planned' }}
+      - name: Plan de couverture des départs (par zone)
+        if: ${{ inputs.mode != 'generate_names' }}
         env:
-          DMAX_KM: ${{ inputs.dmax_km }}
+          SCENARIO: ${{ inputs.scenario }}
         run: |
           python scripts/plan_starts.py --pbf data/region.osm.pbf --workdir data \
-            --out data/starts_plan.json --report data/coverage.json --dmax-km "$DMAX_KM"
+            --out data/starts_plan.json --report data/coverage.json --demand-out data/demand_sample.json \
+            --scenario "$SCENARIO"
 
-      - name: Publier le plan (départs et couverture)
-        if: ${{ inputs.plan_only || inputs.starts_mode == 'planned' }}
+      - name: Publier le plan (départs, couverture, échantillon)
+        if: ${{ inputs.mode != 'generate_names' }}
         uses: actions/upload-artifact@v4
         with:
           name: plan-departs
           path: |
             data/starts_plan.json
             data/coverage.json
+            data/demand_sample.json
           retention-days: 30
 
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
-        if: ${{ !inputs.plan_only }}
+        if: ${{ inputs.mode != 'plan' }}
         run: |
           nohup java -Xmx6g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
             -jar graphhopper-web.jar server config/graphhopper.yml > gh.log 2>&1 &
@@ -132,17 +138,36 @@ jobs:
           done
           echo "Délai dépassé"; tail -50 gh.log; exit 1
 
+      - name: Mesurer le détour et la vitesse d'approche
+        if: ${{ inputs.mode == 'detour' }}
+        env:
+          CASES: ${{ inputs.detour_cases }}
+        run: |
+          python scripts/measure_detour.py --gh http://localhost:8989 \
+            --sample data/demand_sample.json --starts data/starts_plan.json --pbf data/region.osm.pbf \
+            --n 200 --cases "$CASES" --out data/detour.json
+
+      - name: Publier la mesure de détour
+        if: ${{ inputs.mode == 'detour' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: detour-mesure
+          path: data/detour.json
+          retention-days: 30
+
       - name: Générer les boucles
-        if: ${{ !inputs.plan_only }}
+        if: ${{ startsWith(inputs.mode, 'generate') }}
         env:
           MAX_STARTS: ${{ inputs.max_starts }}
           DURATIONS: ${{ inputs.durations }}
           WORKERS: ${{ inputs.workers }}
-          STARTS_MODE: ${{ inputs.starts_mode }}
+          MODE: ${{ inputs.mode }}
+          PER_ZONE: ${{ inputs.per_zone }}
         run: |
           rm -rf web/data
           EXTRA=""
-          if [ "$STARTS_MODE" = "planned" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
+          if [ "$MODE" = "generate_planned" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
+          if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE"; fi
           python scripts/generate_loops.py \
             --region "$REGION_FILE" \
             --places data/places.geojson \
@@ -153,7 +178,7 @@ jobs:
             --durations $DURATIONS
 
       - name: Archiver les données générées (14 jours)
-        if: ${{ !inputs.plan_only }}
+        if: ${{ startsWith(inputs.mode, 'generate') }}
         uses: actions/upload-artifact@v4
         with:
           name: loops-data
@@ -161,7 +186,7 @@ jobs:
           retention-days: 14
 
       - name: Assembler le site (web app + données fraîches)
-        if: ${{ !inputs.plan_only }}
+        if: ${{ startsWith(inputs.mode, 'generate') }}
         run: |
           mkdir -p _site
           rsync -a \
@@ -173,17 +198,17 @@ jobs:
           du -sh _site _site/web/data
 
       - name: Préparer GitHub Pages
-        if: ${{ !inputs.plan_only }}
+        if: ${{ startsWith(inputs.mode, 'generate') }}
         uses: actions/configure-pages@v5
 
       - name: Envoyer le site
-        if: ${{ !inputs.plan_only }}
+        if: ${{ startsWith(inputs.mode, 'generate') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    if: ${{ !inputs.plan_only }}
+    if: ${{ startsWith(inputs.mode, 'generate') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
