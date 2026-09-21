@@ -1,0 +1,142 @@
+{
+ "version": "2.0",
+ "measured_on": "2026-09-21",
+ "status": "mesuré (deux échantillons de 200 paires ; valeurs poolées = moyennes pondérées des médianes : approximation)",
+ "zone_key": "start",
+ "zone_semantics": "Zones du DÉPART PRÉ-CALCULÉ le plus proche (celle que le front connaît). Chaque lieu habité est associé à son départ le plus proche ; la zone est celle de ce départ. Le mélange des zones des lieux est donc déjà inclus.",
+ "plan": "scénario 2/3/3 km (dense/périphérie/rural), sans habitations isolées",
+ "source": "mode detour : itinéraires GraphHopper (profil 'approach') de lieux habités vers leur départ le plus proche ; temps = modèle physique à 110 W + 10 s par feu OSM",
+ "bbox_regions": {
+  "centre": [
+   1.65,
+   41.2,
+   2.65,
+   41.85
+  ],
+  "nord_ouest": [
+   1.3,
+   41.55,
+   2.6,
+   42.35
+  ]
+ },
+ "bbox_order": "lon_min, lat_min, lon_max, lat_max",
+ "unmeasured_corners": "ouest du Penedès (lon 1.30-1.65, lat 41.20-41.55) et coin nord-est (lon 2.60-2.65, lat 41.85-42.35) : ne pas afficher de temps d'approche chiffré",
+ "formula": "temps d'approche à l'aller (min) = distance à vol d'oiseau (km) × detour_ratio_median ÷ speed_kmh_110W_median × 60 ; borne pessimiste : detour_ratio_p90 ; aller-retour = 2 × aller",
+ "precision": "environ 70 paires par zone et par région : les médianes varient de ±15 % d'un échantillon à l'autre, les parts de ±10 points. À resserrer avec 900 paires.",
+ "zones": {
+  "dense": {
+   "pairs": 153,
+   "detour_ratio_median": 1.62,
+   "detour_ratio_p90": 2.64,
+   "speed_kmh_110W_median": 16.76,
+   "speed_kmh_150W_median": 19.68,
+   "time_min_110W_median": 6.9,
+   "time_min_110W_p90": 15.13,
+   "lights_per_km_median": 0.88,
+   "lights_per_km_p90": 3.85,
+   "share_of_pairs_over_minutes_one_way_110W": {
+    "10": 0.287,
+    "15": 0.079,
+    "20": 0.026,
+    "30": 0.013,
+    "45": 0.007,
+    "60": 0.0
+   },
+   "share_over_30min_ci95_pts": 1.8,
+   "by_region": {
+    "centre": {
+     "pairs": 77,
+     "ratio": 1.52,
+     "speed": 16.76,
+     "share_over_30min": 0.026
+    },
+    "nord_ouest": {
+     "pairs": 76,
+     "ratio": 1.73,
+     "speed": 16.77,
+     "share_over_30min": 0.0
+    }
+   }
+  },
+  "peri": {
+   "pairs": 140,
+   "detour_ratio_median": 1.58,
+   "detour_ratio_p90": 2.85,
+   "speed_kmh_110W_median": 19.14,
+   "speed_kmh_150W_median": 22.25,
+   "time_min_110W_median": 7.47,
+   "time_min_110W_p90": 18.15,
+   "lights_per_km_median": 0.0,
+   "lights_per_km_p90": 1.44,
+   "share_of_pairs_over_minutes_one_way_110W": {
+    "10": 0.328,
+    "15": 0.171,
+    "20": 0.079,
+    "30": 0.028,
+    "45": 0.021,
+    "60": 0.007
+   },
+   "share_over_30min_ci95_pts": 2.7,
+   "by_region": {
+    "centre": {
+     "pairs": 73,
+     "ratio": 1.59,
+     "speed": 19.51,
+     "share_over_30min": 0.027
+    },
+    "nord_ouest": {
+     "pairs": 67,
+     "ratio": 1.56,
+     "speed": 18.73,
+     "share_over_30min": 0.03
+    }
+   }
+  },
+  "rural": {
+   "pairs": 108,
+   "detour_ratio_median": 1.75,
+   "detour_ratio_p90": 4.71,
+   "speed_kmh_110W_median": 16.28,
+   "speed_kmh_150W_median": 19.72,
+   "time_min_110W_median": 8.47,
+   "time_min_110W_p90": 44.32,
+   "lights_per_km_median": 0.0,
+   "lights_per_km_p90": 0.12,
+   "share_of_pairs_over_minutes_one_way_110W": {
+    "10": 0.454,
+    "15": 0.342,
+    "20": 0.241,
+    "30": 0.167,
+    "45": 0.102,
+    "60": 0.056
+   },
+   "share_over_30min_ci95_pts": 7.0,
+   "by_region": {
+    "centre": {
+     "pairs": 51,
+     "ratio": 1.85,
+     "speed": 15.97,
+     "share_over_30min": 0.216
+    },
+    "nord_ouest": {
+     "pairs": 57,
+     "ratio": 1.66,
+     "speed": 16.56,
+     "share_over_30min": 0.123
+    }
+   }
+  }
+ },
+ "case_barcelona_to_montcada": {
+  "crow_km": 10.9,
+  "road_km": 14.53,
+  "detour_ratio": 1.34,
+  "dense_zone_share": 0.84,
+  "urban_share": 0.94,
+  "traffic_lights": 66,
+  "time_min_110W": 55.99,
+  "time_min_150W": 49.93,
+  "status": "mesuré deux fois, résultat identique"
+ }
+}
