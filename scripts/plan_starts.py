@@ -30,6 +30,7 @@ import argparse
 import json
 import math
 import random
+import re
 import shutil
 import statistics
 import subprocess
@@ -46,7 +47,8 @@ RURAL_PLACES = {"hamlet", "isolated_dwelling"}
 CHECK_PLACES = ("Barcelona;l'Eixample;l'Hospitalet de Llobregat;Badalona;Sabadell;Terrassa;Mataró;Sant Cugat del Vallès;"
                 "Granollers;Vilanova i la Geltrú;Sitges;Manresa;Vic;Igualada;Berga;Sant Celoni;Cardedeu;Montcada i Reixac;"
                 "Cerdanyola del Vallès;Rubí;Castelldefels;Calella;Marganell;Rajadell;Callús;Montseny;Collbató")
-NOT_TRAIN = {"subway", "light_rail", "monorail", "tram"}
+NOT_TRAIN = {"subway", "light_rail", "monorail", "tram", "funicular", "aerialway", "cable_car"}
+NOT_TRAIN_NAME = re.compile(r"\b(aeri|cremallera|funicular|telef[eè]ric|cable ?car)\b", re.IGNORECASE)
 ZONES = ("dense", "peri", "rural")
 SCENARIOS = {"A": (2.0, 3.0, 4.0), "B": (3.0, 3.0, 4.0)}
 CELL_KM = 0.5
@@ -86,7 +88,8 @@ def load(seq: Path):
             if geom.geom_type == "Point":
                 if props.get("place"):
                     places.append((geom.x, geom.y, props["place"], props.get("name")))
-                elif props.get("railway") == "station" and props.get("station") not in NOT_TRAIN:
+                elif (props.get("railway") == "station" and props.get("station") not in NOT_TRAIN
+                      and not NOT_TRAIN_NAME.search(props.get("name") or "")):
                     stations.append((geom.x, geom.y, props.get("name") or "Gare"))
             elif geom.geom_type in ("Polygon", "MultiPolygon") and props.get("landuse") == "residential":
                 residential.append(geom)
@@ -319,7 +322,7 @@ def main() -> int:
     chosen_key = args.scenario if args.scenario in scen else "custom"
 
     report = {
-        "method": "densité résidentielle (carré de 1,5 km) → zone ; couverture maximale + remplissage",
+        "method": "densité résidentielle (carré de 3,5 km) → zone ; couverture maximale + remplissage",
         "thresholds": {"dense_frac": args.dense_frac, "peri_frac": args.peri_frac, "box_km": (2 * R + 1) * CELL_KM},
         "inputs": {"place_nodes": len(places), "stations": len(stations), "residential_polygons": len(residential),
                    "demand_points": int(len(dx))},
