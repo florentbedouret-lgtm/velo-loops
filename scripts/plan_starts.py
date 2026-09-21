@@ -261,9 +261,9 @@ def main() -> int:
     ap.add_argument("--no-force-towns", action="store_true", help="ne pas imposer un départ dans chaque ville (place=city/town)")
     ap.add_argument("--check-places", default=CHECK_PLACES, help="lieux de référence dont on affiche la densité (séparés par ;)")
     ap.add_argument("--stations", choices=["outside_dense", "all", "none"], default="outside_dense")
-    ap.add_argument("--rural-demand", choices=["all", "no_isolated", "villages_up"], default="all",
-                    help="lieux à couvrir : all = tout ; no_isolated = sans habitations isolées ; villages_up = sans habitations "
-                         "isolées ni hameaux (le rapport chiffre les trois variantes)")
+    ap.add_argument("--rural-demand", choices=["all", "no_isolated", "villages_up"], default="no_isolated",
+                    help="lieux à couvrir : all = tout ; no_isolated (défaut) = sans habitations isolées ; villages_up = sans "
+                         "habitations isolées ni hameaux (le rapport chiffre les trois variantes)")
     args = ap.parse_args()
 
     pbf = Path(args.pbf)
