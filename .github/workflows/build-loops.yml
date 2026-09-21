@@ -36,7 +36,7 @@ on:
         description: "Mode detour : trajets à mesurer « Départ A>Départ B » séparés par ; (noms du plan)"
         default: "Barcelona>Montcada i Reixac"
       detour_pairs:
-        description: "Mode detour : nombre total de paires lieu habité > départ à router (répartis entre les 3 zones)"
+        description: "Mode detour : nombre total de paires lieu habité > départ à router, réparties entre les 3 zones (0 = tous les lieux habités)"
         default: "600"
       reuse:
         description: "generate_* : réutiliser les départs identiques du site déjà publié (même point, mêmes paramètres, moins de 60 jours)"
@@ -116,10 +116,16 @@ jobs:
         if: ${{ inputs.mode != 'generate_names' }}
         env:
           SCENARIO: ${{ inputs.scenario }}
+          MODE: ${{ inputs.mode }}
+          PAIRS: ${{ inputs.detour_pairs }}
         run: |
+          SAMPLE=300
+          if [ "$MODE" = "detour" ]; then
+            if [ "$PAIRS" = "0" ]; then SAMPLE=0; else SAMPLE=$(( PAIRS / 3 + 30 )); [ "$SAMPLE" -lt 300 ] && SAMPLE=300; fi
+          fi
           python scripts/plan_starts.py --pbf data/region.osm.pbf --workdir data \
             --out data/starts_plan.json --report data/coverage.json --demand-out data/demand_sample.json \
-            --scenario "$SCENARIO"
+            --scenario "$SCENARIO" --sample-per-zone "$SAMPLE"
 
       - name: Publier le plan (départs, couverture, échantillon)
         if: ${{ inputs.mode != 'generate_names' }}
@@ -135,7 +141,7 @@ jobs:
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
         if: ${{ inputs.mode != 'plan' }}
         run: |
-          nohup java -Xmx6g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
+          nohup java -Xmx8g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
             -jar graphhopper-web.jar server config/graphhopper.yml > gh.log 2>&1 &
           echo $! > gh.pid
           for i in $(seq 1 360); do
@@ -178,7 +184,7 @@ jobs:
           rm -rf web/data
           EXTRA=""
           if [ "$MODE" = "generate_planned" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
-          if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE"; fi
+          if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
           if [ "$REUSE" = "true" ]; then
             OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
             EXTRA="$EXTRA --reuse-from https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
@@ -189,8 +195,20 @@ jobs:
             --out web/data \
             --max-starts "$MAX_STARTS" \
             --workers "$WORKERS" \
+            --timings-out data/timings.json \
             $EXTRA \
             --durations $DURATIONS
+
+      - name: Publier les mesures du pilote (temps de calcul, gain des départs voisins)
+        if: ${{ startsWith(inputs.mode, 'generate') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pilote-mesures
+          path: |
+            data/timings.json
+            data/neighbour_gain.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Archiver les données générées (14 jours)
         if: ${{ startsWith(inputs.mode, 'generate') }}
