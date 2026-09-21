@@ -18,7 +18,7 @@ on:
         options: [plan, detour, generate_names, generate_planned]
         default: plan
       scenario:
-        description: "Scénario de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km (ex. 2.5,3,4)"
+        description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
         default: "A"
       max_starts:
         description: "Nombre maximum de points de départ à générer (generate_*)"
@@ -35,6 +35,13 @@ on:
       detour_cases:
         description: "Mode detour : trajets à mesurer « Départ A>Départ B » séparés par ; (noms du plan)"
         default: "Barcelona>Montcada i Reixac"
+      detour_pairs:
+        description: "Mode detour : nombre total de paires lieu habité > départ à router (répartis entre les 3 zones)"
+        default: "600"
+      reuse:
+        description: "generate_* : réutiliser les départs identiques du site déjà publié (même point, mêmes paramètres, moins de 60 jours)"
+        type: boolean
+        default: false
       workers:
         description: "Départs calculés en parallèle"
         default: "3"
@@ -142,17 +149,20 @@ jobs:
         if: ${{ inputs.mode == 'detour' }}
         env:
           CASES: ${{ inputs.detour_cases }}
+          PAIRS: ${{ inputs.detour_pairs }}
         run: |
           python scripts/measure_detour.py --gh http://localhost:8989 \
             --sample data/demand_sample.json --starts data/starts_plan.json --pbf data/region.osm.pbf \
-            --n 200 --cases "$CASES" --out data/detour.json
+            --n "$PAIRS" --neighbours 30 --cases "$CASES" --out data/detour.json
 
       - name: Publier la mesure de détour
         if: ${{ inputs.mode == 'detour' }}
         uses: actions/upload-artifact@v4
         with:
           name: detour-mesure
-          path: data/detour.json
+          path: |
+            data/detour.json
+            data/detour_pairs.json
           retention-days: 30
 
       - name: Générer les boucles
@@ -163,11 +173,16 @@ jobs:
           WORKERS: ${{ inputs.workers }}
           MODE: ${{ inputs.mode }}
           PER_ZONE: ${{ inputs.per_zone }}
+          REUSE: ${{ inputs.reuse }}
         run: |
           rm -rf web/data
           EXTRA=""
           if [ "$MODE" = "generate_planned" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE"; fi
+          if [ "$REUSE" = "true" ]; then
+            OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+            EXTRA="$EXTRA --reuse-from https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          fi
           python scripts/generate_loops.py \
             --region "$REGION_FILE" \
             --places data/places.geojson \
