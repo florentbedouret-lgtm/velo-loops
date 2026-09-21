@@ -254,6 +254,7 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="JSON de départs du scénario choisi")
     ap.add_argument("--report", required=True, help="JSON de couverture (tous les scénarios)")
     ap.add_argument("--demand-out", default=None, help="échantillon de lieux habités pour measure_detour.py")
+    ap.add_argument("--sample-per-zone", type=int, default=300, help="taille de l'échantillon par zone (0 = tous les lieux)")
     ap.add_argument("--scenario", default="A", help="A, B ou 'dense,peri,rural' en km (ex. 2,3,3) ; plusieurs séparés par ; "
                                                      "(ex. 2,3,3;2,3.5,4) : le premier produit --out, tous sont chiffrés")
     ap.add_argument("--dense-frac", type=float, default=0.45)
@@ -300,8 +301,8 @@ def main() -> int:
     def demand_for(dense_frac, peri_frac, mask=None):
         zones = ["rural" if forced_rural[i] else zone_of(fr[i], dense_frac, peri_frac) for i in range(len(dx))]
         if mask is None:
-            return {"x": dx, "y": dy, "zone": zones}
-        return {"x": dx[mask], "y": dy[mask], "zone": [z for z, m in zip(zones, mask) if m]}
+            return {"x": dx, "y": dy, "zone": zones, "kind": dkind}
+        return {"x": dx[mask], "y": dy[mask], "zone": [z for z, m in zip(zones, mask) if m], "kind": dkind[mask]}
 
     dem_full = demand_for(args.dense_frac, args.peri_frac)
     dem = demand_for(args.dense_frac, args.peri_frac, keep_mask(args.rural_demand))
@@ -467,10 +468,10 @@ def main() -> int:
         for z in ZONES:
             ids = [i for i in range(len(dem["x"])) if dem["zone"][i] == z and dd[i] >= 0.6]
             rnd.shuffle(ids)
-            for i in ids[:300]:
+            for i in (ids if args.sample_per_zone == 0 else ids[: args.sample_per_zone]):
                 lon, lat = proj.lonlat(dem["x"][i], dem["y"][i])
                 sample.append({"lon": round(float(lon), 5), "lat": round(float(lat), 5), "zone": z,
-                               "start": int(idx[i]), "crow_km": round(float(dd[i]), 3)})
+                               "kind": str(dem["kind"][i]), "start": int(idx[i]), "crow_km": round(float(dd[i]), 3)})
         Path(args.demand_out).write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
 
     # --- résumé lisible

@@ -1076,6 +1076,137 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     return entry, buf, time.time() - t0
 
 
+def approach_stats(gh_url: str, a: dict, b: dict):
+    """Trajet à vélo (profil approach) du départ a vers le départ b : distance, temps à 110 W avec feux, part en zone dense."""
+    body = {"points": [[a["lon"], a["lat"]], [b["lon"], b["lat"]]], "profile": "approach", "points_encoded": False,
+            "elevation": True, "instructions": False, "details": ["urban_density"]}
+    try:
+        r = requests.post(f"{gh_url}/route", json=body, timeout=60)
+        path = (r.json().get("paths") or [None])[0] if r.status_code == 200 else None
+    except requests.RequestException:
+        path = None
+    if not path:
+        return None
+    coords = path["points"]["coordinates"]
+    cum = [0.0]
+    for i in range(1, len(coords)):
+        cum.append(cum[-1] + haversine(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]))
+    if cum[-1] < 50:
+        return None
+    urban = meters_by_value(path.get("details", {}).get("urban_density"), cum)
+    city, resid = urban.get("city", 0.0) / cum[-1], urban.get("residential", 0.0) / cum[-1]
+    lights = SIGNALS.count_along(coords, cum) if SIGNALS is not None else None
+    ds, prof = elevation_profile(coords, cum)
+    t = estimate_time_s(ds, prof, 110, city, resid, lights)
+    return {"road_km": round(cum[-1] / 1000.0, 2), "time_min_110W": round(t / 60.0, 1), "dense_zone_share": round(city, 2),
+            "lights": lights}
+
+
+def pick_neighbour_pairs(plan_all: list, n: int) -> list:
+    """N départs denses (hors gares), chacun avec le départ hors zone dense le plus proche s'il est à 2,2 km ou moins."""
+    dense = [x for x in plan_all if x.get("zone") == "dense" and x.get("kind") != "station"]
+    others = [x for x in plan_all if x.get("zone") in ("peri", "rural")]
+    pairs = []
+    for a in dense[:: max(1, len(dense) // max(1, n * 3))]:            # parcours réparti sur toute la liste
+        if not others:
+            break
+        d, b = min(((haversine(a["lon"], a["lat"], o["lon"], o["lat"]) / 1000.0, o) for o in others), key=lambda t: t[0])
+        if d <= 2.2:
+            pairs.append((a, b))
+        if len(pairs) >= n:
+            break
+    return pairs
+
+
+def median(v):
+    v = sorted(v)
+    return None if not v else (v[len(v) // 2] if len(v) % 2 else (v[len(v) // 2 - 1] + v[len(v) // 2]) / 2)
+
+
+def neighbour_gain(pairs: list, index: list, out: Path, gh_url: str, out_path: str):
+    """Pour chaque paire (départ dense, voisin) : temps d'approche, puis, à durée ET niveau identiques, gain du voisin sur
+    les km de ville et les feux par km (meilleure option de chaque départ)."""
+    by_key = {e["key"]: e for e in index}
+
+    def best_options(entry):
+        d = json.loads((out / "starts" / f"{entry['id']}.json").read_text(encoding="utf-8"))
+        best: dict = {}
+        for o in d["options"]:
+            k = (f"{o['duration_target_min'] / 60:g}", o["level"])
+            if k not in best or o["score"] > best[k]["score"]:
+                best[k] = o
+        return best
+
+    rows = []
+    for a, b in pairs:
+        ea, eb = by_key.get(start_key(a["lon"], a["lat"])), by_key.get(start_key(b["lon"], b["lat"]))
+        if not ea or not eb:
+            continue
+        ap_ = approach_stats(gh_url, a, b)
+        if ap_ is None:
+            continue
+        oa, ob = best_options(ea), best_options(eb)
+        for k in sorted(set(oa) & set(ob), key=lambda x: (float(x[0]), x[1])):
+            x, y = oa[k], ob[k]
+            rows.append({
+                "dense_start": a["name"], "neighbour": b["name"], "neighbour_kind": b.get("kind"), "neighbour_zone": b.get("zone"),
+                "crow_km": round(haversine(a["lon"], a["lat"], b["lon"], b["lat"]) / 1000.0, 2), **ap_,
+                "duration_h": k[0], "level": k[1],
+                "dense_exit_dense_km": x["exit_dense_km"], "dense_loop_km": x["distance_km"],
+                "dense_never_exits": x["exit_dense_km"] is not None and x["exit_dense_km"] >= 0.98 * x["distance_km"],
+                "neighbour_exit_dense_km": y["exit_dense_km"], "dense_lights_per_km": x["traffic_lights_per_km"],
+                "neighbour_lights_per_km": y["traffic_lights_per_km"],
+                "km_of_city_avoided": None if x["exit_dense_km"] is None or y["exit_dense_km"] is None
+                else round(x["exit_dense_km"] - y["exit_dense_km"], 1),
+                "lights_per_km_reduction": None if x["traffic_lights_per_km"] is None or y["traffic_lights_per_km"] is None
+                else round(x["traffic_lights_per_km"] - y["traffic_lights_per_km"], 2)})
+
+    def agg(sel):
+        if not sel:
+            return {"rows": 0, "pairs": 0}
+        pairs_ = {(r["dense_start"], r["neighbour"]) for r in sel}
+        km = [r["km_of_city_avoided"] for r in sel if r["km_of_city_avoided"] is not None]
+        lp = [r["lights_per_km_reduction"] for r in sel if r["lights_per_km_reduction"] is not None]
+        return {"rows": len(sel), "pairs": len(pairs_),
+                "median_approach_min_one_way": median([r["time_min_110W"] for r in sel]),
+                "median_km_of_city_avoided": median(km),
+                "km_of_city_avoided_range": [min(km), max(km)] if km else None,
+                "median_lights_per_km_reduction": median(lp),
+                "lights_per_km_reduction_range": [min(lp), max(lp)] if lp else None,
+                "share_dense_loop_never_exits": round(sum(1 for r in sel if r["dense_never_exits"]) / len(sel), 2),
+                "share_neighbour_is_station": round(sum(1 for r in sel if r["neighbour_kind"] == "station") / len(sel), 2)}
+
+    def per_pair(sel):
+        """Une ligne par paire : médiane, sur les combinaisons durée × niveau, des km de ville évités."""
+        acc: dict = {}
+        for r in sel:
+            acc.setdefault((r["dense_start"], r["neighbour"], r["neighbour_kind"], r["time_min_110W"], r["crow_km"]), []).append(r)
+        out_ = []
+        for (a_, b_, kind_, t_, crow_), rr in acc.items():
+            km_ = [x["km_of_city_avoided"] for x in rr if x["km_of_city_avoided"] is not None]
+            out_.append({"dense_start": a_, "neighbour": b_, "neighbour_kind": kind_, "approach_min_one_way": t_, "crow_km": crow_,
+                         "median_km_of_city_avoided": median(km_), "combinations": len(rr)})
+        return sorted(out_, key=lambda x: x["approach_min_one_way"])
+
+    result = {"note": "meilleure option (note la plus haute) de chaque départ, à durée et niveau identiques ; km de ville évités = "
+                      "exit_dense_km du départ dense − celui du voisin ; feux : baisse de feux par km",
+              "pairs_measured": len({(r["dense_start"], r["neighbour"]) for r in rows}),
+              "all_within_15min": agg([r for r in rows if r["time_min_110W"] <= 15]),
+              "within_10min": agg([r for r in rows if r["time_min_110W"] <= 10]),
+              "between_10_and_15min": agg([r for r in rows if 10 < r["time_min_110W"] <= 15]),
+              "pairs_within_10min": per_pair([r for r in rows if r["time_min_110W"] <= 10]),
+              "pairs_between_10_and_15min": per_pair([r for r in rows if 10 < r["time_min_110W"] <= 15]),
+              "within_10min_by_duration_and_level": {}, "neighbour_kinds_within_10min": {}, "rows": rows}
+    for r in [r for r in rows if r["time_min_110W"] <= 10]:
+        k = f"{r['duration_h']} h / {r['level']}"
+        result["within_10min_by_duration_and_level"].setdefault(k, []).append(r)
+        result["neighbour_kinds_within_10min"][r["neighbour_kind"]] = result["neighbour_kinds_within_10min"].get(r["neighbour_kind"], 0) + 1
+    result["within_10min_by_duration_and_level"] = {k: agg(v) for k, v in result["within_10min_by_duration_and_level"].items()}
+    if out_path:
+        Path(out_path).write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    return result
+
+
 def by_zone_seconds(index) -> dict:
     acc: dict = {}
     for e in index:
@@ -1115,8 +1246,14 @@ def main() -> int:
     ap.add_argument("--reuse-from", default=None, help="adresse du site précédent (ou dossier local) dont on réutilise les départs "
                                                         "identiques (même clé, mêmes paramètres, moins de --reuse-max-age-days)")
     ap.add_argument("--reuse-max-age-days", type=float, default=60.0)
-    ap.add_argument("--pilot-names", default="Barcelona;Badalona;Montcada i Reixac",
-                    help="départs toujours inclus par --per-zone (noms séparés par ;)")
+    ap.add_argument("--pilot-names", default="Barcelona;Badalona;Montcada i Reixac;Manresa;Vic",
+                    help="départs toujours inclus par --per-zone (noms séparés par ; ; ceux qui n'existent pas sont ignorés)")
+    ap.add_argument("--pilot-rural", type=int, default=0, help="pilote : nombre total de départs ruraux (au moins --per-zone)")
+    ap.add_argument("--pilot-box", default=None, help="pilote : « lon0,lat0,lon1,lat1:N » = N départs ruraux imposés dans cette emprise (relief)")
+    ap.add_argument("--timings-out", default=None, help="JSON des temps de calcul par départ (zone, durée) : diagnostic, non publié")
+    ap.add_argument("--neighbour-pilot", type=int, default=0, help="pilote : N départs denses avec leur voisin hors zone dense à moins de 2,2 km "
+                                                                    "(ajoutés à la sélection) et mesure du gain de boucle")
+    ap.add_argument("--neighbour-out", default=None, help="JSON du gain des départs voisins (avec --neighbour-pilot)")
     ap.add_argument("--shard", default=None, help="i/N : ne traite que les départs d'indice i modulo N (calcul en parallèle)")
     ap.add_argument("--workers", type=int, default=1, help="départs traités en parallèle (threads)")
     ap.add_argument("--out", default="web/data", help="dossier de sortie")
@@ -1162,12 +1299,26 @@ def main() -> int:
         starts = load_starts_file(Path(args.starts_file), region.get("bbox"))
     else:
         starts = load_starts(places_path, region.get("start_names"), region.get("bbox"), max_starts)
+    plan_all = list(starts)
+    neighbour_pairs: list = []
     if args.per_zone:
         picked = [st for st in starts if st["name"] in {n.strip() for n in args.pilot_names.split(";") if n.strip()}]
-        for z in ("dense", "peri", "rural"):
+        for z in ("dense", "peri"):
             zs = [st for st in starts if st.get("zone") == z and st.get("kind") != "station"]
             step = max(1, len(zs) // args.per_zone)
             picked.extend(zs[::step][: args.per_zone])
+        rural = [st for st in starts if st.get("zone") == "rural" and st.get("kind") != "station"]
+        box_pick: list = []
+        if args.pilot_box:
+            spec, cnt = args.pilot_box.rsplit(":", 1)
+            x0, y0, x1, y1 = (float(v) for v in spec.split(","))
+            inbox = [st for st in rural if x0 <= st["lon"] <= x1 and y0 <= st["lat"] <= y1]
+            box_pick = inbox[:: max(1, len(inbox) // max(1, int(cnt)))][: int(cnt)]
+            if len(box_pick) < int(cnt):
+                print(f"! pilote : {len(box_pick)} départ(s) rural(aux) seulement dans l'emprise {spec} (demandé {cnt})", file=sys.stderr)
+        rest = [st for st in rural if st["name"] not in {b["name"] for b in box_pick}]
+        n_rest = max(0, max(args.per_zone, args.pilot_rural) - len(box_pick))
+        picked.extend(box_pick + rest[:: max(1, len(rest) // max(1, n_rest))][:n_rest])
         stations = [st for st in starts if st.get("kind") == "station"]
         picked.extend(stations[:: max(1, len(stations) // 2)][:2])          # 2 gares réparties dans la liste
         seen_names, unique = set(), []
@@ -1176,6 +1327,14 @@ def main() -> int:
                 seen_names.add(st["name"])
                 unique.append(st)
         starts = unique or starts
+        if args.neighbour_pilot:                       # départs denses et leur voisin hors zone dense, pour mesurer le gain
+            neighbour_pairs = pick_neighbour_pairs(plan_all, args.neighbour_pilot)
+            have = {st["name"] for st in starts}
+            for a, b in neighbour_pairs:
+                for x in (a, b):
+                    if x["name"] not in have:
+                        starts.append(x)
+                        have.add(x["name"])
     if args.shard:
         i, n = (int(x) for x in args.shard.split("/"))
         starts = starts[i::n]
@@ -1230,6 +1389,16 @@ def main() -> int:
     skipped = [st["name"] for st, r in zip(starts, results) if not r[0]]
     elapsed = time.time() - t0
 
+    if args.timings_out:
+        Path(args.timings_out).write_text(json.dumps([
+            {"name": st["name"], "zone": st.get("zone"), "kind": st.get("kind"), "reused": bool(r[0].get("reused")),
+             "seconds": r[0].get("compute_seconds"), "seconds_by_duration": r[0].get("compute_seconds_by_duration")}
+            for st, r in zip(starts, results) if r[0]], ensure_ascii=False, indent=1), encoding="utf-8")
+    if neighbour_pairs:
+        ng = neighbour_gain(neighbour_pairs, index, out, args.gh, args.neighbour_out)
+        w10 = ng["within_10min"]
+        print(f"Voisins : {ng['pairs_measured']} paires mesurées, dont {w10.get('pairs', 0)} à 10 min ou moins ; "
+              f"km de ville évités (médiane) {w10.get('median_km_of_city_avoided')} ; baisse de feux par km {w10.get('median_lights_per_km_reduction')}", flush=True)
     info = gh.info()
     available = sorted({d for e in index for d in e["durations_h"]})
     meta = {

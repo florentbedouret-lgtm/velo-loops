@@ -98,7 +98,7 @@ def main() -> int:
 
     rnd = random.Random(11)
     per_zone = math.ceil(args.n / 3) if args.n else 10 ** 9
-    rows, failed = [], {"dense": 0, "peri": 0, "rural": 0}
+    rows, failed, failed_rows = [], {"dense": 0, "peri": 0, "rural": 0}, []
     for zone in ("dense", "peri", "rural"):
         pairs = [s for s in sample if s["zone"] == zone]
         rnd.shuffle(pairs)
@@ -109,8 +109,10 @@ def main() -> int:
             m = measure(path, crow) if path else None
             if m is None:
                 failed[zone] += 1
+                failed_rows.append({"zone": zone, "kind": s.get("kind", "?"), "crow_km": round(crow, 3)})
                 continue
-            m.update({"zone": zone, "start_zone": st.get("zone"), "crow_km": crow, "lon": s["lon"], "lat": s["lat"]})
+            m.update({"zone": zone, "start_zone": st.get("zone"), "crow_km": crow, "lon": s["lon"], "lat": s["lat"],
+                      "kind": s.get("kind", "?")})
             rows.append(m)
 
     THRESHOLDS = (10, 15, 20, 30, 45, 60)
@@ -135,6 +137,35 @@ def main() -> int:
         sel = [r for r in rows if r.get("start_zone") == zone]
         if sel:
             report["by_start_zone"][zone] = aggregate(sel)
+    KIND_GROUP = {"city": "bourgs et villages", "town": "bourgs et villages", "village": "bourgs et villages",
+                  "suburb": "bourgs et villages", "hamlet": "hameaux", "isolated_dwelling": "habitations isolées",
+                  "neighbourhood": "quartiers et lotissements", "quarter": "quartiers et lotissements",
+                  "residential": "zones résidentielles"}
+    group = lambda k: KIND_GROUP.get(k, "autres")  # noqa: E731
+
+    def tail_block(sel_rows, sel_failed):
+        """Lieux « non couverts » selon la règle de l'UX : sans itinéraire, rapport > 10 ; et lieux à plus de 30 min."""
+        total = len(sel_rows) + len(sel_failed)
+        over30 = [r for r in sel_rows if r["time_min_110W"] > 30]
+        ratio10 = [r for r in sel_rows if r["ratio"] > 10]
+        unc = [r for r in sel_rows if r["ratio"] > 10 or r["time_min_110W"] > 30]
+        out = {"places_routed_or_failed": total, "no_route": len(sel_failed), "ratio_over_10": len(ratio10),
+               "over_30min": len(over30), "over_30min_or_no_route_or_ratio_over_10": len(unc) + len(sel_failed),
+               "share_over_30min": round(len(over30) / total, 3) if total else None,
+               "share_not_covered_by_ux_rule": round((len(unc) + len(sel_failed)) / total, 3) if total else None,
+               "composition_of_over_30min_by_kind_group": {}, "composition_of_not_covered_by_kind_group": {},
+               "all_places_by_kind_group": {}}
+        for r in over30:
+            g_ = group(r["kind"]); out["composition_of_over_30min_by_kind_group"][g_] = out["composition_of_over_30min_by_kind_group"].get(g_, 0) + 1
+        for r in unc + sel_failed:
+            g_ = group(r["kind"]); out["composition_of_not_covered_by_kind_group"][g_] = out["composition_of_not_covered_by_kind_group"].get(g_, 0) + 1
+        for r in sel_rows + sel_failed:
+            g_ = group(r["kind"]); out["all_places_by_kind_group"][g_] = out["all_places_by_kind_group"].get(g_, 0) + 1
+        return out
+
+    report["tail"] = {"all_zones": tail_block(rows, failed_rows)}
+    for zone in ("dense", "peri", "rural"):
+        report["tail"][zone] = tail_block([r for r in rows if r["zone"] == zone], [r for r in failed_rows if r["zone"] == zone])
     pairs_path = Path(args.pairs_out) if args.pairs_out else Path(args.out).with_name("detour_pairs.json")
     pairs_path.write_text(json.dumps([{k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}
                                       for r in rows], ensure_ascii=False), encoding="utf-8")
@@ -204,6 +235,13 @@ def main() -> int:
             print(f"{zone:<7}{r['pairs']:>7}{med('crow_km'):>11} km{med('road_km'):>6} km{med('ratio_road_over_crow'):>9}"
                   f"{med('ratio_road_over_crow', 'p90'):>6}{med('time_min_110W'):>10} min{med('speed_kmh_110W'):>9}"
                   f"{round(100 * r['share_over_minutes_110W']['15']):>8}%{round(100 * r['share_over_minutes_110W']['30']):>8}%")
+    t = report["tail"]["all_zones"]
+    print(f"\nQueue : {t['places_routed_or_failed']} lieux routés ; sans itinéraire {t['no_route']} ; rapport > 10 : {t['ratio_over_10']} ; "
+          f"au-delà de 30 min : {t['over_30min']} ({round(100 * (t['share_over_30min'] or 0), 1)} %) ; non couverts selon la règle "
+          f"(30 min, sans itinéraire ou rapport > 10) : {t['over_30min_or_no_route_or_ratio_over_10']} "
+          f"({round(100 * (t['share_not_covered_by_ux_rule'] or 0), 1)} %)")
+    print(f"  composition des lieux > 30 min ou non couverts : {t['composition_of_not_covered_by_kind_group']} "
+          f"(parmi tous les lieux : {t['all_places_by_kind_group']})")
     if report["neighbour_pairs"]:
         n = report["neighbour_pairs"]
         print(f"\nDépart dense -> départ voisin hors zone dense ({n['pairs']} paires) : temps médian {n['time_min_110W']['median']} min, "
