@@ -10,6 +10,9 @@ graphhopper:
       custom_model_files: [racingbike.json, bike_elevation.json, loop_calm.json]
     - name: sport
       custom_model_files: [racingbike.json, bike_elevation.json, loop_sport.json]
+    # trajet d'approche vers un départ : vélo de route sans préférence de paysage ni évitement de la ville
+    - name: approach
+      custom_model_files: [racingbike.json, bike_elevation.json]
 
   graph.encoded_values: racingbike_priority, racingbike_access, roundabout, racingbike_average_speed, bike_road_access, average_slope, mtb_rating, hike_rating, country, road_class, road_environment, surface, bike_network, urban_density
 
