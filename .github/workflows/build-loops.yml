@@ -9,15 +9,17 @@ name: Générer les boucles vélo
 #  - detour           : plan + mesure du détour et de la vitesse d'approche avec GraphHopper. Rien n'est publié.
 #  - pilot            : pilote complet (aucun autre réglage à faire) : plan sur la province, environ 35 à 60 départs choisis
 #                       (dont 5 ruraux, 2 au nord-ouest, 2 gares, des paires dense/voisin), toutes durées, puis publication.
+#  - full             : génération COMPLÈTE : plan sur la province entière, tous les départs du plan (jusqu'à 1000), toutes durées,
+#                       puis publication. À ne lancer qu'après accord ; `reuse` coché reprend les départs identiques du site publié.
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Mode : plan, detour, pilot (pilote complet), generate_names ou generate_planned"
+        description: "Mode : plan, detour, pilot (pilote), full (génération complète, province entière), generate_names ou generate_planned"
         type: choice
-        options: [plan, detour, pilot, generate_names, generate_planned]
+        options: [plan, detour, pilot, full, generate_names, generate_planned]
         default: plan
       scenario:
         description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
@@ -109,7 +111,7 @@ jobs:
           curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
           BBOX="$BBOX_INPUT"
           if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
-            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
+            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "$MODE" = "full" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
           fi
           if [ "$BBOX" = "province" ]; then BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"; fi
           echo "Emprise utilisée : $BBOX"
@@ -178,7 +180,7 @@ jobs:
           retention-days: 30
 
       - name: Générer les boucles
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
         env:
           MAX_STARTS: ${{ inputs.max_starts }}
           DURATIONS: ${{ inputs.durations }}
@@ -189,7 +191,8 @@ jobs:
         run: |
           rm -rf web/data
           EXTRA=""
-          if [ "$MODE" = "generate_planned" ] || [ "$MODE" = "pilot" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
+          if [ "$MODE" = "generate_planned" ] || [ "$MODE" = "pilot" ] || [ "$MODE" = "full" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
+          if [ "$MODE" = "full" ]; then MAX_STARTS=1000; PER_ZONE=""; fi
           if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
           if [ "$REUSE" = "true" ]; then
@@ -207,7 +210,7 @@ jobs:
             --durations $DURATIONS
 
       - name: Publier les mesures du pilote (temps de calcul, gain des départs voisins)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
         uses: actions/upload-artifact@v4
         with:
           name: pilote-mesures
@@ -218,7 +221,7 @@ jobs:
           retention-days: 30
 
       - name: Archiver les données générées (14 jours)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
         uses: actions/upload-artifact@v4
         with:
           name: loops-data
@@ -226,7 +229,7 @@ jobs:
           retention-days: 14
 
       - name: Assembler le site (web app + données fraîches)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
         run: |
           mkdir -p _site
           rsync -a \
@@ -238,17 +241,17 @@ jobs:
           du -sh _site _site/web/data
 
       - name: Préparer GitHub Pages
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
         uses: actions/configure-pages@v5
 
       - name: Envoyer le site
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot') }}
+    if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
