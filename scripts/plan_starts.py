@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
 """
-Planifie les points de départ pour que « n'importe quel lieu habité » soit proche d'un départ pré-calculé,
-et MESURE la couverture obtenue (distance médiane, P90, P95, maximale) à partir des données OpenStreetMap.
+Planifie les points de départ pré-calculés et MESURE la couverture obtenue, par type de zone.
 
-Lieux habités (demande) : nœuds place=* (ville, village, hameau, quartier…) + points échantillonnés tous les ~400 m
-dans les zones landuse=residential.
-Départs candidats : centres de villes/villages, gares (train), puis départs de « remplissage » placés là où un lieu
-habité reste trop loin du départ le plus proche (algorithme du point le plus éloigné d'abord).
+Idée : « n'importe quel lieu habité » doit être à moins de `dmax` du départ le plus proche, avec un `dmax` qui dépend du
+type de zone (dense, périphérie, rural). Les lieux habités (demande) sont :
+  - les nœuds OpenStreetMap place=* (ville, village, hameau, quartier…) ;
+  - des points échantillonnés tous les 400 m dans les zones landuse=residential.
+
+Type de zone (`dense` / `peri` / `rural`) = part du sol résidentiel autour du point, mesurée dans un carré de 1,5 km de
+côté (points de landuse=residential × 0,16 km² / 2,25 km²). Seuils par défaut : >= 35 % dense, >= 12 % périphérie,
+sinon rural. Les hameaux isolés sont toujours « rural ». Les seuils sont des paramètres : le rapport donne la
+répartition obtenue pour 3 couples de seuils, à vérifier avant de choisir.
+
+Départs candidats : centres de villes / villages / quartiers, gares (hors zone dense par défaut). Choix par
+« couverture maximale » : on retient à chaque étape le candidat qui couvre le plus de lieux habités non couverts, puis
+on complète par des départs de remplissage (nom du lieu le plus proche + direction) là où un lieu reste trop loin.
 
 Sorties :
-  --out     JSON de départs [{name, lon, lat, kind}] pour generate_loops.py --starts-file
-  --report  JSON de couverture (pour l'expert produit : quelle distance acceptable ?)
+  --out          JSON de départs [{name, lon, lat, kind, zone}] pour generate_loops.py --starts-file
+  --report       JSON de couverture (par scénario et par zone : nombre de départs, distances médiane / P90 / P95 / max,
+                 temps de calcul et taille estimés)
+  --demand-out   échantillon de lieux habités avec leur départ le plus proche (pour measure_detour.py)
 """
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import random
 import shutil
 import statistics
 import subprocess
@@ -27,9 +38,17 @@ import numpy as np
 import shapely
 from shapely.geometry import shape
 
-PLACE_DENSE = {"city": 3, "town": 2, "village": 1, "suburb": 1, "neighbourhood": 0, "quarter": 0}
-PLACE_RURAL = {"hamlet", "isolated_dwelling"}
+PRIORITY = {"city": 4, "town": 3, "village": 2, "suburb": 2, "neighbourhood": 1, "quarter": 1, "station": 1}
+CANDIDATE_PLACES = {"city", "town", "village", "suburb"}
+RURAL_PLACES = {"hamlet", "isolated_dwelling"}
 NOT_TRAIN = {"subway", "light_rail", "monorail", "tram"}
+ZONES = ("dense", "peri", "rural")
+SCENARIOS = {"A": (2.0, 3.0, 4.0), "B": (3.0, 3.0, 4.0)}
+CELL_KM = 0.5
+SAMPLE_KM2 = 0.16                 # surface résidentielle représentée par un point d'échantillonnage (0,4 km x 0,4 km)
+BOX_KM2 = 9 * CELL_KM * CELL_KM   # carré de 3 x 3 cellules de 0,5 km
+SEC_PER_START = (80, 190)         # ESTIMATION du calcul pour 4 durées x 4 combinaisons (à remplacer par la mesure)
+KB_PER_START = 170                # ESTIMATION : 4 durées dans un même fichier
 
 
 def extract(pbf: Path, workdir: Path) -> Path:
@@ -72,12 +91,11 @@ def load(seq: Path):
 
 class Proj:
     def __init__(self, lat0: float):
-        self.lat0 = lat0
         self.kx = 111.32 * math.cos(math.radians(lat0))
         self.ky = 110.54
 
     def xy(self, lon, lat):
-        return (np.asarray(lon) * self.kx, np.asarray(lat) * self.ky)
+        return float(lon) * self.kx, float(lat) * self.ky
 
     def lonlat(self, x, y):
         return x / self.kx, y / self.ky
@@ -102,32 +120,48 @@ def sample_residential(polys, proj: Proj, step_km=0.4):
     return pts
 
 
-def nearest_dist(px, py, sx, sy):
-    """Distance (km) de chaque point (px, py) au départ le plus proche (sx, sy)."""
+class Density:
+    """Part du sol résidentiel autour d'un point (carré de 1,5 km de côté)."""
+
+    def __init__(self, res_xy):
+        self.counts: dict = {}
+        for x, y in res_xy:
+            k = (math.floor(x / CELL_KM), math.floor(y / CELL_KM))
+            self.counts[k] = self.counts.get(k, 0) + 1
+
+    def frac(self, x, y) -> float:
+        cx, cy = math.floor(x / CELL_KM), math.floor(y / CELL_KM)
+        s = sum(self.counts.get((cx + i, cy + j), 0) for i in (-1, 0, 1) for j in (-1, 0, 1))
+        return min(1.0, s * SAMPLE_KM2 / BOX_KM2)
+
+
+def zone_of(frac: float, dense: float, peri: float) -> str:
+    return "dense" if frac >= dense else "peri" if frac >= peri else "rural"
+
+
+def dist_to_nearest(px, py, sx, sy):
     out = np.full(len(px), np.inf)
-    for start in range(0, len(sx), 100):
-        dx = px[:, None] - sx[None, start:start + 100]
-        dy = py[:, None] - sy[None, start:start + 100]
+    sx, sy = np.asarray(sx), np.asarray(sy)
+    for a in range(0, len(sx), 100):
+        dx = px[:, None] - sx[None, a:a + 100]
+        dy = py[:, None] - sy[None, a:a + 100]
         out = np.minimum(out, np.sqrt(dx * dx + dy * dy).min(axis=1))
     return out
 
 
-def plan(dmax_km, dmax_rural_km, seeds, dem_x, dem_y, dem_rural):
-    """seeds : [(x, y, kind, name)] ; remplissage par point le plus éloigné (en multiple de dmax)."""
-    sx = [s[0] for s in seeds]
-    sy = [s[1] for s in seeds]
-    kinds = [s[2] for s in seeds]
-    lim = np.where(dem_rural, dmax_rural_km, dmax_km)
-    d = nearest_dist(dem_x, dem_y, np.array(sx), np.array(sy)) if seeds else np.full(len(dem_x), np.inf)
-    added = []
-    while True:
-        ratio = d / lim
-        i = int(np.argmax(ratio))
-        if ratio[i] <= 1.0:
-            break
-        sx.append(dem_x[i]); sy.append(dem_y[i]); kinds.append("fill"); added.append(len(sx) - 1)
-        d = np.minimum(d, np.sqrt((dem_x - dem_x[i]) ** 2 + (dem_y - dem_y[i]) ** 2))
-    return np.array(sx), np.array(sy), kinds, d
+def nearest_index(px, py, sx, sy):
+    best = np.full(len(px), np.inf)
+    idx = np.zeros(len(px), dtype=int)
+    sx, sy = np.asarray(sx), np.asarray(sy)
+    for a in range(0, len(sx), 100):
+        dx = px[:, None] - sx[None, a:a + 100]
+        dy = py[:, None] - sy[None, a:a + 100]
+        d = np.sqrt(dx * dx + dy * dy)
+        j = d.argmin(axis=1)
+        dm = d[np.arange(len(px)), j]
+        better = dm < best
+        best[better], idx[better] = dm[better], a + j[better]
+    return idx, best
 
 
 def pctl(v, p):
@@ -137,22 +171,86 @@ def pctl(v, p):
 
 def describe(d):
     if len(d) == 0:
-        return {}
-    return {"median_km": round(float(np.median(d)), 2), "p90_km": round(pctl(d, 90), 2),
-            "p95_km": round(pctl(d, 95), 2), "max_km": round(float(np.max(d)), 2),
-            "within_1km": round(float((d <= 1).mean()), 3), "within_2km": round(float((d <= 2).mean()), 3),
-            "within_3km": round(float((d <= 3).mean()), 3), "within_5km": round(float((d <= 5).mean()), 3)}
+        return {"n": 0}
+    return {"n": int(len(d)), "median_km": round(float(np.median(d)), 2), "p90_km": round(pctl(d, 90), 2),
+            "p95_km": round(pctl(d, 95), 2), "max_km": round(float(np.max(d)), 2)}
+
+
+def plan(limits, cand, dem):
+    """Couverture maximale puis remplissage. limits = {zone: dmax km}. Retourne (départs, distances)."""
+    lim = np.array([limits[z] for z in dem["zone"]])
+    cx, cy = cand["x"], cand["y"]
+    covered = []
+    for a in range(0, len(cx), 50):
+        dx = cx[a:a + 50, None] - dem["x"][None, :]
+        dy = cy[a:a + 50, None] - dem["y"][None, :]
+        mask = np.sqrt(dx * dx + dy * dy) <= lim[None, :]
+        covered.extend(np.nonzero(row)[0] for row in mask)
+    uncovered = np.ones(len(dem["x"]), dtype=bool)
+    prio = np.array([PRIORITY.get(k, 1) for k in cand["kind"]], dtype=float)
+    chosen = []
+    while True:
+        gains = np.array([uncovered[c].sum() for c in covered], dtype=float)
+        if len(gains) == 0 or gains.max() < 1:
+            break
+        j = int(np.argmax(gains + 0.001 * prio))
+        chosen.append(j)
+        uncovered[covered[j]] = False
+    sx = [cx[j] for j in chosen]
+    sy = [cy[j] for j in chosen]
+    kinds = [cand["kind"][j] for j in chosen]
+    names = [cand["name"][j] for j in chosen]
+    d = dist_to_nearest(dem["x"], dem["y"], sx, sy) if sx else np.full(len(dem["x"]), np.inf)
+    rng = np.random.default_rng(3)
+    while True:                                  # remplissage : le point qui couvre le plus de lieux non couverts
+        unc = np.nonzero(d > lim)[0]
+        if len(unc) == 0:
+            break
+        pool = unc if len(unc) <= 400 else rng.choice(unc, 400, replace=False)
+        ddx = dem["x"][pool][:, None] - dem["x"][unc][None, :]
+        ddy = dem["y"][pool][:, None] - dem["y"][unc][None, :]
+        gain = (np.sqrt(ddx * ddx + ddy * ddy) <= lim[unc][None, :]).sum(axis=1)
+        i = int(pool[int(np.argmax(gain))])
+        sx.append(dem["x"][i]); sy.append(dem["y"][i]); kinds.append("fill"); names.append(None)
+        d = np.minimum(d, np.sqrt((dem["x"] - dem["x"][i]) ** 2 + (dem["y"] - dem["y"][i]) ** 2))
+    return {"x": np.array(sx), "y": np.array(sy), "kind": kinds, "name": names}, d
+
+
+def summarise(limits, starts, d, dem, density, dense_frac, peri_frac):
+    zones = [zone_of(density.frac(x, y), dense_frac, peri_frac) for x, y in zip(starts["x"], starts["y"])]
+    dz = np.array(dem["zone"])
+    cov = {"all": describe(d)}
+    for z in ZONES:
+        cov[z] = describe(d[dz == z])
+    n = len(starts["x"])
+    return {
+        "limits_km": dict(zip(ZONES, limits)),
+        "starts": n,
+        "starts_by_zone": {z: zones.count(z) for z in ZONES},
+        "starts_by_kind": {k: starts["kind"].count(k) for k in ("city", "town", "village", "suburb", "station", "fill")
+                           if starts["kind"].count(k)},
+        "coverage_by_demand_zone": cov,
+        "cost_estimate": {
+            "compute_hours_one_thread": [round(n * SEC_PER_START[0] / 3600, 1), round(n * SEC_PER_START[1] / 3600, 1)],
+            "compute_hours_3_workers": [round(n * SEC_PER_START[0] / 3600 / 2.25, 1),
+                                        round(n * SEC_PER_START[1] / 3600 / 2.25, 1)],
+            "size_mb": round(n * KB_PER_START / 1024, 1),
+            "status": "estimé : à remplacer par la mesure (stats.seconds_per_start de index.json)",
+        },
+    }, zones
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pbf", required=True)
     ap.add_argument("--workdir", default=None, help="dossier de travail (défaut : dossier du .pbf)")
-    ap.add_argument("--out", required=True, help="JSON de départs")
-    ap.add_argument("--report", required=True, help="JSON de couverture")
-    ap.add_argument("--dmax-km", type=float, default=2.0, help="distance maximale visée (zones habitées)")
-    ap.add_argument("--dmax-rural-km", type=float, default=None, help="distance maximale visée (hameaux), défaut 2 × dmax")
-    ap.add_argument("--no-stations", action="store_true", help="ne pas utiliser les gares comme départs")
+    ap.add_argument("--out", required=True, help="JSON de départs du scénario choisi")
+    ap.add_argument("--report", required=True, help="JSON de couverture (tous les scénarios)")
+    ap.add_argument("--demand-out", default=None, help="échantillon de lieux habités pour measure_detour.py")
+    ap.add_argument("--scenario", default="A", help="A, B ou 'dense,peri,rural' en km (ex. 2,3,4)")
+    ap.add_argument("--dense-frac", type=float, default=0.35)
+    ap.add_argument("--peri-frac", type=float, default=0.12)
+    ap.add_argument("--stations", choices=["outside_dense", "all", "none"], default="outside_dense")
     args = ap.parse_args()
 
     pbf = Path(args.pbf)
@@ -161,84 +259,137 @@ def main() -> int:
     if not places and not residential:
         sys.exit("aucun lieu habité trouvé dans les données")
     proj = Proj(statistics.mean([p[1] for p in places]) if places else 41.0)
-    dmax_rural = args.dmax_rural_km or 2 * args.dmax_km
+    res_xy = [proj.xy(lon, lat) for lon, lat in sample_residential(residential, proj)]
+    density = Density(res_xy)
 
-    # --- demande : lieux habités
-    dem = {}
+    # --- demande : nœuds place=* et points résidentiels (dédoublonnés à 250 m)
+    dem_map = {}
     for lon, lat, kind, _ in places:
         x, y = proj.xy(lon, lat)
-        dem[(round(float(x) / 0.25), round(float(y) / 0.25))] = (float(x), float(y), kind in PLACE_RURAL)
-    for lon, lat in sample_residential(residential, proj):
-        x, y = proj.xy(lon, lat)
-        dem.setdefault((round(float(x) / 0.25), round(float(y) / 0.25)), (float(x), float(y), False))
-    dem_x = np.array([v[0] for v in dem.values()])
-    dem_y = np.array([v[1] for v in dem.values()])
-    dem_rural = np.array([v[2] for v in dem.values()])
+        dem_map[(round(x / 0.25), round(y / 0.25))] = (x, y, kind in RURAL_PLACES)
+    for x, y in res_xy:
+        dem_map.setdefault((round(x / 0.25), round(y / 0.25)), (x, y, False))
+    dx = np.array([v[0] for v in dem_map.values()]); dy = np.array([v[1] for v in dem_map.values()])
+    forced_rural = np.array([v[2] for v in dem_map.values()])
+    fr = np.array([density.frac(x, y) for x, y in zip(dx, dy)])
 
-    # --- graines : centres de villes/villages puis gares (fusion à moins de 0,5 / 0,7 km)
-    seeds = []
+    def demand_for(dense_frac, peri_frac):
+        zones = ["rural" if forced_rural[i] else zone_of(fr[i], dense_frac, peri_frac) for i in range(len(dx))]
+        return {"x": dx, "y": dy, "zone": zones}
 
-    def far_enough(x, y, km):
-        return all(math.hypot(x - s[0], y - s[1]) >= km for s in seeds)
+    dem = demand_for(args.dense_frac, args.peri_frac)
 
-    for lon, lat, kind, name in sorted((p for p in places if p[2] in ("city", "town", "village") and p[3]),
-                                       key=lambda p: -PLACE_DENSE[p[2]]):
-        x, y = proj.xy(lon, lat)
-        if far_enough(float(x), float(y), 0.5):
-            seeds.append((float(x), float(y), "place", name))
-    if not args.no_stations:
-        for lon, lat, name in stations:
+    # --- candidats : centres de villes / villages / quartiers ; les gares sont ajoutées ensuite (voir add_stations)
+    def candidates():
+        cx, cy, kind, name = [], [], [], []
+        for lon, lat, k, nm in places:
+            if k in CANDIDATE_PLACES and nm:
+                x, y = proj.xy(lon, lat)
+                cx.append(x); cy.append(y); kind.append(k); name.append(nm)
+        return {"x": np.array(cx), "y": np.array(cy), "kind": kind, "name": name}
+
+    def add_stations(starts, policy):
+        """Ajoute les gares (train) à plus de 0,7 km d'un départ existant ; 'outside_dense' écarte celles en zone dense."""
+        if policy == "none":
+            return starts
+        sx, sy = list(starts["x"]), list(starts["y"])
+        kinds, names = list(starts["kind"]), list(starts["name"])
+        for lon, lat, nm in stations:
             x, y = proj.xy(lon, lat)
-            if far_enough(float(x), float(y), 0.7):
-                seeds.append((float(x), float(y), "station", name))
+            if policy == "outside_dense" and zone_of(density.frac(x, y), args.dense_frac, args.peri_frac) == "dense":
+                continue
+            if sx and min(math.hypot(x - a, y - b) for a, b in zip(sx, sy)) < 0.7:
+                continue
+            sx.append(x); sy.append(y); kinds.append("station")
+            names.append(nm if str(nm).lower().startswith("gare") else f"Gare {nm}")
+        return {"x": np.array(sx), "y": np.array(sy), "kind": kinds, "name": names}
 
-    # --- plan pour plusieurs distances maximales (le comptage de départs dépend fortement de ce choix)
+    scen = dict(SCENARIOS)
+    if "," in args.scenario:
+        scen["custom"] = tuple(float(v) for v in args.scenario.split(","))
+    chosen_key = args.scenario if args.scenario in scen else "custom"
+
+    report = {
+        "method": "densité résidentielle (carré de 1,5 km) → zone ; couverture maximale + remplissage",
+        "thresholds": {"dense_frac": args.dense_frac, "peri_frac": args.peri_frac},
+        "inputs": {"place_nodes": len(places), "stations": len(stations), "residential_polygons": len(residential),
+                   "demand_points": int(len(dx))},
+        "demand_by_zone": {z: dem["zone"].count(z) for z in ZONES},
+        "density_quantiles_of_demand": {str(q): round(float(np.quantile(fr, q / 100)), 3) for q in (10, 25, 50, 75, 90)},
+        "zone_sensitivity": {f"dense>={a},peri>={b}": {z: demand_for(a, b)["zone"].count(z) for z in ZONES}
+                             for a, b in ((0.25, 0.10), (0.35, 0.12), (0.45, 0.15))},
+        "scenarios": {},
+    }
+    results = {}
+    for key, limits in scen.items():
+        lim_map = dict(zip(ZONES, limits))
+        base, _ = plan(lim_map, candidates(), dem)
+        variants = {}
+        for policy in ("outside_dense", "all", "none"):
+            variants[policy] = int(len(add_stations(base, policy)["x"]))
+        starts = add_stations(base, args.stations)
+        d = dist_to_nearest(dem["x"], dem["y"], starts["x"], starts["y"])
+        summ, zones = summarise(limits, starts, d, dem, density, args.dense_frac, args.peri_frac)
+        summ["starts_without_stations"] = int(len(base["x"]))
+        summ["starts_by_stations_policy"] = variants
+        report["scenarios"][key] = summ
+        results[key] = (starts, d, zones)
+
+    starts, d, zones = results[chosen_key]
+    # --- fichier de départs (noms uniques ; remplissage = nom du lieu le plus proche + direction)
     named = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3]]
-    nx = np.array([float(n[0]) for n in named]); ny = np.array([float(n[1]) for n in named])
-    report = {"demand_points": int(len(dem_x)), "place_nodes": len(places), "residential_polygons": len(residential),
-              "stations": len(stations), "seeds": len(seeds), "by_dmax_km": {}}
-    chosen = None
-    for dm in sorted({1.0, 1.5, 2.0, 3.0, args.dmax_km}):
-        sx, sy, kinds, d = plan(dm, args.dmax_rural_km or 2 * dm, seeds, dem_x, dem_y, dem_rural)
-        report["by_dmax_km"][f"{dm:g}"] = {"starts": int(len(sx)), "places": kinds.count("place"),
-                                          "stations": kinds.count("station"), "fill": kinds.count("fill"),
-                                          "coverage": describe(d)}
-        if abs(dm - args.dmax_km) < 1e-9:
-            chosen = (sx, sy, kinds, d)
-    sx, sy, kinds, d = chosen
-
-    # --- fichier de départs (noms uniques ; les départs de remplissage portent le nom du lieu le plus proche)
-    starts, names_used = [], {}
-    for i in range(len(sx)):
-        lon, lat = proj.lonlat(sx[i], sy[i])
-        if kinds[i] == "fill" and len(nx):
-            j = int(np.argmin(np.hypot(nx - sx[i], ny - sy[i])))
-            dx, dy = sx[i] - nx[j], sy[i] - ny[j]
-            compass = ["est", "nord-est", "nord", "nord-ouest", "ouest", "sud-ouest", "sud", "sud-est"]
-            direction = compass[int(round(math.degrees(math.atan2(dy, dx)) / 45.0)) % 8]
-            name = f"{named[j][2]} ({direction})"
-        elif kinds[i] == "place":
-            name = seeds[i][3]
-        else:
-            name = seeds[i][3] if i < len(seeds) else "Départ"
-            if kinds[i] == "station":
-                name = f"Gare {name}" if not str(name).lower().startswith("gare") else name
-        names_used[name] = names_used.get(name, 0) + 1
-        if names_used[name] > 1:
-            name = f"{name} {names_used[name]}"
-        starts.append({"name": name, "lon": round(float(lon), 5), "lat": round(float(lat), 5), "kind": kinds[i]})
-    Path(args.out).write_text(json.dumps(starts, ensure_ascii=False, indent=1), encoding="utf-8")
-    report["chosen_dmax_km"] = args.dmax_km
+    nx = np.array([n[0] for n in named]); ny = np.array([n[1] for n in named])
+    out, used = [], {}
+    for i in range(len(starts["x"])):
+        lon, lat = proj.lonlat(starts["x"][i], starts["y"][i])
+        name = starts["name"][i]
+        if name is None:
+            if len(nx):
+                j = int(np.argmin(np.hypot(nx - starts["x"][i], ny - starts["y"][i])))
+                ddx, ddy = starts["x"][i] - nx[j], starts["y"][i] - ny[j]
+                compass = ["est", "nord-est", "nord", "nord-ouest", "ouest", "sud-ouest", "sud", "sud-est"]
+                name = f"{named[j][2]} ({compass[int(round(math.degrees(math.atan2(ddy, ddx)) / 45.0)) % 8]})"
+            else:
+                name = "Départ"
+        used[name] = used.get(name, 0) + 1
+        if used[name] > 1:
+            name = f"{name} {used[name]}"
+        kind = "station" if starts["kind"][i] == "station" else "fill" if starts["kind"][i] == "fill" else "place"
+        out.append({"name": name, "lon": round(float(lon), 5), "lat": round(float(lat), 5), "kind": kind,
+                    "zone": zones[i]})
+    Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    report["chosen_scenario"] = chosen_key
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
 
-    print(f"Lieux habités (points de demande) : {report['demand_points']} "
-          f"({report['place_nodes']} nœuds place=*, {report['residential_polygons']} zones résidentielles)")
-    print(f"{'Dmax':>6} {'départs':>8} {'lieux':>6} {'gares':>6} {'remplis.':>9} {'médiane':>8} {'P90':>6} {'P95':>6} {'max':>6}")
-    for dm, r in report["by_dmax_km"].items():
-        c = r["coverage"]
-        print(f"{dm:>4} km {r['starts']:>8} {r['places']:>6} {r['stations']:>6} {r['fill']:>9} "
-              f"{c['median_km']:>6} km {c['p90_km']:>4} {c['p95_km']:>6} {c['max_km']:>6}")
-    print(f"-> {len(starts)} départs écrits dans {args.out} (Dmax visé {args.dmax_km} km)")
+    # --- échantillon de lieux habités et de leur départ le plus proche (pour mesurer le détour)
+    if args.demand_out:
+        idx, dd = nearest_index(dem["x"], dem["y"], starts["x"], starts["y"])
+        rnd = random.Random(7)
+        sample = []
+        for z in ZONES:
+            ids = [i for i in range(len(dem["x"])) if dem["zone"][i] == z and dd[i] >= 0.6]
+            rnd.shuffle(ids)
+            for i in ids[:300]:
+                lon, lat = proj.lonlat(dem["x"][i], dem["y"][i])
+                sample.append({"lon": round(float(lon), 5), "lat": round(float(lat), 5), "zone": z,
+                               "start": int(idx[i]), "crow_km": round(float(dd[i]), 3)})
+        Path(args.demand_out).write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+
+    # --- résumé lisible
+    print(f"Lieux habités (points de demande) : {report['inputs']['demand_points']} → par zone {report['demand_by_zone']}")
+    print(f"Sensibilité aux seuils de zone : {json.dumps(report['zone_sensitivity'], ensure_ascii=False)}")
+    for key, s in report["scenarios"].items():
+        print(f"\nScénario {key} : dmax {s['limits_km']} → {s['starts']} départs "
+              f"{s['starts_by_zone']} ; gares (politique {args.stations}) : {s['starts_by_stations_policy']}")
+        print(f"  {'zone':<7}{'n':>6}{'médiane':>10}{'P90':>7}{'P95':>7}{'max':>7}   (km, à vol d'oiseau)")
+        for z in ("all", *ZONES):
+            c = s["coverage_by_demand_zone"][z]
+            if c.get("n"):
+                print(f"  {z:<7}{c['n']:>6}{c['median_km']:>10}{c['p90_km']:>7}{c['p95_km']:>7}{c['max_km']:>7}")
+        ce = s["cost_estimate"]
+        print(f"  calcul estimé : {ce['compute_hours_one_thread'][0]}–{ce['compute_hours_one_thread'][1]} h (1 fil), "
+              f"{ce['compute_hours_3_workers'][0]}–{ce['compute_hours_3_workers'][1]} h (3 en parallèle) ; taille estimée {ce['size_mb']} Mo")
+    print(f"\n-> {len(out)} départs du scénario {chosen_key} écrits dans {args.out}")
     return 0
 
 

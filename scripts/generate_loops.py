@@ -906,8 +906,38 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     for e in json.loads(path.read_text(encoding="utf-8")):
         if bbox and not (bbox[0] <= e["lon"] <= bbox[2] and bbox[1] <= e["lat"] <= bbox[3]):
             continue
-        out.append({"name": e["name"], "lon": e["lon"], "lat": e["lat"], "kind": e.get("kind", "place")})
+        out.append({"name": e["name"], "lon": e["lon"], "lat": e["lat"], "kind": e.get("kind", "place"),
+                    "zone": e.get("zone")})
     return out
+
+
+GENERATOR_VERSION = "4"
+
+
+def compare_block(options: list) -> dict:
+    """Meilleure option (note la plus haute) par durée et par niveau : de quoi comparer des départs voisins
+    sans charger leurs fichiers. Comparable seulement à durée ET niveau identiques."""
+    best: dict = {}
+    for o in options:
+        key = (f"{o['duration_target_min'] / 60:g}", o["level"])
+        if key not in best or o["score"] > best[key]["score"]:
+            best[key] = o
+    out: dict = {}
+    for (dur, lvl), o in best.items():
+        u = o["shares"]["urban"]
+        ex = o["exit_dense_km"]
+        if ex is not None and ex >= o["distance_km"] * 0.98:
+            ex = None                              # null = la boucle ne sort jamais de la zone dense
+        out.setdefault(dur, {})[lvl] = {
+            "score": o["score"], "lights_per_km": o["traffic_lights_per_km"], "exit_dense_km": ex,
+            "urban_share": round(u["city"] + u["residential"], 2)}
+    return out
+
+
+def start_key(lon: float, lat: float) -> str:
+    """Clé stable d'un départ (coordonnées arrondies à ~10 m) : permet de réutiliser des résultats entre générations."""
+    import hashlib
+    return hashlib.sha1(f"{lon:.4f},{lat:.4f}".encode()).hexdigest()[:10]
 
 
 def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates, out: Path):
@@ -920,7 +950,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     if snapped is None or snapped[2] > 400:
         log(f"- {st['name']} : pas de route à moins de 400 m, ignoré")
         return None, buf, time.time() - t0
-    st = {**st, "lon": snapped[0], "lat": snapped[1]}
+    st = {**st, "lon0": st["lon"], "lat0": st["lat"], "lon": snapped[0], "lat": snapped[1]}
     log(f"- {st['name']}")
     options = []
     for duration in durations:
@@ -946,8 +976,9 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         key = f"{o['duration_target_min'] / 60:g}"
         by_dur[key] = by_dur.get(key, 0) + 1
     entry = {"id": sid, "name": st["name"], "lon": payload["start"]["lon"], "lat": payload["start"]["lat"],
-             "kind": st.get("kind", "place"), "options": len(options),
-             "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur}
+             "kind": st.get("kind", "place"), "zone": st.get("zone"), "key": start_key(st["lon0"], st["lat0"]),
+             "options": len(options), "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur,
+             "compare": compare_block(options)}
     log(f"  {len(options)} options, durées disponibles : {', '.join(by_dur)} h ({time.time() - t0:.0f} s)")
     return entry, buf, time.time() - t0
 
@@ -968,6 +999,7 @@ def main() -> int:
     ap.add_argument("--region", required=True, help="fichier JSON de région (config/region_*.json)")
     ap.add_argument("--places", required=True, help="GeoJSON des lieux OSM (osmium export)")
     ap.add_argument("--starts-file", default=None, help="JSON de départs [{name, lon, lat, kind}] (remplace la sélection par noms)")
+    ap.add_argument("--per-zone", type=int, default=None, help="pilote : N départs par zone (dense/peri/rural), répartis sur la liste")
     ap.add_argument("--shard", default=None, help="i/N : ne traite que les départs d'indice i modulo N (calcul en parallèle)")
     ap.add_argument("--workers", type=int, default=1, help="départs traités en parallèle (threads)")
     ap.add_argument("--out", default="web/data", help="dossier de sortie")
@@ -1013,10 +1045,20 @@ def main() -> int:
         starts = load_starts_file(Path(args.starts_file), region.get("bbox"))
     else:
         starts = load_starts(places_path, region.get("start_names"), region.get("bbox"), max_starts)
+    if args.per_zone:
+        picked = []
+        for z in ("dense", "peri", "rural"):
+            zs = [st for st in starts if st.get("zone") == z]
+            step = max(1, len(zs) // args.per_zone)
+            picked.extend(zs[::step][: args.per_zone])
+        starts = picked or starts
     if args.shard:
         i, n = (int(x) for x in args.shard.split("/"))
         starts = starts[i::n]
-    starts = starts[:max_starts] if not args.starts_file else starts[: args.max_starts or len(starts)]
+    if args.per_zone:
+        pass                                            # le pilote par zone ignore --max-starts
+    else:
+        starts = starts[:max_starts] if not args.starts_file else starts[: args.max_starts or len(starts)]
     if not starts:
         print("Aucun point de départ trouvé.", file=sys.stderr)
         return 1
@@ -1053,6 +1095,7 @@ def main() -> int:
         "region": region.get("name"),
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "osm_data_date": (info.get("data_date") if not str(info.get("data_date", "")).startswith("1970") else None),
+        "generator_version": GENERATOR_VERSION,
         "durations_h": available,
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
         "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
@@ -1062,7 +1105,7 @@ def main() -> int:
                   "workers": args.workers, **res},
         "starts": index,
     }
-    (out / "index.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out / "index.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"Terminé : {len(index)} départs sur {len(starts)} en {elapsed:.0f} s "
           f"({elapsed / max(1, len(starts)):.0f} s par départ) -> {out}", flush=True)
     return 0
