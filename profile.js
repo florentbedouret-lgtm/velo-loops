@@ -41,4 +41,24 @@ function profileSvg(o) {
   if (!o.coords[0] || o.coords[0].length < 3) return '';
   const p = profileData(o.coords, o.distance_km);
   const W = 320, H = 120, mL = 34, mR = 8, mT = 8, mB = 20;
-  let lo =
+  let lo = Math.min(...p.alt), hi = Math.max(...p.alt);
+  if (hi - lo < 20) { const mid = (hi + lo) / 2; lo = mid - 10; hi = mid + 10; } // profil presque plat : échelle minimale de 20 m
+  lo = Math.floor(lo / 10) * 10;
+  hi = Math.ceil(hi / 10) * 10;
+  const x = d => mL + (d / p.total) * (W - mL - mR);
+  const y = a => mT + (1 - (a - lo) / (hi - lo)) * (H - mT - mB);
+  const pts = p.alt.map((a, k) => x(Math.min(k * p.step, p.total)).toFixed(1) + ',' + y(a).toFixed(1));
+  const line = 'M' + pts.join(' L');
+  const area = line + ' L' + x(p.total).toFixed(1) + ',' + y(lo).toFixed(1) +
+    ' L' + x(0).toFixed(1) + ',' + y(lo).toFixed(1) + ' Z';
+  const txt = 'font-size="10" fill="#555" font-family="system-ui, sans-serif"';
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique">
+    <path d="${area}" fill="#e8590c" fill-opacity="0.18"/>
+    <path d="${line}" fill="none" stroke="#e8590c" stroke-width="1.5" stroke-linejoin="round"/>
+    <line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" stroke="#bbb"/>
+    <text x="${mL - 4}" y="${mT + 8}" text-anchor="end" ${txt}>${hi} m</text>
+    <text x="${mL - 4}" y="${H - mB}" text-anchor="end" ${txt}>${lo} m</text>
+    <text x="${mL}" y="${H - 6}" ${txt}>0</text>
+    <text x="${W - mR}" y="${H - 6}" text-anchor="end" ${txt}>${pfKm(p.total)} km</text>
+  </svg>`;
+}
