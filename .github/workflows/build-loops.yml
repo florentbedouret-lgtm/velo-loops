@@ -11,6 +11,9 @@ name: Générer les boucles vélo
 #                       (dont 5 ruraux, 2 au nord-ouest, 2 gares, des paires dense/voisin), toutes durées, puis publication.
 #  - full             : génération COMPLÈTE : plan sur la province entière, tous les départs du plan (jusqu'à 1000), toutes durées,
 #                       puis publication. À ne lancer qu'après accord ; `reuse` coché reprend les départs identiques du site publié.
+#                       Budget de calcul : 300 min ; au-delà, plus aucun nouveau départ n'est démarré, le site est publié INCOMPLET et
+#                       signalé, et un nouveau lancement avec `reuse` coché termine le travail sans rien recalculer.
+#                       Rapport de fin de génération : résumé de l'exécution + artefact `rapport-generation` (à envoyer).
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
@@ -55,7 +58,7 @@ permissions:
 
 concurrency:
   group: build-loops
-  cancel-in-progress: true
+  cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
   GH_VERSION: "11.0"
@@ -70,6 +73,7 @@ jobs:
 
       - name: Ressources de la machine
         run: |
+          echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
           nproc
           free -g
           df -h . | tail -1
@@ -192,7 +196,7 @@ jobs:
           rm -rf web/data
           EXTRA=""
           if [ "$MODE" = "generate_planned" ] || [ "$MODE" = "pilot" ] || [ "$MODE" = "full" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
-          if [ "$MODE" = "full" ]; then MAX_STARTS=1000; PER_ZONE=""; fi
+          if [ "$MODE" = "full" ]; then MAX_STARTS=1000; PER_ZONE=""; EXTRA="$EXTRA --time-budget-min 300"; fi
           if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
           if [ "$REUSE" = "true" ]; then
@@ -206,6 +210,7 @@ jobs:
             --max-starts "$MAX_STARTS" \
             --workers "$WORKERS" \
             --timings-out data/timings.json \
+            --skipped-out data/skipped.json \
             $EXTRA \
             --durations $DURATIONS
 
@@ -239,6 +244,24 @@ jobs:
           touch _site/.nojekyll
           test -f _site/index.html || echo "ATTENTION : pas d'index.html à la racine du site"
           du -sh _site _site/web/data
+
+      - name: Rapport de génération (critères de réussite)
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        run: |
+          python scripts/report_generation.py --data web/data --timings data/timings.json --skipped data/skipped.json \
+            --plan data/starts_plan.json --site _site --job-seconds "$(( $(date +%s) - JOB_START ))" \
+            --out-md data/rapport-generation.md --out-json data/rapport-generation.json
+          cat data/rapport-generation.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier le rapport de génération
+        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-generation
+          path: |
+            data/rapport-generation.md
+            data/rapport-generation.json
+          retention-days: 90
 
       - name: Préparer GitHub Pages
         if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
