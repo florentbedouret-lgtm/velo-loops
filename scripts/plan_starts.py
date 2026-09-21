@@ -7,10 +7,12 @@ type de zone (dense, périphérie, rural). Les lieux habités (demande) sont :
   - les nœuds OpenStreetMap place=* (ville, village, hameau, quartier…) ;
   - des points échantillonnés tous les 400 m dans les zones landuse=residential.
 
-Type de zone (`dense` / `peri` / `rural`) = part du sol résidentiel autour du point, mesurée dans un carré de 1,5 km de
-côté (points de landuse=residential × 0,16 km² / 2,25 km²). Seuils par défaut : >= 35 % dense, >= 12 % périphérie,
-sinon rural. Les hameaux isolés sont toujours « rural ». Les seuils sont des paramètres : le rapport donne la
-répartition obtenue pour 3 couples de seuils, à vérifier avant de choisir.
+Type de zone (`dense` / `peri` / `rural`) = part du sol résidentiel autour du point, mesurée dans un carré de 3,5 km
+de côté (7 x 7 cellules de 0,5 km ; points de landuse=residential x 0,16 km² / 12,25 km²). Seuils par défaut :
+>= 45 % dense, >= 15 % périphérie, sinon rural. Un carré large distingue une grande agglomération d'un petit village
+(un village de 1 km de côté n'occupe qu'environ 5 % du carré). Les hameaux isolés sont toujours « rural ». Le rapport
+donne la densité et la zone de lieux de référence (Barcelone, Sabadell, Vic, Marganell…) pour vérifier les seuils, ainsi
+que la répartition obtenue pour trois couples de seuils.
 
 Départs candidats : centres de villes / villages / quartiers, gares (hors zone dense par défaut). Choix par
 « couverture maximale » : on retient à chaque étape le candidat qui couvre le plus de lieux habités non couverts, puis
@@ -41,12 +43,14 @@ from shapely.geometry import shape
 PRIORITY = {"city": 4, "town": 3, "village": 2, "suburb": 2, "neighbourhood": 1, "quarter": 1, "station": 1}
 CANDIDATE_PLACES = {"city", "town", "village", "suburb"}
 RURAL_PLACES = {"hamlet", "isolated_dwelling"}
+CHECK_PLACES = ("Barcelona;l'Eixample;l'Hospitalet de Llobregat;Badalona;Sabadell;Terrassa;Mataró;Sant Cugat del Vallès;"
+                "Granollers;Vilanova i la Geltrú;Sitges;Manresa;Vic;Igualada;Berga;Sant Celoni;Cardedeu;Montcada i Reixac;"
+                "Cerdanyola del Vallès;Rubí;Castelldefels;Calella;Marganell;Rajadell;Callús;Montseny;Collbató")
 NOT_TRAIN = {"subway", "light_rail", "monorail", "tram"}
 ZONES = ("dense", "peri", "rural")
 SCENARIOS = {"A": (2.0, 3.0, 4.0), "B": (3.0, 3.0, 4.0)}
 CELL_KM = 0.5
 SAMPLE_KM2 = 0.16                 # surface résidentielle représentée par un point d'échantillonnage (0,4 km x 0,4 km)
-BOX_KM2 = 9 * CELL_KM * CELL_KM   # carré de 3 x 3 cellules de 0,5 km
 SEC_PER_START = (80, 190)         # ESTIMATION du calcul pour 4 durées x 4 combinaisons (à remplacer par la mesure)
 KB_PER_START = 170                # ESTIMATION : 4 durées dans un même fichier
 
@@ -121,7 +125,7 @@ def sample_residential(polys, proj: Proj, step_km=0.4):
 
 
 class Density:
-    """Part du sol résidentiel autour d'un point (carré de 1,5 km de côté)."""
+    """Part du sol résidentiel autour d'un point (carré de (2r+1) x 0,5 km de côté)."""
 
     def __init__(self, res_xy):
         self.counts: dict = {}
@@ -129,10 +133,10 @@ class Density:
             k = (math.floor(x / CELL_KM), math.floor(y / CELL_KM))
             self.counts[k] = self.counts.get(k, 0) + 1
 
-    def frac(self, x, y) -> float:
+    def frac(self, x, y, r=3) -> float:
         cx, cy = math.floor(x / CELL_KM), math.floor(y / CELL_KM)
-        s = sum(self.counts.get((cx + i, cy + j), 0) for i in (-1, 0, 1) for j in (-1, 0, 1))
-        return min(1.0, s * SAMPLE_KM2 / BOX_KM2)
+        s = sum(self.counts.get((cx + i, cy + j), 0) for i in range(-r, r + 1) for j in range(-r, r + 1))
+        return min(1.0, s * SAMPLE_KM2 / (((2 * r + 1) * CELL_KM) ** 2))
 
 
 def zone_of(frac: float, dense: float, peri: float) -> str:
@@ -216,8 +220,8 @@ def plan(limits, cand, dem):
     return {"x": np.array(sx), "y": np.array(sy), "kind": kinds, "name": names}, d
 
 
-def summarise(limits, starts, d, dem, density, dense_frac, peri_frac):
-    zones = [zone_of(density.frac(x, y), dense_frac, peri_frac) for x, y in zip(starts["x"], starts["y"])]
+def summarise(limits, starts, d, dem, frac_fn, dense_frac, peri_frac):
+    zones = [zone_of(frac_fn(x, y), dense_frac, peri_frac) for x, y in zip(starts["x"], starts["y"])]
     dz = np.array(dem["zone"])
     cov = {"all": describe(d)}
     for z in ZONES:
@@ -248,8 +252,11 @@ def main() -> int:
     ap.add_argument("--report", required=True, help="JSON de couverture (tous les scénarios)")
     ap.add_argument("--demand-out", default=None, help="échantillon de lieux habités pour measure_detour.py")
     ap.add_argument("--scenario", default="A", help="A, B ou 'dense,peri,rural' en km (ex. 2,3,4)")
-    ap.add_argument("--dense-frac", type=float, default=0.35)
-    ap.add_argument("--peri-frac", type=float, default=0.12)
+    ap.add_argument("--dense-frac", type=float, default=0.45)
+    ap.add_argument("--peri-frac", type=float, default=0.15)
+    ap.add_argument("--box-cells", type=int, default=3, help="rayon du carré de densité en cellules de 0,5 km (3 = carré de 3,5 km)")
+    ap.add_argument("--no-force-towns", action="store_true", help="ne pas imposer un départ dans chaque ville (place=city/town)")
+    ap.add_argument("--check-places", default=CHECK_PLACES, help="lieux de référence dont on affiche la densité (séparés par ;)")
     ap.add_argument("--stations", choices=["outside_dense", "all", "none"], default="outside_dense")
     args = ap.parse_args()
 
@@ -261,6 +268,8 @@ def main() -> int:
     proj = Proj(statistics.mean([p[1] for p in places]) if places else 41.0)
     res_xy = [proj.xy(lon, lat) for lon, lat in sample_residential(residential, proj)]
     density = Density(res_xy)
+    R = args.box_cells
+    frac_fn = lambda x, y: density.frac(x, y, R)  # noqa: E731
 
     # --- demande : nœuds place=* et points résidentiels (dédoublonnés à 250 m)
     dem_map = {}
@@ -271,7 +280,7 @@ def main() -> int:
         dem_map.setdefault((round(x / 0.25), round(y / 0.25)), (x, y, False))
     dx = np.array([v[0] for v in dem_map.values()]); dy = np.array([v[1] for v in dem_map.values()])
     forced_rural = np.array([v[2] for v in dem_map.values()])
-    fr = np.array([density.frac(x, y) for x, y in zip(dx, dy)])
+    fr = np.array([frac_fn(x, y) for x, y in zip(dx, dy)])
 
     def demand_for(dense_frac, peri_frac):
         zones = ["rural" if forced_rural[i] else zone_of(fr[i], dense_frac, peri_frac) for i in range(len(dx))]
@@ -296,7 +305,7 @@ def main() -> int:
         kinds, names = list(starts["kind"]), list(starts["name"])
         for lon, lat, nm in stations:
             x, y = proj.xy(lon, lat)
-            if policy == "outside_dense" and zone_of(density.frac(x, y), args.dense_frac, args.peri_frac) == "dense":
+            if policy == "outside_dense" and zone_of(frac_fn(x, y), args.dense_frac, args.peri_frac) == "dense":
                 continue
             if sx and min(math.hypot(x - a, y - b) for a, b in zip(sx, sy)) < 0.7:
                 continue
@@ -311,26 +320,58 @@ def main() -> int:
 
     report = {
         "method": "densité résidentielle (carré de 1,5 km) → zone ; couverture maximale + remplissage",
-        "thresholds": {"dense_frac": args.dense_frac, "peri_frac": args.peri_frac},
+        "thresholds": {"dense_frac": args.dense_frac, "peri_frac": args.peri_frac, "box_km": (2 * R + 1) * CELL_KM},
         "inputs": {"place_nodes": len(places), "stations": len(stations), "residential_polygons": len(residential),
                    "demand_points": int(len(dx))},
         "demand_by_zone": {z: dem["zone"].count(z) for z in ZONES},
         "density_quantiles_of_demand": {str(q): round(float(np.quantile(fr, q / 100)), 3) for q in (10, 25, 50, 75, 90)},
         "zone_sensitivity": {f"dense>={a},peri>={b}": {z: demand_for(a, b)["zone"].count(z) for z in ZONES}
-                             for a, b in ((0.25, 0.10), (0.35, 0.12), (0.45, 0.15))},
+                             for a, b in ((0.35, 0.12), (0.45, 0.15), (0.55, 0.20))},
         "scenarios": {},
     }
+    def add_towns(starts):
+        """Ajoute un départ dans chaque ville (place=city/town) à plus de 1 km d'un départ existant."""
+        if args.no_force_towns:
+            return starts, 0
+        sx, sy = list(starts["x"]), list(starts["y"])
+        kinds, names = list(starts["kind"]), list(starts["name"])
+        added = 0
+        for lon, lat, k, nm in places:
+            if k in ("city", "town") and nm:
+                x, y = proj.xy(lon, lat)
+                if sx and min(math.hypot(x - a, y - b) for a, b in zip(sx, sy)) < 1.0:
+                    continue
+                sx.append(x); sy.append(y); kinds.append(k); names.append(nm); added += 1
+        return {"x": np.array(sx), "y": np.array(sy), "kind": kinds, "name": names}, added
+
+    ref = {}
+    by_place = {}
+    for lon, lat, k, nm in places:
+        if nm and (nm not in by_place or PRIORITY.get(k, 0) > PRIORITY.get(by_place[nm][2], 0)):
+            by_place[nm] = (lon, lat, k)
+    for nm in [c.strip() for c in args.check_places.split(";") if c.strip()]:
+        if nm in by_place:
+            x, y = proj.xy(by_place[nm][0], by_place[nm][1])
+            f15, f35 = density.frac(x, y, 1), density.frac(x, y, 3)
+            ref[nm] = {"density_1_5km": round(f15, 2), "density_3_5km": round(f35, 2),
+                       "zone": zone_of(frac_fn(x, y), args.dense_frac, args.peri_frac)}
+        else:
+            ref[nm] = None
+    report["reference_places"] = ref
+
     results = {}
     for key, limits in scen.items():
         lim_map = dict(zip(ZONES, limits))
         base, _ = plan(lim_map, candidates(), dem)
+        base, towns_added = add_towns(base)
         variants = {}
         for policy in ("outside_dense", "all", "none"):
             variants[policy] = int(len(add_stations(base, policy)["x"]))
         starts = add_stations(base, args.stations)
         d = dist_to_nearest(dem["x"], dem["y"], starts["x"], starts["y"])
-        summ, zones = summarise(limits, starts, d, dem, density, args.dense_frac, args.peri_frac)
+        summ, zones = summarise(limits, starts, d, dem, frac_fn, args.dense_frac, args.peri_frac)
         summ["starts_without_stations"] = int(len(base["x"]))
+        summ["towns_forced_added"] = towns_added
         summ["starts_by_stations_policy"] = variants
         report["scenarios"][key] = summ
         results[key] = (starts, d, zones)
@@ -377,10 +418,14 @@ def main() -> int:
 
     # --- résumé lisible
     print(f"Lieux habités (points de demande) : {report['inputs']['demand_points']} → par zone {report['demand_by_zone']}")
+    print(f"\nLieux de référence (densité du sol résidentiel dans un carré de 1,5 km puis de 3,5 km ; zone retenue "
+          f"avec seuils {args.dense_frac}/{args.peri_frac} sur {(2 * R + 1) * CELL_KM} km) :")
+    for nm, v in ref.items():
+        print(f"  {nm:<28}" + (f"{v['density_1_5km']:>5} | {v['density_3_5km']:>5} → {v['zone']}" if v else "  (introuvable)"))
     print(f"Sensibilité aux seuils de zone : {json.dumps(report['zone_sensitivity'], ensure_ascii=False)}")
     for key, s in report["scenarios"].items():
         print(f"\nScénario {key} : dmax {s['limits_km']} → {s['starts']} départs "
-              f"{s['starts_by_zone']} ; gares (politique {args.stations}) : {s['starts_by_stations_policy']}")
+              f"{s['starts_by_zone']} ; gares (politique {args.stations}) : {s['starts_by_stations_policy']} ; villes ajoutées : {s['towns_forced_added']}")
         print(f"  {'zone':<7}{'n':>6}{'médiane':>10}{'P90':>7}{'P95':>7}{'max':>7}   (km, à vol d'oiseau)")
         for z in ("all", *ZONES):
             c = s["coverage_by_demand_zone"][z]
