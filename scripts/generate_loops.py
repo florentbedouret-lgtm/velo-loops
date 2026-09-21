@@ -908,7 +908,7 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
         if bbox and not (bbox[0] <= e["lon"] <= bbox[2] and bbox[1] <= e["lat"] <= bbox[3]):
             continue
         out.append({"name": e["name"], "lon": e["lon"], "lat": e["lat"], "kind": e.get("kind", "place"),
-                    "zone": e.get("zone")})
+                    "zone": e.get("zone"), "display_name": e.get("display_name")})
     return out
 
 
@@ -1028,6 +1028,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
                     k = f"{o['duration_target_min'] / 60:g}"
                     by_dur[k] = by_dur.get(k, 0) + 1
                 entry = {**old, "name": st["name"], "kind": st.get("kind", "place"), "zone": st.get("zone"),
+                         **({"display_name": st["display_name"]} if st.get("display_name") else {}),
                          "options": len(opts), "durations_h": sorted(float(k) for k in by_dur),
                          "options_by_duration": by_dur, "compare": compare_block(opts), "reused": True}
                 log(f"- {st['name']} : réutilisé (calculé le {old['computed_at']})")
@@ -1069,6 +1070,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         by_dur[key] = by_dur.get(key, 0) + 1
     entry = {"id": sid, "name": st["name"], "lon": payload["start"]["lon"], "lat": payload["start"]["lat"],
              "kind": st.get("kind", "place"), "zone": st.get("zone"), "key": start_key(st["lon0"], st["lat0"]),
+             **({"display_name": st["display_name"]} if st.get("display_name") else {}),
              "options": len(options), "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur,
              "compare": compare_block(options), "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "compute_seconds": round(time.time() - t0, 1), "compute_seconds_by_duration": dur_seconds}

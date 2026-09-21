@@ -109,10 +109,11 @@ def main() -> int:
             m = measure(path, crow) if path else None
             if m is None:
                 failed[zone] += 1
-                failed_rows.append({"zone": zone, "kind": s.get("kind", "?"), "crow_km": round(crow, 3)})
+                failed_rows.append({"zone": zone, "kind": s.get("kind", "?"), "crow_km": round(crow, 3),
+                                    "lon": s["lon"], "lat": s["lat"], "start": st["name"]})
                 continue
             m.update({"zone": zone, "start_zone": st.get("zone"), "crow_km": crow, "lon": s["lon"], "lat": s["lat"],
-                      "kind": s.get("kind", "?")})
+                      "kind": s.get("kind", "?"), "start": st["name"]})
             rows.append(m)
 
     THRESHOLDS = (10, 15, 20, 30, 45, 60)
@@ -167,8 +168,9 @@ def main() -> int:
     for zone in ("dense", "peri", "rural"):
         report["tail"][zone] = tail_block([r for r in rows if r["zone"] == zone], [r for r in failed_rows if r["zone"] == zone])
     pairs_path = Path(args.pairs_out) if args.pairs_out else Path(args.out).with_name("detour_pairs.json")
-    pairs_path.write_text(json.dumps([{k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}
-                                      for r in rows], ensure_ascii=False), encoding="utf-8")
+    pairs_path.write_text(json.dumps({
+        "pairs": [{k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()} for r in rows],
+        "no_route": failed_rows}, ensure_ascii=False), encoding="utf-8")
 
     # départ dense -> départ voisin hors zone dense (règle « meilleur départ à vélo : quelques minutes de plus »)
     report["neighbour_pairs"] = None

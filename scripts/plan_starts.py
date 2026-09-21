@@ -71,7 +71,7 @@ def extract(pbf: Path, workdir: Path) -> Path:
 
 
 def load(seq: Path):
-    places, stations, residential = [], [], []
+    places, stations, residential, place_pop = [], [], [], []
     with seq.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -88,12 +88,15 @@ def load(seq: Path):
             if geom.geom_type == "Point":
                 if props.get("place"):
                     places.append((geom.x, geom.y, props["place"], props.get("name")))
+                    pop = re.sub(r"[^0-9]", "", str(props.get("population", "")))
+                    if pop:
+                        place_pop.append((geom.x, geom.y, props["place"], props.get("name"), int(pop)))
                 elif (props.get("railway") == "station" and props.get("station") not in NOT_TRAIN
                       and not NOT_TRAIN_NAME.search(props.get("name") or "")):
                     stations.append((geom.x, geom.y, props.get("name") or "Gare"))
             elif geom.geom_type in ("Polygon", "MultiPolygon") and props.get("landuse") == "residential":
                 residential.append(geom)
-    return places, stations, residential
+    return places, stations, residential, place_pop
 
 
 class Proj:
@@ -270,7 +273,7 @@ def main() -> int:
 
     pbf = Path(args.pbf)
     seq = extract(pbf, Path(args.workdir) if args.workdir else pbf.parent)
-    places, stations, residential = load(seq)
+    places, stations, residential, place_pop = load(seq)
     if not places and not residential:
         sys.exit("aucun lieu habité trouvé dans les données")
     proj = Proj(statistics.mean([p[1] for p in places]) if places else 41.0)
@@ -383,6 +386,14 @@ def main() -> int:
         else:
             ref[nm] = None
     report["reference_places"] = ref
+    big = [(nm, k, pop, zone_of(frac_fn(*proj.xy(lon, lat)), args.dense_frac, args.peri_frac))
+           for lon, lat, k, nm, pop in place_pop if pop >= 20000 and k in ("city", "town", "village", "suburb")]
+    report["places_over_20000"] = {
+        "note": "lieux place=city/town/village/suburb avec un tag population >= 20 000 ; zone calculée au nœud du lieu",
+        "places_with_population_tag": len(place_pop), "places_over_20000": len(big),
+        "by_zone": {z: sum(1 for b in big if b[3] == z) for z in ZONES},
+        "rural": sorted([{"name": b[0], "kind": b[1], "population": b[2]} for b in big if b[3] == "rural"], key=lambda x: -x["population"]),
+        "peri": sorted([{"name": b[0], "kind": b[1], "population": b[2]} for b in big if b[3] == "peri"], key=lambda x: -x["population"])[:40]}
 
     def run_plan(limits, policy):
         mask = keep_mask(policy)
@@ -438,6 +449,8 @@ def main() -> int:
     # --- fichier de départs (noms uniques ; remplissage = nom du lieu le plus proche + direction)
     named = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3]]
     nx = np.array([n[0] for n in named]); ny = np.array([n[1] for n in named])
+    towns = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3] and p[2] in CANDIDATE_PLACES]   # villes, villages, quartiers principaux
+    tx = np.array([n[0] for n in towns]); ty = np.array([n[1] for n in towns])
     out, used = [], {}
     for i in range(len(starts["x"])):
         lon, lat = proj.lonlat(starts["x"][i], starts["y"][i])
@@ -454,8 +467,11 @@ def main() -> int:
         if used[name] > 1:
             name = f"{name} {used[name]}"
         kind = "station" if starts["kind"][i] == "station" else "fill" if starts["kind"][i] == "fill" else "place"
-        out.append({"name": name, "lon": round(float(lon), 5), "lat": round(float(lat), 5), "kind": kind,
-                    "zone": zones[i]})
+        entry = {"name": name, "lon": round(float(lon), 5), "lat": round(float(lat), 5), "kind": kind, "zone": zones[i]}
+        if kind == "fill" and len(tx):                   # nom d'affichage : « Près de <ville ou village le plus proche> »
+            jt = int(np.argmin(np.hypot(tx - starts["x"][i], ty - starts["y"][i])))
+            entry["display_name"] = f"Près de {towns[jt][2]}"
+        out.append(entry)
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     report["chosen_scenario"] = chosen_key
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -480,6 +496,10 @@ def main() -> int:
           f"avec seuils {args.dense_frac}/{args.peri_frac} sur {(2 * R + 1) * CELL_KM} km) :")
     for nm, v in ref.items():
         print(f"  {nm:<28}" + (f"{v['density_1_5km']:>5} | {v['density_3_5km']:>5} → {v['zone']}" if v else "  (introuvable)"))
+    bg = report["places_over_20000"]
+    print(f"\nLieux de plus de 20 000 habitants (tag population, {bg['places_with_population_tag']} lieux ont ce tag) : "
+          f"{bg['places_over_20000']} au total, par zone {bg['by_zone']} ; classés rural : "
+          f"{[(x['name'], x['population']) for x in bg['rural']]}")
     print(f"Sensibilité aux seuils de zone : {json.dumps(report['zone_sensitivity'], ensure_ascii=False)}")
     for key, s in report["scenarios"].items():
         print(f"\nScénario {key} : dmax {s['limits_km']} → {s['starts']} départs "
