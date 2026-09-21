@@ -1,0 +1,53 @@
+{
+ "version": 1,
+ "measured_on": "2026-09-21",
+ "status": "mesuré",
+ "source": "mode detour du workflow : itinéraires GraphHopper (profil vélo 'approach') de 67 lieux habités par zone vers leur départ le plus proche ; durées par modèle physique (puissance, pente) + 10 s par feu tricolore OSM",
+ "limits": "emprise centrale 1.65,41.20,2.65,41.85 (Barcelone, Vallès, Maresme sud, Garraf, Penedès est) ; nord et ouest de la province non mesurés ; 67 paires par zone ; 10 % des paires rurales dépassent 10 km de route",
+ "formula": "temps d'approche à l'aller (min) = distance à vol d'oiseau (km) × detour_ratio_median / speed_kmh_110W_median × 60 ; aller-retour = 2 × aller ; pour une borne pessimiste utiliser detour_ratio_p90",
+ "zones": {
+  "dense": {
+   "pairs": 67,
+   "crow_km_median": 1.06,
+   "detour_ratio_median": 1.54,
+   "detour_ratio_p90": 2.24,
+   "speed_kmh_110W_median": 16.68,
+   "speed_kmh_150W_median": 19.07,
+   "lights_per_km_median": 1.2,
+   "lights_per_km_p90": 4.85,
+   "dense_zone_share_median": 0.93
+  },
+  "peri": {
+   "pairs": 67,
+   "crow_km_median": 1.25,
+   "detour_ratio_median": 1.54,
+   "detour_ratio_p90": 3.03,
+   "speed_kmh_110W_median": 19.76,
+   "speed_kmh_150W_median": 22.98,
+   "lights_per_km_median": 0.0,
+   "lights_per_km_p90": 1.79,
+   "dense_zone_share_median": 0.0
+  },
+  "rural": {
+   "pairs": 67,
+   "crow_km_median": 1.77,
+   "detour_ratio_median": 2.05,
+   "detour_ratio_p90": 4.55,
+   "speed_kmh_110W_median": 16.83,
+   "speed_kmh_150W_median": 20.28,
+   "lights_per_km_median": 0.0,
+   "lights_per_km_p90": 0.51,
+   "dense_zone_share_median": 0.0
+  }
+ },
+ "case_barcelona_to_montcada": {
+  "crow_km": 10.9,
+  "road_km": 14.53,
+  "detour_ratio": 1.34,
+  "dense_zone_share": 0.84,
+  "urban_share": 0.94,
+  "traffic_lights": 66,
+  "time_min_110W": 55.99,
+  "time_min_150W": 49.93
+ }
+}
