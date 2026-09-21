@@ -449,7 +449,7 @@ def main() -> int:
     # --- fichier de départs (noms uniques ; remplissage = nom du lieu le plus proche + direction)
     named = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3]]
     nx = np.array([n[0] for n in named]); ny = np.array([n[1] for n in named])
-    towns = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3] and p[2] in CANDIDATE_PLACES]   # villes, villages, quartiers principaux
+    towns = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3] and p[2] in ("city", "town", "village")]   # « Près de » : commune, pas un quartier
     tx = np.array([n[0] for n in towns]); ty = np.array([n[1] for n in towns])
     out, used = [], {}
     for i in range(len(starts["x"])):

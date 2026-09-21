@@ -949,6 +949,7 @@ def start_key(lon: float, lat: float) -> str:
 
 PARAMS_HASH = ""
 REUSE = None                    # {"src", "index", "by_key", "max_age_days"} si --reuse-from est fourni
+BUDGET_END = None               # instant (time.time()) au-delà duquel on ne démarre plus de nouveau départ
 
 
 def params_hash(config_dir: str = "config") -> str:
@@ -1012,6 +1013,9 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     t0 = time.time()
     buf: list[str] = []
     log = buf.append
+    if BUDGET_END is not None and time.time() > BUDGET_END:
+        log(f"- {st['name']} : ignoré (budget de temps épuisé)")
+        return None, buf, 0.0
     key0 = start_key(st["lon"], st["lat"])
     old = reuse_candidate(key0, durations, levels)
     if old is not None:                                   # même point, mêmes paramètres : on reprend le fichier existant
@@ -1252,6 +1256,9 @@ def main() -> int:
                     help="départs toujours inclus par --per-zone (noms séparés par ; ; ceux qui n'existent pas sont ignorés)")
     ap.add_argument("--pilot-rural", type=int, default=0, help="pilote : nombre total de départs ruraux (au moins --per-zone)")
     ap.add_argument("--pilot-box", default=None, help="pilote : « lon0,lat0,lon1,lat1:N » = N départs ruraux imposés dans cette emprise (relief)")
+    ap.add_argument("--time-budget-min", type=float, default=0.0, help="ne démarre plus de nouveau départ après ce nombre de minutes de calcul "
+                                                                        "(0 = illimité) ; le site est alors publié incomplet et signalé")
+    ap.add_argument("--skipped-out", default=None, help="JSON des départs ignorés avec leur motif")
     ap.add_argument("--timings-out", default=None, help="JSON des temps de calcul par départ (zone, durée) : diagnostic, non publié")
     ap.add_argument("--neighbour-pilot", type=int, default=0, help="pilote : N départs denses avec leur voisin hors zone dense à moins de 2,2 km "
                                                                     "(ajoutés à la sélection) et mesure du gain de boucle")
@@ -1350,8 +1357,9 @@ def main() -> int:
 
     out = Path(args.out)
     (out / "starts").mkdir(parents=True, exist_ok=True)
-    global REUSE, PARAMS_HASH
+    global REUSE, PARAMS_HASH, BUDGET_END
     PARAMS_HASH = params_hash()
+    BUDGET_END = time.time() + 60.0 * args.time_budget_min if args.time_budget_min else None
     REUSE = load_reuse(args.reuse_from, args.reuse_max_age_days) if args.reuse_from else None
     used: dict[str, int] = {}
     ids = []
@@ -1389,6 +1397,19 @@ def main() -> int:
             print("\n".join(results[-1][1]), flush=True)
     index = [r[0] for r in results if r[0]]
     skipped = [st["name"] for st, r in zip(starts, results) if not r[0]]
+
+    def reason(lines):
+        text = " ".join(lines)
+        return ("budget de temps épuisé" if "budget de temps épuisé" in text else
+                "aucune route à moins de 400 m" if "pas de route à moins de 400 m" in text else
+                "aucune option valide" if "aucune option valide" in text else "autre")
+    skipped_details = [{"name": st["name"], "zone": st.get("zone"), "kind": st.get("kind"), "reason": reason(r[1])}
+                       for st, r in zip(starts, results) if not r[0]]
+    if args.skipped_out:
+        Path(args.skipped_out).write_text(json.dumps(skipped_details, ensure_ascii=False, indent=1), encoding="utf-8")
+    reasons: dict = {}
+    for d_ in skipped_details:
+        reasons[d_["reason"]] = reasons.get(d_["reason"], 0) + 1
     elapsed = time.time() - t0
 
     if args.timings_out:
@@ -1416,7 +1437,9 @@ def main() -> int:
                   "starts_reused": sum(1 for e in index if e.get("reused")),
                   "seconds_per_computed_start_by_zone": by_zone_seconds(index),
                   "seconds_per_start_and_duration": by_duration_seconds(index),
-                  "starts_skipped": len(skipped), "skipped_examples": skipped[:30],
+                  "starts_skipped": len(skipped), "skipped_by_reason": reasons, "skipped_examples": skipped[:30],
+                  "incomplete": bool(reasons.get("budget de temps épuisé")),
+                  "time_budget_minutes": args.time_budget_min or None,
                   "generation_seconds": round(elapsed), "seconds_per_start": round(elapsed / max(1, len(starts)), 1),
                   "workers": args.workers, **res},
         "starts": [{k: v for k, v in e.items() if k not in ("compute_seconds", "compute_seconds_by_duration", "reused")}
@@ -1426,6 +1449,9 @@ def main() -> int:
     meta["stats"]["index_kb"] = round(len(text.encode("utf-8")) / 1024, 1)
     meta["stats"]["index_bytes_per_start"] = round(len(text.encode("utf-8")) / max(1, len(index)))
     (out / "index.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    if reasons.get("budget de temps épuisé"):
+        print(f"::warning::GÉNÉRATION INCOMPLÈTE : {reasons['budget de temps épuisé']} départs non démarrés (budget de temps de "
+              f"{args.time_budget_min:g} min épuisé). Relancer avec « reuse » coché pour terminer.", flush=True)
     print(f"Terminé : {len(index)} départs sur {len(starts)} en {elapsed:.0f} s "
           f"({elapsed / max(1, len(starts)):.0f} s par départ) -> {out}", flush=True)
     return 0
