@@ -41,7 +41,7 @@ REAL_WORLD_FACTOR = 0.88      # arrêts, virages, prudence : à calibrer avec le
 
 LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTERNE uniquement
     "facile": {"watts": 110, "label": "tranquille", "profiles": ["calm"]},
-    "modere": {"watts": 150, "label": "soutenu modéré", "profiles": ["calm", "sport"]},
+    "modere": {"watts": 150, "label": "modéré", "profiles": ["calm", "sport"]},
     "soutenu": {"watts": 190, "label": "sportif", "profiles": ["sport"]},
 }
 
@@ -831,6 +831,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
     simplified = simplify(l.coords, 10.0)
     return {
         "id": f"{start_id}-{l.duration_h:g}h-{l.level}-{l.profile}-{idx}",
+        "route_key": route_key(simplified),
         "label": label,
         "profile": l.profile,
         "level": l.level,
@@ -934,10 +935,76 @@ def compare_block(options: list) -> dict:
     return out
 
 
+def route_key(coords) -> str:
+    """Empreinte du tracé (coordonnées simplifiées arrondies à ~10 m) : identique si la boucle est identique."""
+    import hashlib
+    return hashlib.sha1(";".join(f"{c[0]:.4f},{c[1]:.4f}" for c in coords).encode()).hexdigest()[:12]
+
+
 def start_key(lon: float, lat: float) -> str:
     """Clé stable d'un départ (coordonnées arrondies à ~10 m) : permet de réutiliser des résultats entre générations."""
     import hashlib
     return hashlib.sha1(f"{lon:.4f},{lat:.4f}".encode()).hexdigest()[:10]
+
+
+PARAMS_HASH = ""
+REUSE = None                    # {"src", "index", "by_key", "max_age_days"} si --reuse-from est fourni
+
+
+def params_hash(config_dir: str = "config") -> str:
+    """Empreinte de tout ce qui influence les boucles : constantes du modèle + fichiers de configuration GraphHopper.
+    Deux générations avec la même empreinte produisent les mêmes boucles pour un même départ (aux données OSM près)."""
+    import hashlib
+    consts = {"version": GENERATOR_VERSION, "levels": LEVELS, "candidates": CANDIDATES, "weights": WEIGHTS,
+              "tol": TIME_TOLERANCE, "overlap": MAX_OVERLAP, "unpaved": MAX_UNPAVED, "uturns": MAX_UTURNS,
+              "signal": [SIGNAL_DELAY_S, SIGNAL_RADIUS_M, SIGNAL_CLUSTER_M, LIGHTS_PER_KM_ZERO_SCORE],
+              "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
+              "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M]}
+    h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
+    cfg = Path(config_dir)
+    if cfg.exists():
+        for f in sorted(cfg.rglob("*")):
+            if f.is_file() and f.suffix in (".json", ".yml"):
+                h.update(f.read_bytes())
+    return h.hexdigest()[:12]
+
+
+def _read_json(src: str, rel: str):
+    if src.startswith("http"):
+        r = requests.get(f"{src.rstrip('/')}/{rel}", timeout=60)
+        r.raise_for_status()
+        return r.json()
+    return json.loads((Path(src) / rel).read_text(encoding="utf-8"))
+
+
+def load_reuse(src: str, max_age_days: float):
+    """Charge l'index de la génération précédente (adresse du site ou dossier local contenant web/data/)."""
+    try:
+        idx = _read_json(src, "web/data/index.json")
+    except Exception as e:  # noqa: BLE001 : sans index précédent on calcule tout
+        print(f"! réutilisation impossible ({type(e).__name__}: {e}) : tout sera recalculé", file=sys.stderr)
+        return None
+    if idx.get("params_hash") != PARAMS_HASH:
+        print(f"! la génération précédente a des paramètres différents ({idx.get('params_hash')} contre {PARAMS_HASH}) : "
+              "tout sera recalculé", file=sys.stderr)
+        return None
+    return {"src": src, "index": idx, "max_age_days": max_age_days,
+            "by_key": {e["key"]: e for e in idx.get("starts", []) if e.get("key")}}
+
+
+def reuse_candidate(key: str, durations, levels):
+    """Entrée de la génération précédente réutilisable pour ce départ, ou None."""
+    if REUSE is None or key not in REUSE["by_key"]:
+        return None
+    old = REUSE["by_key"][key]
+    have = {float(d) for d in old.get("durations_h", [])}
+    if not {float(d) for d in durations} <= have or not set(levels) <= set(REUSE["index"].get("levels", {})):
+        return None
+    try:
+        age = (time.time() - time.mktime(time.strptime(old["computed_at"], "%Y-%m-%dT%H:%M:%SZ"))) / 86400.0
+    except (KeyError, ValueError):
+        return None
+    return old if age <= REUSE["max_age_days"] else None
 
 
 def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates, out: Path):
@@ -945,6 +1012,28 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     t0 = time.time()
     buf: list[str] = []
     log = buf.append
+    key0 = start_key(st["lon"], st["lat"])
+    old = reuse_candidate(key0, durations, levels)
+    if old is not None:                                   # même point, mêmes paramètres : on reprend le fichier existant
+        try:
+            prev = _read_json(REUSE["src"], f"web/data/starts/{old['id']}.json")
+            opts = [o for o in prev["options"] if o["level"] in levels and o["duration_target_min"] / 60 in
+                    {float(d) for d in durations}]
+            if opts:
+                payload = {"start": {**prev["start"], "name": st["name"]}, "options": opts}
+                (out / "starts" / f"{old['id']}.json").write_text(
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+                by_dur: dict[str, int] = {}
+                for o in opts:
+                    k = f"{o['duration_target_min'] / 60:g}"
+                    by_dur[k] = by_dur.get(k, 0) + 1
+                entry = {**old, "name": st["name"], "kind": st.get("kind", "place"), "zone": st.get("zone"),
+                         "options": len(opts), "durations_h": sorted(float(k) for k in by_dur),
+                         "options_by_duration": by_dur, "compare": compare_block(opts), "reused": True}
+                log(f"- {st['name']} : réutilisé (calculé le {old['computed_at']})")
+                return entry, buf, time.time() - t0
+        except Exception as e:  # noqa: BLE001 : en cas de problème on recalcule
+            log(f"  réutilisation échouée ({type(e).__name__}) : recalcul")
     gh = GraphHopper(gh_url)
     snapped = gh.nearest(st["lat"], st["lon"])
     if snapped is None or snapped[2] > 400:
@@ -953,7 +1042,9 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     st = {**st, "lon0": st["lon"], "lat0": st["lat"], "lon": snapped[0], "lat": snapped[1]}
     log(f"- {st['name']}")
     options = []
+    dur_seconds: dict[str, float] = {}
     for duration in durations:
+        t_dur = time.time()
         for level in levels:
             pool: list[Loop] = []
             for profile in LEVELS[level]["profiles"]:
@@ -964,6 +1055,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
                 pool.extend(found)
             for i, (label, loop) in enumerate(pick_options(pool), start=1):
                 options.append(to_json(loop, label, sid, i))
+        dur_seconds[f"{duration:g}"] = round(time.time() - t_dur, 1)
     if not options:
         log("  aucune option valide, départ ignoré")
         return None, buf, time.time() - t0
@@ -978,9 +1070,29 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     entry = {"id": sid, "name": st["name"], "lon": payload["start"]["lon"], "lat": payload["start"]["lat"],
              "kind": st.get("kind", "place"), "zone": st.get("zone"), "key": start_key(st["lon0"], st["lat0"]),
              "options": len(options), "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur,
-             "compare": compare_block(options)}
+             "compare": compare_block(options), "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+             "compute_seconds": round(time.time() - t0, 1), "compute_seconds_by_duration": dur_seconds}
     log(f"  {len(options)} options, durées disponibles : {', '.join(by_dur)} h ({time.time() - t0:.0f} s)")
     return entry, buf, time.time() - t0
+
+
+def by_zone_seconds(index) -> dict:
+    acc: dict = {}
+    for e in index:
+        if e.get("reused") or "compute_seconds" not in e:
+            continue
+        acc.setdefault(e.get("zone") or "inconnue", []).append(e["compute_seconds"])
+    return {z: {"starts": len(v), "mean_s": round(sum(v) / len(v), 1), "max_s": round(max(v), 1)} for z, v in acc.items()}
+
+
+def by_duration_seconds(index) -> dict:
+    acc: dict = {}
+    for e in index:
+        if e.get("reused"):
+            continue
+        for d, sec in (e.get("compute_seconds_by_duration") or {}).items():
+            acc.setdefault(d, []).append(sec)
+    return {d: {"mean_s": round(sum(v) / len(v), 1), "max_s": round(max(v), 1)} for d, v in sorted(acc.items(), key=lambda x: float(x[0]))}
 
 
 def machine_resources() -> dict:
@@ -1000,6 +1112,11 @@ def main() -> int:
     ap.add_argument("--places", required=True, help="GeoJSON des lieux OSM (osmium export)")
     ap.add_argument("--starts-file", default=None, help="JSON de départs [{name, lon, lat, kind}] (remplace la sélection par noms)")
     ap.add_argument("--per-zone", type=int, default=None, help="pilote : N départs par zone (dense/peri/rural), répartis sur la liste")
+    ap.add_argument("--reuse-from", default=None, help="adresse du site précédent (ou dossier local) dont on réutilise les départs "
+                                                        "identiques (même clé, mêmes paramètres, moins de --reuse-max-age-days)")
+    ap.add_argument("--reuse-max-age-days", type=float, default=60.0)
+    ap.add_argument("--pilot-names", default="Barcelona;Badalona;Montcada i Reixac",
+                    help="départs toujours inclus par --per-zone (noms séparés par ;)")
     ap.add_argument("--shard", default=None, help="i/N : ne traite que les départs d'indice i modulo N (calcul en parallèle)")
     ap.add_argument("--workers", type=int, default=1, help="départs traités en parallèle (threads)")
     ap.add_argument("--out", default="web/data", help="dossier de sortie")
@@ -1046,12 +1163,19 @@ def main() -> int:
     else:
         starts = load_starts(places_path, region.get("start_names"), region.get("bbox"), max_starts)
     if args.per_zone:
-        picked = []
+        picked = [st for st in starts if st["name"] in {n.strip() for n in args.pilot_names.split(";") if n.strip()}]
         for z in ("dense", "peri", "rural"):
-            zs = [st for st in starts if st.get("zone") == z]
+            zs = [st for st in starts if st.get("zone") == z and st.get("kind") != "station"]
             step = max(1, len(zs) // args.per_zone)
             picked.extend(zs[::step][: args.per_zone])
-        starts = picked or starts
+        stations = [st for st in starts if st.get("kind") == "station"]
+        picked.extend(stations[:: max(1, len(stations) // 2)][:2])          # 2 gares réparties dans la liste
+        seen_names, unique = set(), []
+        for st in picked:
+            if st["name"] not in seen_names:
+                seen_names.add(st["name"])
+                unique.append(st)
+        starts = unique or starts
     if args.shard:
         i, n = (int(x) for x in args.shard.split("/"))
         starts = starts[i::n]
@@ -1065,12 +1189,29 @@ def main() -> int:
 
     out = Path(args.out)
     (out / "starts").mkdir(parents=True, exist_ok=True)
+    global REUSE, PARAMS_HASH
+    PARAMS_HASH = params_hash()
+    REUSE = load_reuse(args.reuse_from, args.reuse_max_age_days) if args.reuse_from else None
     used: dict[str, int] = {}
     ids = []
-    for st in starts:                                   # identifiants uniques et stables
+    reserved = {}
+    for st in starts:                                   # un départ réutilisé garde l'identifiant de la génération précédente
+        old = reuse_candidate(start_key(st["lon"], st["lat"]), durations, levels)
+        if old is not None:
+            reserved[id(st)] = old["id"]
+    taken = set(reserved.values())
+    for st in starts:                                   # identifiants uniques
+        if id(st) in reserved:
+            ids.append(reserved[id(st)])
+            continue
         base = slugify(st["name"])
         used[base] = used.get(base, 0) + 1
-        ids.append(base if used[base] == 1 else f"{base}-{used[base]}")
+        cand = base if used[base] == 1 else f"{base}-{used[base]}"
+        while cand in taken:
+            used[base] += 1
+            cand = f"{base}-{used[base]}"
+        taken.add(cand)
+        ids.append(cand)
     t0 = time.time()
     results = []
     if args.workers > 1:
@@ -1099,12 +1240,20 @@ def main() -> int:
         "durations_h": available,
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
         "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
+        "params_hash": PARAMS_HASH,
         "stats": {"starts_requested": len(starts), "starts_generated": len(index),
+                  "starts_reused": sum(1 for e in index if e.get("reused")),
+                  "seconds_per_computed_start_by_zone": by_zone_seconds(index),
+                  "seconds_per_start_and_duration": by_duration_seconds(index),
                   "starts_skipped": len(skipped), "skipped_examples": skipped[:30],
                   "generation_seconds": round(elapsed), "seconds_per_start": round(elapsed / max(1, len(starts)), 1),
                   "workers": args.workers, **res},
-        "starts": index,
+        "starts": [{k: v for k, v in e.items() if k not in ("compute_seconds", "compute_seconds_by_duration", "reused")}
+                   for e in index],
     }
+    text = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
+    meta["stats"]["index_kb"] = round(len(text.encode("utf-8")) / 1024, 1)
+    meta["stats"]["index_bytes_per_start"] = round(len(text.encode("utf-8")) / max(1, len(index)))
     (out / "index.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"Terminé : {len(index)} départs sur {len(starts)} en {elapsed:.0f} s "
           f"({elapsed / max(1, len(starts)):.0f} s par départ) -> {out}", flush=True)

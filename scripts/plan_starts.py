@@ -254,7 +254,8 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="JSON de départs du scénario choisi")
     ap.add_argument("--report", required=True, help="JSON de couverture (tous les scénarios)")
     ap.add_argument("--demand-out", default=None, help="échantillon de lieux habités pour measure_detour.py")
-    ap.add_argument("--scenario", default="A", help="A, B ou 'dense,peri,rural' en km (ex. 2,3,4)")
+    ap.add_argument("--scenario", default="A", help="A, B ou 'dense,peri,rural' en km (ex. 2,3,3) ; plusieurs séparés par ; "
+                                                     "(ex. 2,3,3;2,3.5,4) : le premier produit --out, tous sont chiffrés")
     ap.add_argument("--dense-frac", type=float, default=0.45)
     ap.add_argument("--peri-frac", type=float, default=0.15)
     ap.add_argument("--box-cells", type=int, default=3, help="rayon du carré de densité en cellules de 0,5 km (3 = carré de 3,5 km)")
@@ -330,10 +331,16 @@ def main() -> int:
             names.append(nm if str(nm).lower().startswith("gare") else f"Gare {nm}")
         return {"x": np.array(sx), "y": np.array(sy), "kind": kinds, "name": names}
 
-    scen = dict(SCENARIOS)
-    if "," in args.scenario:
-        scen["custom"] = tuple(float(v) for v in args.scenario.split(","))
-    chosen_key = args.scenario if args.scenario in scen else "custom"
+    scen = dict(SCENARIOS)                      # A et B sont toujours calculés, pour comparer
+    chosen_key = None
+    for part in [x.strip() for x in args.scenario.split(";") if x.strip()]:
+        if part in SCENARIOS:
+            key = part
+        else:                                   # trio dense,peri,rural en km ; plusieurs trios séparés par « ; »
+            vals = tuple(float(v) for v in part.split(","))
+            key = "/".join(f"{v:g}" for v in vals)
+            scen[key] = vals
+        chosen_key = chosen_key or key          # le premier scénario cité produit le fichier de départs
 
     report = {
         "method": "densité résidentielle (carré de 3,5 km) → zone ; couverture maximale + remplissage",

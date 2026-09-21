@@ -80,7 +80,9 @@ def main() -> int:
     ap.add_argument("--sample", required=True, help="demand_sample.json (plan_starts.py --demand-out)")
     ap.add_argument("--starts", required=True, help="starts_plan.json (plan_starts.py --out)")
     ap.add_argument("--pbf", default=None, help=".pbf de la région (comptage des feux)")
-    ap.add_argument("--n", type=int, default=200, help="nombre total de paires, réparties entre les zones")
+    ap.add_argument("--n", type=int, default=600, help="nombre total de paires, réparties entre les zones (0 = tout l'échantillon)")
+    ap.add_argument("--neighbours", type=int, default=30, help="départs denses testés vers leur départ voisin hors zone dense (0 = non)")
+    ap.add_argument("--pairs-out", default=None, help="JSON des paires mesurées une à une (défaut : à côté de --out)")
     ap.add_argument("--profile", default="approach")
     ap.add_argument("--places", default=None, help="places.geojson : repli pour nommer un cas hors du plan")
     ap.add_argument("--cases", default="", help="cas nommés « Départ A>Départ B;… »")
@@ -95,7 +97,7 @@ def main() -> int:
     print(f"Feux tricolores OSM chargés : {len(g.SIGNALS.points) if g.SIGNALS else 0}", flush=True)
 
     rnd = random.Random(11)
-    per_zone = math.ceil(args.n / 3)
+    per_zone = math.ceil(args.n / 3) if args.n else 10 ** 9
     rows, failed = [], {"dense": 0, "peri": 0, "rural": 0}
     for zone in ("dense", "peri", "rural"):
         pairs = [s for s in sample if s["zone"] == zone]
@@ -108,21 +110,67 @@ def main() -> int:
             if m is None:
                 failed[zone] += 1
                 continue
-            m.update({"zone": zone, "crow_km": crow})
+            m.update({"zone": zone, "start_zone": st.get("zone"), "crow_km": crow, "lon": s["lon"], "lat": s["lat"]})
             rows.append(m)
 
-    report = {"profile": args.profile, "pairs_requested_per_zone": per_zone, "failed": failed, "by_zone": {}}
+    THRESHOLDS = (10, 15, 20, 30, 45, 60)
+
+    def aggregate(sel):
+        out = {"pairs": len(sel), "crow_km": stats(sel, "crow_km"), "road_km": stats(sel, "road_km"),
+               "ratio_road_over_crow": stats(sel, "ratio"), "time_min_110W": stats(sel, "time_min_110W"),
+               "time_min_150W": stats(sel, "time_min_150W"), "speed_kmh_110W": stats(sel, "speed_kmh_110W"),
+               "speed_kmh_150W": stats(sel, "speed_kmh_150W"), "lights_per_km": stats(sel, "lights_per_km"),
+               "city_share": stats(sel, "city_share"),
+               "share_over_minutes_110W": {str(t): round(sum(1 for r in sel if r["time_min_110W"] > t) / len(sel), 3)
+                                           for t in THRESHOLDS}}
+        return out
+
+    report = {"profile": args.profile, "pairs_requested_per_zone": per_zone if args.n else "tout l'échantillon",
+              "failed": failed, "by_zone": {}, "by_start_zone": {}}
     for zone in ("dense", "peri", "rural", "all"):
         sel = rows if zone == "all" else [r for r in rows if r["zone"] == zone]
-        if not sel:
-            continue
-        report["by_zone"][zone] = {
-            "pairs": len(sel),
-            "crow_km": stats(sel, "crow_km"), "road_km": stats(sel, "road_km"), "ratio_road_over_crow": stats(sel, "ratio"),
-            "time_min_110W": stats(sel, "time_min_110W"), "time_min_150W": stats(sel, "time_min_150W"),
-            "speed_kmh_110W": stats(sel, "speed_kmh_110W"), "speed_kmh_150W": stats(sel, "speed_kmh_150W"),
-            "lights_per_km": stats(sel, "lights_per_km"), "city_share": stats(sel, "city_share"),
-        }
+        if sel:
+            report["by_zone"][zone] = aggregate(sel)
+    for zone in ("dense", "peri", "rural"):
+        sel = [r for r in rows if r.get("start_zone") == zone]
+        if sel:
+            report["by_start_zone"][zone] = aggregate(sel)
+    pairs_path = Path(args.pairs_out) if args.pairs_out else Path(args.out).with_name("detour_pairs.json")
+    pairs_path.write_text(json.dumps([{k: (round(v, 3) if isinstance(v, float) else v) for k, v in r.items()}
+                                      for r in rows], ensure_ascii=False), encoding="utf-8")
+
+    # départ dense -> départ voisin hors zone dense (règle « meilleur départ à vélo : quelques minutes de plus »)
+    report["neighbour_pairs"] = None
+    if args.neighbours:
+        dense_starts = [x for x in starts if x.get("zone") == "dense"]
+        others = [x for x in starts if x.get("zone") in ("peri", "rural")]
+        rnd.shuffle(dense_starts)
+        nrows, nfailed = [], 0
+        for a in dense_starts:
+            if len(nrows) + nfailed >= args.neighbours:
+                break
+            near = [(g.haversine(a["lon"], a["lat"], b["lon"], b["lat"]) / 1000.0, b) for b in others]
+            near = sorted((d, b) for d, b in near if 1.0 <= d <= 6.0)[:1]
+            if not near:
+                continue
+            crow, b = near[0]
+            path = route(args.gh, (a["lon"], a["lat"]), (b["lon"], b["lat"]), args.profile)
+            m = measure(path, crow) if path else None
+            if m is None:
+                nfailed += 1
+                continue
+            m.update({"from": a["name"], "to": b["name"], "crow_km": crow})
+            nrows.append(m)
+        if nrows:
+            report["neighbour_pairs"] = {
+                "pairs": len(nrows), "failed": nfailed, "crow_km": stats(nrows, "crow_km"), "road_km": stats(nrows, "road_km"),
+                "time_min_110W": stats(nrows, "time_min_110W"), "dense_zone_share": stats(nrows, "city_share"),
+                "lights_per_km": stats(nrows, "lights_per_km"),
+                "share_time_at_most_10min": round(sum(1 for r in nrows if r["time_min_110W"] <= 10) / len(nrows), 3),
+                "share_time_at_most_15min": round(sum(1 for r in nrows if r["time_min_110W"] <= 15) / len(nrows), 3),
+                "examples": [{"from": r["from"], "to": r["to"], "crow_km": round(r["crow_km"], 1),
+                              "time_min_110W": round(r["time_min_110W"]), "dense_zone_share": round(r["city_share"], 2)}
+                             for r in nrows[:8]]}
 
     report["cases"] = []
     by_name = {s["name"]: s for s in starts}
@@ -147,12 +195,20 @@ def main() -> int:
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
 
     print(f"\nDétour et vitesse d'approche (profil {args.profile}) — paires échouées : {failed}")
-    print(f"{'zone':<7}{'paires':>7}{'vol d’oiseau':>13}{'route':>8}{'rapport':>9}{'temps 110 W':>13}{'vitesse 110 W':>15}{'feux/km':>9}")
-    for zone, r in report["by_zone"].items():
-        def med(k):
-            return r[k]["median"] if r.get(k) else "-"
-        print(f"{zone:<7}{r['pairs']:>7}{med('crow_km'):>11} km{med('road_km'):>6} km{med('ratio_road_over_crow'):>9}"
-              f"{med('time_min_110W'):>10} min{med('speed_kmh_110W'):>11} km/h{med('lights_per_km'):>9}")
+    for title, block in (("par zone du LIEU HABITÉ", report["by_zone"]), ("par zone du DÉPART le plus proche", report["by_start_zone"])):
+        print(f"\n{title}")
+        print(f"{'zone':<7}{'paires':>7}{'vol d’oiseau':>13}{'route':>8}{'rapport':>9}{'p90':>6}{'temps 110 W':>13}{'vitesse':>9}{'>15 min':>9}{'>30 min':>9}")
+        for zone, r in block.items():
+            def med(k, q="median"):
+                return r[k][q] if r.get(k) else "-"
+            print(f"{zone:<7}{r['pairs']:>7}{med('crow_km'):>11} km{med('road_km'):>6} km{med('ratio_road_over_crow'):>9}"
+                  f"{med('ratio_road_over_crow', 'p90'):>6}{med('time_min_110W'):>10} min{med('speed_kmh_110W'):>9}"
+                  f"{round(100 * r['share_over_minutes_110W']['15']):>8}%{round(100 * r['share_over_minutes_110W']['30']):>8}%")
+    if report["neighbour_pairs"]:
+        n = report["neighbour_pairs"]
+        print(f"\nDépart dense -> départ voisin hors zone dense ({n['pairs']} paires) : temps médian {n['time_min_110W']['median']} min, "
+              f"part en zone dense {n['dense_zone_share']['median']}, <= 10 min : {round(100 * n['share_time_at_most_10min'])} %, "
+              f"<= 15 min : {round(100 * n['share_time_at_most_15min'])} %")
     for c in report["cases"]:
         print("Cas", c)
     return 0
