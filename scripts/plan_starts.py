@@ -261,6 +261,9 @@ def main() -> int:
     ap.add_argument("--no-force-towns", action="store_true", help="ne pas imposer un départ dans chaque ville (place=city/town)")
     ap.add_argument("--check-places", default=CHECK_PLACES, help="lieux de référence dont on affiche la densité (séparés par ;)")
     ap.add_argument("--stations", choices=["outside_dense", "all", "none"], default="outside_dense")
+    ap.add_argument("--rural-demand", choices=["all", "no_isolated", "villages_up"], default="all",
+                    help="lieux à couvrir : all = tout ; no_isolated = sans habitations isolées ; villages_up = sans habitations "
+                         "isolées ni hameaux (le rapport chiffre les trois variantes)")
     args = ap.parse_args()
 
     pbf = Path(args.pbf)
@@ -278,18 +281,29 @@ def main() -> int:
     dem_map = {}
     for lon, lat, kind, _ in places:
         x, y = proj.xy(lon, lat)
-        dem_map[(round(x / 0.25), round(y / 0.25))] = (x, y, kind in RURAL_PLACES)
+        dem_map[(round(x / 0.25), round(y / 0.25))] = (x, y, kind in RURAL_PLACES, kind)
     for x, y in res_xy:
-        dem_map.setdefault((round(x / 0.25), round(y / 0.25)), (x, y, False))
+        dem_map.setdefault((round(x / 0.25), round(y / 0.25)), (x, y, False, "residential"))
     dx = np.array([v[0] for v in dem_map.values()]); dy = np.array([v[1] for v in dem_map.values()])
     forced_rural = np.array([v[2] for v in dem_map.values()])
+    dkind = np.array([v[3] for v in dem_map.values()])
     fr = np.array([frac_fn(x, y) for x, y in zip(dx, dy)])
 
-    def demand_for(dense_frac, peri_frac):
-        zones = ["rural" if forced_rural[i] else zone_of(fr[i], dense_frac, peri_frac) for i in range(len(dx))]
-        return {"x": dx, "y": dy, "zone": zones}
+    def keep_mask(policy):
+        if policy == "no_isolated":
+            return dkind != "isolated_dwelling"
+        if policy == "villages_up":
+            return ~np.isin(dkind, ["isolated_dwelling", "hamlet"])
+        return np.ones(len(dx), dtype=bool)
 
-    dem = demand_for(args.dense_frac, args.peri_frac)
+    def demand_for(dense_frac, peri_frac, mask=None):
+        zones = ["rural" if forced_rural[i] else zone_of(fr[i], dense_frac, peri_frac) for i in range(len(dx))]
+        if mask is None:
+            return {"x": dx, "y": dy, "zone": zones}
+        return {"x": dx[mask], "y": dy[mask], "zone": [z for z, m in zip(zones, mask) if m]}
+
+    dem_full = demand_for(args.dense_frac, args.peri_frac)
+    dem = demand_for(args.dense_frac, args.peri_frac, keep_mask(args.rural_demand))
 
     # --- candidats : centres de villes / villages / quartiers ; les gares sont ajoutées ensuite (voir add_stations)
     def candidates():
@@ -362,22 +376,55 @@ def main() -> int:
             ref[nm] = None
     report["reference_places"] = ref
 
+    def run_plan(limits, policy):
+        mask = keep_mask(policy)
+        dem_p = demand_for(args.dense_frac, args.peri_frac, mask)
+        lim_map = dict(zip(ZONES, limits))
+        base, _ = plan(lim_map, candidates(), dem_p)
+        base, towns_added = add_towns(base)
+        starts = add_stations(base, args.stations)
+        d = dist_to_nearest(dem_p["x"], dem_p["y"], starts["x"], starts["y"])
+        return starts, d, dem_p, mask, towns_added, base
+
+    def skipped_stats(starts, mask):
+        if mask.all():
+            return None
+        d_skip = dist_to_nearest(dx[~mask], dy[~mask], starts["x"], starts["y"])
+        out = describe(d_skip)
+        out["within_4km"] = round(float((d_skip <= 4).mean()), 3)
+        out["within_6km"] = round(float((d_skip <= 6).mean()), 3)
+        return out
+
     results = {}
     for key, limits in scen.items():
-        lim_map = dict(zip(ZONES, limits))
-        base, _ = plan(lim_map, candidates(), dem)
-        base, towns_added = add_towns(base)
+        starts, d, dem_p, mask, towns_added, base = run_plan(limits, args.rural_demand)
         variants = {}
         for policy in ("outside_dense", "all", "none"):
             variants[policy] = int(len(add_stations(base, policy)["x"]))
-        starts = add_stations(base, args.stations)
-        d = dist_to_nearest(dem["x"], dem["y"], starts["x"], starts["y"])
-        summ, zones = summarise(limits, starts, d, dem, frac_fn, args.dense_frac, args.peri_frac)
+        summ, zones = summarise(limits, starts, d, dem_p, frac_fn, args.dense_frac, args.peri_frac)
+        summ["rural_demand"] = args.rural_demand
+        summ["demand_points_kept"] = int(mask.sum())
+        summ["skipped_demand_distance_to_nearest_start"] = skipped_stats(starts, mask)
         summ["starts_without_stations"] = int(len(base["x"]))
         summ["towns_forced_added"] = towns_added
         summ["starts_by_stations_policy"] = variants
         report["scenarios"][key] = summ
         results[key] = (starts, d, zones)
+
+    # variantes de la demande rurale (habitations isolées, hameaux) : le plus gros levier sur le nombre de départs
+    report["rural_demand_variants"] = {"kinds_in_demand": {k: int((dkind == k).sum()) for k in
+                                                           ("isolated_dwelling", "hamlet", "village", "town", "city",
+                                                            "suburb", "neighbourhood", "quarter", "residential")}}
+    for key in sorted({"A", chosen_key}):
+        report["rural_demand_variants"][key] = {}
+        for policy in ("all", "no_isolated", "villages_up"):
+            st, dd, dem_p, mask, _, _ = run_plan(scen[key], policy)
+            sm, _ = summarise(scen[key], st, dd, dem_p, frac_fn, args.dense_frac, args.peri_frac)
+            report["rural_demand_variants"][key][policy] = {
+                "demand_points_kept": int(mask.sum()), "starts": sm["starts"], "starts_by_zone": sm["starts_by_zone"],
+                "compute_hours_3_workers": sm["cost_estimate"]["compute_hours_3_workers"],
+                "size_mb": sm["cost_estimate"]["size_mb"], "coverage_of_kept_demand": sm["coverage_by_demand_zone"]["all"],
+                "skipped_demand_distance_to_nearest_start": skipped_stats(st, mask)}
 
     starts, d, zones = results[chosen_key]
     # --- fichier de départs (noms uniques ; remplissage = nom du lieu le plus proche + direction)
@@ -437,6 +484,16 @@ def main() -> int:
         ce = s["cost_estimate"]
         print(f"  calcul estimé : {ce['compute_hours_one_thread'][0]}–{ce['compute_hours_one_thread'][1]} h (1 fil), "
               f"{ce['compute_hours_3_workers'][0]}–{ce['compute_hours_3_workers'][1]} h (3 en parallèle) ; taille estimée {ce['size_mb']} Mo")
+    print("\nDemande rurale : combien de départs pour couvrir, ou non, les habitations isolées et les hameaux ?")
+    print(f"  lieux dans les données : {report['rural_demand_variants']['kinds_in_demand']}")
+    for key, v in report["rural_demand_variants"].items():
+        if key == "kinds_in_demand":
+            continue
+        for policy, r in v.items():
+            sk = r["skipped_demand_distance_to_nearest_start"]
+            print(f"  scénario {key} / {policy:<12} {r['starts']:>4} départs {r['starts_by_zone']} ; calcul (3 fils) "
+                  f"{r['compute_hours_3_workers'][0]}–{r['compute_hours_3_workers'][1]} h ; {r['size_mb']} Mo"
+                  + (f" ; lieux non couverts à {sk['median_km']} km (médiane), {sk['max_km']} km (max)" if sk else ""))
     print(f"\n-> {len(out)} départs du scénario {chosen_key} écrits dans {args.out}")
     return 0
 
