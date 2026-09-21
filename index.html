@@ -9,7 +9,7 @@
     html, body { margin: 0; }
     body { height: 100dvh; display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
     #controls { display: flex; gap: 8px; padding: 8px; }
-    #controls select { flex: 1; font-size: 16px; padding: 8px; }
+    #controls select { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
     #map { flex: 0 0 45%; }
     #list { flex: 1; overflow: auto; padding: 8px; }
     .card { border: 2px solid #ddd; border-radius: 10px; padding: 10px; margin-bottom: 8px; line-height: 1.5; }
@@ -24,11 +24,14 @@
   <div id="controls">
     <select id="start"></select>
     <select id="level"></select>
+    <select id="duration"></select>
   </div>
   <div id="map"></div>
   <div id="list">Chargement…</div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
   <script src="gpx.js"></script>
+  <script src="profile.js"></script>
+  <script src="feedback.js"></script>
   <script>
     const LABELS = {
       equilibre: 'Équilibrée',
@@ -40,6 +43,7 @@
 
     const startSel = document.getElementById('start');
     const levelSel = document.getElementById('level');
+    const durSel = document.getElementById('duration');
     const list = document.getElementById('list');
 
     const map = new maplibregl.Map({
@@ -53,6 +57,7 @@
     let shown = [];
     let current = 0;
     let marker = null;
+    let indexData = null;
 
     const km = n => n.toFixed(1).replace('.', ',');
     function hm(min) {
@@ -68,9 +73,13 @@
         fetch('web/data/index.json').then(r => r.json()),
         new Promise(ok => map.once('load', ok))
       ]);
+      indexData = index;
       index.starts.forEach(s => startSel.add(new Option(s.name, s.id)));
       Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
       levelSel.value = 'modere';
+      index.durations_h.forEach(h => durSel.add(new Option(hm(h * 60), h)));
+      durSel.value = '2';
+      durSel.onchange = showLevel;
 
       map.addSource('routes', { type: 'geojson', data: EMPTY });
       map.addLayer({
@@ -103,9 +112,11 @@
     }
 
     function showLevel() {
-      shown = startData.options.filter(o => o.level === levelSel.value);
+      shown = startData.options.filter(o => o.level === levelSel.value &&
+        (o.duration_target_min == null ||
+         Math.round(o.duration_target_min) === Math.round(Number(durSel.value) * 60)));
       if (!shown.length) {
-        list.textContent = 'Aucune option pour ce niveau.';
+        list.textContent = 'Aucune option pour ce niveau et cette durée.';
         map.getSource('routes').setData(EMPTY);
         return;
       }
@@ -122,6 +133,7 @@
         km(c.avg_grade_pct) + ' %, +' + Math.round(c.gain_m) + ' m</li>').join('');
       return `
         <ul class="pitch">${pitch}</ul>
+        ${profileSvg(o)}
         <div class="facts">
           Pistes cyclables : ${pct(o.shares.dedicated_cycleway)}<br>
           Routes principales : ${pct(o.shares.main_roads)}<br>
@@ -130,7 +142,8 @@
         </div>
         <ul class="climbs">${climbs}</ul>
         <button onclick="downloadGpx(startData, shown[current])" style="font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 0">Télécharger le GPX</button><br>
-        <small>Durée et dénivelé : des estimations, pas des promesses.</small>`;
+        ${feedbackHtml(o)}
+        <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
     }
 
     function select(i) {
