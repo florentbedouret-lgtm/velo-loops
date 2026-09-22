@@ -32,6 +32,7 @@ def main() -> int:
     ap.add_argument("--job-seconds", type=float, default=None, help="durée écoulée depuis le début du job")
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--out-json", required=True)
+    ap.add_argument("--out-csv", default=None, help="CSV : une ligne par départ avec ses combinaisons absentes")
     args = ap.parse_args()
 
     data = Path(args.data)
@@ -102,9 +103,39 @@ def main() -> int:
                     per_start[s["name"]] = per_start.get(s["name"], 0) + 1
                     per_combo[f"{d} h / {lv}"] = per_combo.get(f"{d} h / {lv}", 0) + 1
     miss_pct = 100.0 * missing / expected if expected else 0.0
+    # répartition par départ, par zone et par durée
+    n_combo = len(durations) * len(levels)
+    missing_by_start = {}
+    for s_ in starts:
+        comp = s_.get("compare", {})
+        missing_by_start[s_["name"]] = [f"{d} h / {lv}" for d in durations for lv in levels if d not in comp or lv not in comp[d]]
+    hist = {"0": 0, "1": 0, "2": 0, "3 à 5": 0, "6 à 9": 0, "10 à 11": 0}
+    for lst in missing_by_start.values():
+        k = len(lst)
+        hist["0" if k == 0 else "1" if k == 1 else "2" if k == 2 else "3 à 5" if k <= 5 else "6 à 9" if k <= 9 else "10 à 11"] += 1
+    by_zone_missing = {}
+    for z in ("dense", "peri", "rural"):
+        zs = [s_ for s_ in starts if s_.get("zone") == z]
+        if zs:
+            cnt = [len(missing_by_start[s_["name"]]) for s_ in zs]
+            by_zone_missing[z] = {"starts": len(zs), "starts_with_missing": sum(1 for c in cnt if c), "starts_with_6_or_more": sum(1 for c in cnt if c >= 6),
+                                  "missing_combos": sum(cnt), "share_of_zone_combos_pct": round(100.0 * sum(cnt) / (len(zs) * n_combo), 2)}
+    no_option_at_duration = {d: sum(1 for s_ in starts if all(d not in s_.get("compare", {}) or lv not in s_["compare"][d] for lv in levels)) for d in durations}
+    by_kind_missing = {}
+    for kd in sorted({s_.get("kind") for s_ in starts}):
+        ks = [s_ for s_ in starts if s_.get("kind") == kd]
+        by_kind_missing[kd] = {"starts": len(ks), "missing_combos": sum(len(missing_by_start[s_["name"]]) for s_ in ks)}
+    if args.out_csv:
+        with open(args.out_csv, "w", encoding="utf-8") as fh:
+            fh.write("name;zone;kind;missing_count;missing_combinations\n")
+            for s_ in starts:
+                lst = missing_by_start[s_["name"]]
+                fh.write(f'{s_["name"]};{s_.get("zone")};{s_.get("kind")};{len(lst)};{" | ".join(lst)}\n')
     absentes = {"expected": expected, "missing": missing, "missing_pct": round(miss_pct, 2),
                 "by_combo": dict(sorted(per_combo.items(), key=lambda x: -x[1])),
-                "starts_most_affected": dict(sorted(per_start.items(), key=lambda x: -x[1])[:15])}
+                "starts_most_affected": dict(sorted(per_start.items(), key=lambda x: -x[1])[:15]),
+                "distribution_of_starts_by_missing_count": hist, "by_zone": by_zone_missing,
+                "starts_with_no_option_at_duration": no_option_at_duration, "by_kind": by_kind_missing}
 
     # ---- verdicts
     def verdict(ok):
@@ -157,6 +188,10 @@ def main() -> int:
     if per_combo:
         L.append(f"- Par combinaison : {absentes['by_combo']}")
         L.append(f"- Départs les plus touchés : {absentes['starts_most_affected']}")
+        L.append(f"- **Répartition des départs par nombre de combinaisons absentes** (sur {n_combo}) : {hist}")
+        L.append(f"- Par zone : {by_zone_missing}")
+        L.append(f"- Départs sans aucune option à une durée donnée (tous niveaux) : {no_option_at_duration}")
+        L.append(f"- Par type de départ : {by_kind_missing}")
     Path(args.out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
     return 0

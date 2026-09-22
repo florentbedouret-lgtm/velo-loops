@@ -373,25 +373,18 @@ def sample_points(coords, cum, step):
     return out
 
 
-def slope_stats(ds, prof):
-    """Pente max (lissée), répartition de la distance par classe de pente, et montées significatives."""
-    grades = [(prof[k] - prof[k - 1]) / ds for k in range(1, len(prof))]
-    if not grades:
-        return {"max_grade_pct": 0.0, "bands": {}, "climbs": [], "n_climbs": 0}
-    bands = {"descent": 0, "flat": 0, "up_3_6": 0, "up_6_9": 0, "up_9_plus": 0}
-    for g in grades:
-        key = ("descent" if g < -0.03 else "flat" if g < 0.03 else "up_3_6" if g < 0.06
-               else "up_6_9" if g < 0.09 else "up_9_plus")
-        bands[key] += 1
-    n = len(grades)
-    # montées : suites monotones dont la remontée dépasse 5 m, gardées si gain >= 20 m
+def detect_climb_runs(prof, threshold=5.0):
+    """Suites monotones (montée ou descente) dont l'amplitude dépasse `threshold` (bruit sous ce seuil, comme un
+    altimètre GPS). Retourne la liste des montées : [(indice de départ, indice du sommet)]. Une seule
+    implémentation, utilisée à la fois pour les "montées" affichées (slope_stats, filtrées >= 20 m, 5 au plus)
+    et pour la pente moyenne des montées nettes (terrain.avg_climb_grade_pct, TOUTES les montées >= 5 m)."""
     runs, direction, low_i, high_i, start_i = [], 0, 0, 0, 0
     for i in range(1, len(prof)):
         v = prof[i]
         if direction == 0:
-            if v - prof[low_i] >= 5.0:
+            if v - prof[low_i] >= threshold:
                 direction, start_i, high_i = 1, low_i, i
-            elif prof[high_i] - v >= 5.0:
+            elif prof[high_i] - v >= threshold:
                 direction, low_i = -1, i
             else:
                 low_i = i if v <= prof[low_i] else low_i
@@ -399,25 +392,46 @@ def slope_stats(ds, prof):
         elif direction == 1:
             if v > prof[high_i]:
                 high_i = i
-            elif prof[high_i] - v >= 5.0:
+            elif prof[high_i] - v >= threshold:
                 runs.append((start_i, high_i))
                 direction, low_i = -1, i
         else:
             if v <= prof[low_i]:
                 low_i = i
-            elif v - prof[low_i] >= 5.0:
+            elif v - prof[low_i] >= threshold:
                 direction, start_i, high_i = 1, low_i, i
     if direction == 1:
         runs.append((start_i, high_i))
-    climbs = []
-    for a, b in runs:
-        gain, length = prof[b] - prof[a], (b - a) * ds
-        if gain >= 20.0 and length > 0:
-            climbs.append({"start_km": round(a * ds / 1000.0, 1), "length_km": round(length / 1000.0, 1),
-                           "gain_m": round(gain), "avg_grade_pct": round(100.0 * gain / length, 1)})
+    return runs
+
+
+def slope_stats(ds, prof):
+    """Pente max (lissée), répartition de la distance par classe de pente, montées significatives (affichage),
+    et pente moyenne pondérée sur TOUTES les montées nettes (terrain.avg_climb_grade_pct — validée par le test de
+    sensibilité au lissage du 22/09 : rapport médian 1,21x sans lissage/500 m sur 6 sorties réelles, le plus
+    stable des indicateurs de pente testés ; affichage recommandé arrondi au multiple de 2 le plus proche, pas
+    à l'entier, pour rester dans la marge de bruit)."""
+    grades = [(prof[k] - prof[k - 1]) / ds for k in range(1, len(prof))]
+    if not grades:
+        return {"max_grade_pct": 0.0, "bands": {}, "climbs": [], "n_climbs": 0, "avg_climb_grade_pct": None}
+    bands = {"descent": 0, "flat": 0, "up_3_6": 0, "up_6_9": 0, "up_9_plus": 0}
+    for g in grades:
+        key = ("descent" if g < -0.03 else "flat" if g < 0.03 else "up_3_6" if g < 0.06
+               else "up_6_9" if g < 0.09 else "up_9_plus")
+        bands[key] += 1
+    n = len(grades)
+    runs = detect_climb_runs(prof, threshold=5.0)               # toutes les montées nettes (>= 5 m, bruit exclu)
+    all_climbs = [(prof[b] - prof[a], (b - a) * ds) for a, b in runs]
+    climb_gain = sum(g for g, _ in all_climbs)
+    climb_len = sum(le for _, le in all_climbs)
+    avg_climb = round(100.0 * climb_gain / climb_len, 1) if climb_len > 0 else None
+    # sous-ensemble affiché dans le pitch : seulement les montées >= 20 m, les 5 plus grosses
+    climbs = [{"start_km": round(a * ds / 1000.0, 1), "length_km": round((b - a) * ds / 1000.0, 1),
+              "gain_m": round(prof[b] - prof[a]), "avg_grade_pct": round(100.0 * (prof[b] - prof[a]) / ((b - a) * ds), 1)}
+              for a, b in runs if prof[b] - prof[a] >= 20.0 and (b - a) * ds > 0]
     climbs.sort(key=lambda c: -c["gain_m"])
     return {"max_grade_pct": round(100.0 * max(grades), 1), "bands": {k: round(v / n, 3) for k, v in bands.items()},
-            "climbs": climbs[:5], "n_climbs": len(climbs)}
+            "climbs": climbs[:5], "n_climbs": len(climbs), "avg_climb_grade_pct": avg_climb}
 
 
 def count_uturns(coords, min_seg=8.0, angle=150.0) -> int:
@@ -762,15 +776,23 @@ def format_duration(minutes: int) -> str:
     return f"{minutes} min" if minutes < 60 else f"{minutes // 60} h {minutes % 60:02d}"
 
 
-def pitch(l: Loop, label: str) -> list[str]:
-    """Phrases construites uniquement à partir de mesures (aucune affirmation non vérifiée)."""
-    s = l.shares
-    urban = s["urban"]
-    minutes = round(l.time_s / 60.0)
-    per100 = l.dplus_per_km * 100.0
+PITCH_VERSION = 2   # incrémenté à chaque changement du TEXTE produit par pitch_from_option (sert à rewrite_pitch.py)
+
+
+def pitch_from_option(o: dict) -> list[str]:
+    """Phrases construites uniquement à partir de mesures déjà exportées (aucune affirmation non vérifiée).
+    Prend le même dict que celui écrit dans starts/<id>.json (voir to_json) : peut être appelé à la génération
+    ET, plus tard, en relecture seule sur des données déjà publiées (voir scripts/rewrite_pitch.py), sans
+    GraphHopper ni recalcul. Décision UX : aucun pourcentage de pente n'est affiché tant que la dispersion du
+    lissage n'est pas mesurée ; les champs bruts terrain.max_grade_pct et climbs[].avg_grade_pct restent dans
+    les données pour un usage futur, seul le TEXTE ne les montre plus.
+    """
+    urban = o["shares"]["urban"]
+    minutes = round(o["time_est_min"])
+    per100 = o["ascend_m"] / max(o["distance_km"], 0.1) * 100.0
     lines = [
-        f"{l.distance_m / 1000:.0f} km, {l.ascend_m:.0f} m de dénivelé positif, "
-        f"environ {format_duration(minutes)} à un rythme « {LEVELS[l.level]['label']} »."
+        f"{o['distance_km']:.0f} km, {o['ascend_m']:.0f} m de dénivelé positif, "
+        f"environ {format_duration(minutes)} à un rythme « {LEVELS[o['level']]['label']} »."
     ]
     lines.append(f"Profil {relief_category(per100)} : {per100:.0f} m de D+ pour 100 km.")
     if urban["rural"] >= 0.6:
@@ -779,27 +801,31 @@ def pitch(l: Loop, label: str) -> list[str]:
         lines.append("Évite les zones urbaines denses (moins de 5 % du parcours).")
     else:
         lines.append(f"{urban['city'] * 100:.0f} % du parcours en zone urbaine dense.")
-    if l.exit_dense_m is not None and l.exit_dense_m > 0:
-        if l.exit_dense_m >= l.distance_m * 0.98:
+    ex = o.get("exit_dense_km")
+    if ex is not None and ex > 0:
+        if ex >= o["distance_km"] * 0.98:
             lines.append("Reste en zone urbaine dense sur tout le parcours.")
         else:
-            lines.append(f"Sort de la zone urbaine dense après {l.exit_dense_m / 1000:.1f} km.")
-    if l.signals is not None:
-        per_km = l.signals / max(l.distance_m / 1000.0, 0.1)
-        if l.signals == 0:
+            lines.append(f"Sort de la zone urbaine dense après {ex:.1f} km.")
+    signals = o.get("traffic_lights")
+    if signals is not None:
+        per_km = o.get("traffic_lights_per_km") or 0.0
+        if signals == 0:
             lines.append("Aucun feu tricolore recensé dans OpenStreetMap sur le parcours.")
         else:
-            lines.append(f"{l.signals} carrefours à feux tricolores ({per_km:.1f} par km).")
-    tr = l.terrain
+            lines.append(f"{signals} carrefours à feux tricolores ({per_km:.1f} par km).")
+    tr = o.get("terrain") or {}
     if tr.get("climbs"):
         c = tr["climbs"][0]
-        lines.append(f"Plus longue montée : {c['length_km']:.1f} km à {c['avg_grade_pct']:.1f} % (+{c['gain_m']} m) ; "
-                     f"{tr['n_climbs']} montée(s) de plus de 20 m au total, pente max lissée {tr['max_grade_pct']:.0f} %.")
+        # pas de pourcentage de pente affiché ici (ni la pente moyenne de la montée, ni la pente max lissée) :
+        # décision UX, en attendant la mesure de dispersion du lissage. Les valeurs restent dans terrain/climbs.
+        lines.append(f"Plus longue montée : {c['length_km']:.1f} km (+{c['gain_m']} m) ; "
+                     f"{tr['n_climbs']} montée(s) de plus de 20 m au total.")
     elif tr:
         lines.append("Aucune montée significative (plus de 20 m d'un seul tenant).")
-    if l.u_turns:
-        lines.append(f"{l.u_turns} demi-tour(s) sur le parcours.")
-    sc = l.scenery
+    if o.get("u_turns"):
+        lines.append(f"{o['u_turns']} demi-tour(s) sur le parcours.")
+    sc = o.get("scenery")
     if sc:
         if sc["forest"] >= 0.15:
             lines.append(f"{sc['forest'] * 100:.0f} % du parcours dans ou en bordure de forêt.")
@@ -809,22 +835,38 @@ def pitch(l: Loop, label: str) -> list[str]:
             lines.append(f"{sc['protected'] * 100:.0f} % dans un parc ou un espace protégé.")
         if sc["viewpoints"] >= 1:
             lines.append(f"{sc['viewpoints']} point(s) de vue référencé(s) à moins de 300 m.")
-    sm = l.surface_mix
+    sm = o.get("surface")
     if sm and sm.get("unknown", 0) >= 0.3:
         lines.append(f"Surface non renseignée dans OpenStreetMap sur {sm['unknown'] * 100:.0f} % du parcours.")
-    if s["main_roads"] < 0.01:
+    sh = o["shares"]
+    if sh["main_roads"] < 0.01:
         lines.append("Aucune route principale sur le parcours.")
-    elif s["main_roads"] <= 0.10:
-        lines.append(f"Peu de routes principales ({s['main_roads'] * 100:.0f} % du parcours).")
+    elif sh["main_roads"] <= 0.10:
+        lines.append(f"Peu de routes principales ({sh['main_roads'] * 100:.0f} % du parcours).")
     else:
-        lines.append(f"{s['main_roads'] * 100:.0f} % sur des routes principales : à parcourir avec vigilance.")
-    if s["dedicated_cycleway"] >= 0.10:
-        lines.append(f"{s['dedicated_cycleway'] * 100:.0f} % sur pistes cyclables ou voies vertes.")
-    if s["unpaved"] > 0.05:
-        lines.append(f"{s['unpaved'] * 100:.0f} % sur revêtement non goudronné.")
-    if l.overlap > 0.10:
-        lines.append(f"{l.overlap * 100:.0f} % de tronçons empruntés deux fois.")
+        lines.append(f"{sh['main_roads'] * 100:.0f} % sur des routes principales : à parcourir avec vigilance.")
+    if sh["dedicated_cycleway"] >= 0.10:
+        lines.append(f"{sh['dedicated_cycleway'] * 100:.0f} % sur pistes cyclables ou voies vertes.")
+    if sh["unpaved"] > 0.05:
+        lines.append(f"{sh['unpaved'] * 100:.0f} % sur revêtement non goudronné.")
+    if o.get("overlap", 0) > 0.10:
+        lines.append(f"{o['overlap'] * 100:.0f} % de tronçons empruntés deux fois.")
     return lines
+
+
+def pitch(l: Loop, label: str) -> list[str]:
+    """Construit le dict exporté attendu par pitch_from_option() à partir du Loop en cours de calcul, pour
+    n'avoir qu'une seule version du texte (voir pitch_from_option)."""
+    o = {
+        "distance_km": l.distance_m / 1000.0, "ascend_m": l.ascend_m, "level": l.level,
+        "time_est_min": l.time_s / 60.0, "shares": l.shares,
+        "exit_dense_km": None if l.exit_dense_m is None else l.exit_dense_m / 1000.0,
+        "traffic_lights": l.signals,
+        "traffic_lights_per_km": (None if l.signals is None else l.signals / max(l.distance_m / 1000.0, 0.1)),
+        "terrain": l.terrain, "u_turns": l.u_turns, "scenery": l.scenery, "surface": l.surface_mix,
+        "overlap": l.overlap,
+    }
+    return pitch_from_option(o)
 
 
 def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
@@ -856,7 +898,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "stop_signs_per_km": (None if l.stops is None else round(l.stops / max(l.distance_m / 1000.0, 0.1), 2)),
         "surface": {k: round(v, 3) for k, v in l.surface_mix.items()},
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
-                    "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs")},
+                    "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
+                    "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},
         "u_turns": l.u_turns,
         "longest_repeat_km": round(l.longest_repeat_m / 1000.0, 2),
         "scenery": (None if l.scenery is None else {
