@@ -337,19 +337,21 @@
     function detailHtml(o) {
       const pct = f => Math.round(f * 100) + ' %';
       const pitch = (o.pitch || []).map(p => '<li>' + esc(p) + '</li>').join('');
-      // montées : plus de pourcentage affiché (bruit du modèle de terrain trop élevé sur une seule montée)
-      const climbs = (o.terrain.climbs || []).map(c =>
-        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
+            const climbs = (o.terrain.climbs || []).map(c =>
+        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km à ' +
+        km(c.avg_grade_pct) + ' %, +' + Math.round(c.gain_m) + ' m</li>').join('');
 
-      // ville : uniquement à partir de exit_dense_km (jamais `zone`, repère technique interne)
+            // ville : uniquement à partir de exit_dense_km, comparé à la distance réelle (pas de null en pratique)
       let cityLine = '';
-      if (o.exit_dense_km == null) {
+      if (o.exit_dense_km === 0) {
+        // rien à afficher
+      } else if (o.exit_dense_km == null || o.exit_dense_km >= o.distance_km - 0.05) {
         const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
         cityLine = 'Depuis ici, une sortie de ' + hm(o.time_est_min) + ' reste en ville.' +
           (hasLonger ? ' <button type="button" onclick="nextDuration()" style="font-size:14px;padding:4px 8px;border:0;border-radius:6px;background:#6b7280;color:#fff">Essayer plus long</button>' : '');
-      } else if (o.exit_dense_km > 0) {
+      } else {
         cityLine = 'Sort de la ville après ' + km(o.exit_dense_km) + ' km.';
-      } // exit_dense_km === 0 : rien à afficher
+      }
 
       // pente : catégorie qualitative + badge à seuil unique, jamais de chiffre
       const slopeCat = o.terrain.avg_climb_grade_pct != null ? slopeCategory(o.terrain.avg_climb_grade_pct) : null;
