@@ -1430,6 +1430,9 @@ def main() -> int:
         "osm_data_date": (info.get("data_date") if not str(info.get("data_date", "")).startswith("1970") else None),
         "generator_version": GENERATOR_VERSION,
         "durations_h": available,
+        # boîte englobante des départs générés [lon_min, lat_min, lon_max, lat_max] (champ additif, pour « zone couverte »)
+        "coverage_bbox": ([round(min(e["lon"] for e in index), 4), round(min(e["lat"] for e in index), 4),
+                           round(max(e["lon"] for e in index), 4), round(max(e["lat"] for e in index), 4)] if index else None),
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
         "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
         "params_hash": PARAMS_HASH,

@@ -43,6 +43,12 @@ def main() -> int:
     (out / "starts").mkdir(parents=True, exist_ok=True)
     raw = get(base + "/index.json")
     index = json.loads(raw)
+    if not index.get("coverage_bbox") and index.get("starts"):        # champ additif : boîte englobante des départs
+        xs = [s["lon"] for s in index["starts"]]
+        ys = [s["lat"] for s in index["starts"]]
+        index["coverage_bbox"] = [round(min(xs), 4), round(min(ys), 4), round(max(xs), 4), round(max(ys), 4)]
+        raw = json.dumps(index, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        print(f"coverage_bbox ajouté à index.json : {index['coverage_bbox']}", flush=True)
     (out / "index.json").write_bytes(raw)
     ids = [s["id"] for s in index["starts"]]
     print(f"index.json : {len(ids)} départs, généré le {index.get('generated_at')}", flush=True)
