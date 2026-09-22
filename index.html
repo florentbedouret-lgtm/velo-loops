@@ -16,12 +16,8 @@
     #results button { display: block; width: 100%; text-align: left; font-size: 15px; padding: 8px; margin-top: 4px;
                       border: 1px solid #ccc; border-radius: 8px; background: #fff; }
     #geoattr { display: block; color: #666; padding: 4px 8px 0; }
-    #controls { display: flex; gap: 8px; padding: 8px 8px 0; align-items: flex-end; }
-    #controls > select { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
-    #controls .durwrap { flex: 1; min-width: 0; }
-    #controls .durwrap label { display: block; font-size: 12px; color: #555; margin-bottom: 2px; }
-    #controls .durwrap select { width: 100%; font-size: 16px; padding: 8px; }
-    #loopTotal { padding: 4px 8px 0; font-size: 14px; color: #444; min-height: 1.2em; }
+    #controls { display: flex; gap: 8px; padding: 8px; }
+    #controls select { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
     #where { padding: 0 8px 6px; line-height: 1.4; }
     #where button { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; border: 0; border-radius: 8px; background: #6b7280; color: #fff; }
     .warn { color: #b45309; }
@@ -46,12 +42,10 @@
   <div id="results"></div>
   <div id="controls">
     <select id="level"></select>
-    <div class="durwrap">
-      <label for="duration">Durée de la boucle</label>
-      <select id="duration"></select>
-    </div>
+    <select id="duration" aria-label="Durée de la boucle"></select>
   </div>
-  <div id="loopTotal"></div>
+  <div id="durlabel" style="padding:0 8px;font-size:13px;color:#666">Durée de la boucle</div>
+  <div id="totalApproach" style="padding:0 8px 6px;font-size:14px;color:#555"></div>
   <div id="where">Saisissez une adresse, touchez la carte ou utilisez votre position.</div>
   <details id="adv"><summary>Choisir un départ dans la liste</summary><select id="start"></select></details>
   <div id="map"></div>
@@ -96,17 +90,14 @@
     const esc = s => String(s).replace(/[&<>"]/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-    // ---------- modèle d'approche (repli si le fichier est absent ou injoignable ; correspond à la v2.2)
-    let model = { version: '2.2', zones: {
+    // ---------- modèle d'approche (repli si le fichier est absent ou d'une version majeure inconnue)
+    const MODEL_MAJOR = 2;
+    let model = { zones: {
       dense: { detour_ratio_median: 1.56, detour_ratio_p90: 2.55, speed_kmh_110W_median: 16.45 },
       peri:  { detour_ratio_median: 1.58, detour_ratio_p90: 2.52, speed_kmh_110W_median: 19.57 },
       rural: { detour_ratio_median: 1.69, detour_ratio_p90: 3.69, speed_kmh_110W_median: 18.07 } } };
-    // false seulement si un fichier a bien été reçu mais avec une version majeure inconnue : alors, aucun temps chiffré
-    let modelOk = true;
-    // distance (km, à vol d'oiseau) en dessous de laquelle on considère le départ "à portée", par zone du départ
-    const DMAX_KM = { dense: 2, peri: 3, rural: 3 };
-    // dernier temps d'approche connu (min, à l'aller) vers le départ actuellement affiché ; null si inconnu
-    let lastApproachMin = null;
+    let modelOk = true; // false si la version majeure du modèle est inconnue : aucun temps chiffré
+    const DMAX_KM = { dense: 2, peri: 3, rural: 3 }; // seuil « à portée », par zone (brief UX)
 
     // ---------- géographie
     const rad = d => d * Math.PI / 180;
@@ -123,7 +114,8 @@
       }
       return best;
     }
-    // emprise des départs générés (champ coverage_bbox de l'index, sinon calculée ici)
+    // emprise des départs générés (champ coverage_bbox de l'index, sinon calculée ici) : sert uniquement à cadrer la carte
+    // et à limiter la recherche Photon, jamais à décider si une adresse est couverte
     function coverageBox(padDeg) {
       let b = indexData.coverage_bbox;
       if (!b) {
@@ -135,7 +127,7 @@
 
     // ---------- recherche d'adresse : Photon (Komoot), service public à usage raisonnable
     // Règles respectées : une requête au plus par seconde, déclenchée par le bouton ou la touche Entrée (pas d'autocomplétion),
-    // 3 caractères au moins, résultats gardés en mémoire, attribution OpenStreetMap affichée.
+    // 3 caractères au moins, résultats gardés en mémoire, attribution OpenStreetMap affichée, délai maximum de 8 s.
     const GEO = { url: 'https://photon.komoot.io/api/', last: 0, cache: new Map() };
     const photonLabel = p => [p.name, [p.street, p.housenumber].filter(Boolean).join(' '), p.postcode, p.city]
       .filter((v, i, a) => v && a.indexOf(v) === i).join(', ');
@@ -181,13 +173,12 @@
           setPosition(it.lon, it.lat);
         };
       } catch (err) {
-        resultsEl.textContent = (err.name === 'TimeoutError')
-          ? 'La recherche d\'adresse ne répond pas. Réessayez dans un instant, ou touchez la carte / utilisez votre position.'
-          : 'La recherche d\'adresse est indisponible pour le moment. Touchez la carte ou utilisez votre position.';
+        resultsEl.textContent = 'La recherche d\'adresse est indisponible pour le moment (délai dépassé ou réseau). Touchez la carte ou utilisez votre position.';
       }
     }
 
     // ---------- position de l'utilisateur -> départ le plus proche -> temps d'approche
+    let approachMin = null; // temps d'approche connu pour le départ actuellement choisi (null si choisi dans la liste)
     function setPosition(lon, lat) {
       if (userMarker) userMarker.remove();
       userMarker = new maplibregl.Marker({ color: '#1c7ed6' }).setLngLat([lon, lat]).addTo(map);
@@ -195,27 +186,24 @@
       const name = esc(s.display_name || s.name);
       pendingStart = s.id;
 
-      // version majeure du modèle inconnue : aucun temps chiffré, mais on n'empêche pas de choisir ce départ
       if (!modelOk) {
-        lastApproachMin = null;
-        whereEl.innerHTML = 'Départ : <b>' + name + '</b><br>Temps de trajet jusqu\'au départ : non disponible pour le moment.';
+        approachMin = null;
+        whereEl.innerHTML = 'Départ : <b>' + name + '</b><br>Temps d\'approche indisponible pour le moment.';
         chooseStart(s.id);
         return;
       }
 
-      const zoneKey = (s.zone && model.zones[s.zone]) ? s.zone : 'peri';
+      const zoneKey = s.zone && model.zones[s.zone] ? s.zone : 'peri';
       const z = model.zones[zoneKey];
       const speed = z.speed_kmh_110W_median;
       const med = Math.round(km * z.detour_ratio_median / speed * 60);
       const hi = Math.round(km * z.detour_ratio_p90 / speed * 60);
-      // fin du palier "à portée" pour cette zone (dmax converti en minutes avec la même formule)
-      const near = Math.round(DMAX_KM[zoneKey] * z.detour_ratio_median / speed * 60);
-      lastApproachMin = med;
+      const portee = Math.round(DMAX_KM[zoneKey] * z.detour_ratio_median / speed * 60);
       const range = zoneKey === 'rural' && hi > med + 3 ? ', jusqu\'à ≈ ' + hi + ' min' : '';
       const nav = 'https://www.openstreetmap.org/directions?engine=fossgis_osrm_bike&route=' +
         lat.toFixed(5) + '%2C' + lon.toFixed(5) + '%3B' + s.lat.toFixed(5) + '%2C' + s.lon.toFixed(5);
+      approachMin = med;
 
-      // seulement 2 seuils, tous deux sur le temps d'approche : "un peu loin" (fin de à portée -> 30 min) et "trop loin" (> 30 min)
       if (med > 30) {
         whereEl.innerHTML = '<span class="warn">Trop loin : le départ le plus proche est à ≈ ' + med + ' min à vélo' + range +
           '.</span><br>Départ : <b>' + name + '</b><br><button type="button" id="see">Voir quand même</button>' +
@@ -225,8 +213,8 @@
         return;
       }
       whereEl.innerHTML = 'Départ : <b>' + name + '</b><br>' +
-        (med > near ? '<span class="warn">Un peu loin : </span>' : '') + '≈ ' + med + ' min à vélo pour le rejoindre' + range +
-        (med > near ? ' · <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>' : '');
+        (med > portee ? '<span class="warn">Un peu loin : </span>' : '') + '≈ ' + med + ' min à vélo pour le rejoindre' + range +
+        (med > portee ? ' · <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>' : '');
       chooseStart(s.id);
     }
     let pendingStart = null;
@@ -242,12 +230,11 @@
         const m = await fetch('web/approach_model.json');
         if (m.ok) {
           const data = await m.json();
-          const major = String(data.version || '').split('.')[0];
-          if (major === '2') { model = data; modelOk = true; }
-          else { modelOk = false; } // version majeure inconnue : aucun temps chiffré, voir setPosition()
+          const major = Number(String(data.version || '').split('.')[0]);
+          if (major === MODEL_MAJOR) model = data;
+          else modelOk = false; // version majeure inconnue : on ignore ce fichier, aucun temps chiffré
         }
-        // si la réponse n'est pas ok (ex. fichier absent) : on garde le modèle de repli ci-dessus
-      } catch (e) { /* pas de réponse : on garde le modèle de repli */ }
+      } catch (e) { /* réseau indisponible : on garde le repli */ }
       index.starts.forEach(s => startSel.add(new Option(s.display_name || s.name, s.id)));
       startSel.selectedIndex = -1;
       Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
@@ -266,7 +253,7 @@
         }
       });
 
-      startSel.onchange = () => { lastApproachMin = null; whereEl.textContent = 'Départ choisi dans la liste.'; loadStart(); };
+      startSel.onchange = () => { whereEl.textContent = 'Départ choisi dans la liste.'; approachMin = null; loadStart(); };
       levelSel.onchange = showLevel;
       list.onclick = e => {
         const card = e.target.closest('.card');
@@ -298,17 +285,8 @@
       showLevel();
     }
 
-    // ligne "+ trajet jusqu'au départ : ≈ ... au total" sous le sélecteur de durée
-    function updateLoopTotal() {
-      const el = document.getElementById('loopTotal');
-      if (lastApproachMin == null) { el.textContent = ''; return; }
-      const loopMin = Number(durSel.value) * 60;
-      el.textContent = '+ trajet jusqu\'au départ : ≈ ' + hm(loopMin + lastApproachMin) + ' au total (sans pauses)';
-    }
-
     function showLevel() {
       if (!startData) return;
-      updateLoopTotal();
       shown = startData.options.filter(o => o.level === levelSel.value &&
         (o.duration_target_min == null ||
          Math.round(o.duration_target_min) === Math.round(Number(durSel.value) * 60)));
@@ -354,6 +332,10 @@
 
     function select(i) {
       current = i;
+      const totalEl = document.getElementById('totalApproach');
+      totalEl.textContent = approachMin != null
+        ? '+ trajet jusqu\'au départ : ≈ ' + hm(shown[current].time_est_min + approachMin) + ' au total, sans pauses'
+        : '';
       list.innerHTML = shown.map((o, k) => `
         <div class="card ${k === current ? 'active' : ''}" data-i="${k}">
           <b>${LABELS[o.label] || o.label}</b><br>
