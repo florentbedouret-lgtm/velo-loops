@@ -31,6 +31,8 @@
     .pitch { margin: 8px 0; padding-left: 18px; }
     .facts, .climbs { font-size: 14px; }
     .climbs { margin: 6px 0; padding-left: 18px; }
+    .badge { display: inline-block; font-size: 13px; background: #fff3e0; color: #b45309; padding: 2px 6px; border-radius: 6px; }
+    .city { font-size: 14px; margin: 6px 0; }
   </style>
 </head>
 <body>
@@ -89,6 +91,18 @@
     // neutralise le HTML dans un texte (bonne habitude)
     const esc = s => String(s).replace(/[&<>"]/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    // ---------- gare : mention affichée à côté du nom du départ
+    const stationNote = kind => kind === 'station'
+      ? ' <span class="badge">🚆 Gare : vérifie les conditions du transporteur.</span>' : '';
+
+    // ---------- pente : catégories qualitatives (jamais de pourcentage affiché)
+    function slopeCategory(pct) {
+      if (pct < 2.5) return 'Peu de côtes';
+      if (pct < 4) return 'Quelques côtes';
+      if (pct < 6) return 'Vallonné';
+      return 'Très vallonné';
+    }
 
     // ---------- modèle d'approche (repli si le fichier est absent ou d'une version majeure inconnue)
     const MODEL_MAJOR = 2;
@@ -183,7 +197,7 @@
       if (userMarker) userMarker.remove();
       userMarker = new maplibregl.Marker({ color: '#1c7ed6' }).setLngLat([lon, lat]).addTo(map);
       const { s, km } = nearestStart(lon, lat);
-      const name = esc(s.display_name || s.name);
+      const name = esc(s.display_name || s.name) + stationNote(s.kind);
       pendingStart = s.id;
 
       if (!modelOk) {
@@ -253,7 +267,11 @@
         }
       });
 
-      startSel.onchange = () => { whereEl.textContent = 'Départ choisi dans la liste.'; approachMin = null; loadStart(); };
+      startSel.onchange = () => {
+        const entry = indexData.starts.find(x => x.id === startSel.value);
+        whereEl.innerHTML = 'Départ choisi dans la liste.' + stationNote(entry && entry.kind);
+        approachMin = null; loadStart();
+      };
       levelSel.onchange = showLevel;
       list.onclick = e => {
         const card = e.target.closest('.card');
@@ -308,21 +326,45 @@
       select(i >= 0 ? i : 0);
     }
 
+    // change pour la durée disponible suivante, sans changer le niveau (bouton "Essayer plus long")
+    function nextDuration() {
+      const durs = indexData.durations_h.map(Number).sort((a, b) => a - b);
+      const next = durs.find(d => d > Number(durSel.value));
+      if (next != null) { durSel.value = String(next); showLevel(); }
+    }
+
     // détail affiché sous la carte sélectionnée
     function detailHtml(o) {
       const pct = f => Math.round(f * 100) + ' %';
       const pitch = (o.pitch || []).map(p => '<li>' + esc(p) + '</li>').join('');
+      // montées : plus de pourcentage affiché (bruit du modèle de terrain trop élevé sur une seule montée)
       const climbs = (o.terrain.climbs || []).map(c =>
-        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km à ' +
-        km(c.avg_grade_pct) + ' %, +' + Math.round(c.gain_m) + ' m</li>').join('');
+        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
+
+      // ville : uniquement à partir de exit_dense_km (jamais `zone`, repère technique interne)
+      let cityLine = '';
+      if (o.exit_dense_km == null) {
+        const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
+        cityLine = 'Depuis ici, une sortie de ' + hm(o.time_est_min) + ' reste en ville.' +
+          (hasLonger ? ' <button type="button" onclick="nextDuration()" style="font-size:14px;padding:4px 8px;border:0;border-radius:6px;background:#6b7280;color:#fff">Essayer plus long</button>' : '');
+      } else if (o.exit_dense_km > 0) {
+        cityLine = 'Sort de la ville après ' + km(o.exit_dense_km) + ' km.';
+      } // exit_dense_km === 0 : rien à afficher
+
+      // pente : catégorie qualitative + badge à seuil unique, jamais de chiffre
+      const slopeCat = o.terrain.avg_climb_grade_pct != null ? slopeCategory(o.terrain.avg_climb_grade_pct) : null;
+      const steepBadge = o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20;
+
       return `
         <ul class="pitch">${pitch}</ul>
         ${profileSvg(o)}
+        ${cityLine ? '<p class="city">' + cityLine + '</p>' : ''}
         <div class="facts">
           Pistes cyclables : ${pct(o.shares.dedicated_cycleway)}<br>
           Routes principales : ${pct(o.shares.main_roads)}<br>
-          Feux recensés dans OSM : ${o.traffic_lights}<br>
-          Montées : ${o.terrain.n_climbs}
+          ${o.traffic_lights != null ? 'Feux recensés dans OSM : ' + o.traffic_lights + '<br>' : ''}
+          Montées : ${o.terrain.n_climbs}${slopeCat ? ' · ' + slopeCat : ''}
+          ${steepBadge ? '<br><span class="badge">⚠️ Au moins une rampe très raide</span>' : ''}
         </div>
         <ul class="climbs">${climbs}</ul>
         <button onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)" style="font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 0">Télécharger le GPX</button><br>
