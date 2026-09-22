@@ -1,6 +1,10 @@
 name: Générer les boucles vélo
 
 # Lancement manuel : onglet Actions > "Générer les boucles vélo" > Run workflow.
+# Lancement AUTOMATIQUE : tout push sur main qui touche index.html, gpx.js, profile.js ou feedback.js republie le
+# site tout seul, en mode "site" (sans recalcul, 3 à 5 min) — pas besoin de lancer le workflow à la main après un
+# correctif front. Un commit seul, sans ce déclencheur, ne republie JAMAIS le site (Pages = "GitHub Actions" veut
+# dire que Pages n'affiche que ce que CE workflow a explicitement déployé, pas l'état du dépôt).
 # Les données générées ne sont PAS commitées : elles sont publiées directement sur GitHub Pages (l'historique Git
 # ne grossit donc pas à chaque génération). Réglage unique : Settings > Pages > Source = "GitHub Actions".
 #
@@ -19,6 +23,9 @@ name: Générer les boucles vélo
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
+  push:
+    branches: [main]
+    paths: [index.html, gpx.js, profile.js, feedback.js]
   workflow_dispatch:
     inputs:
       mode:
@@ -73,6 +80,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Déterminer le mode effectif
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "EFFECTIVE_MODE=site" >> "$GITHUB_ENV"
+            echo "Déclenché par un push sur main (front modifié) -> republication automatique, mode site"
+          else
+            echo "EFFECTIVE_MODE=${{ inputs.mode }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Ressources de la machine
         run: |
           echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
@@ -90,14 +106,14 @@ jobs:
           python-version: "3.12"
 
       - name: Outils (osmium, jq, requests, shapely)
-        if: ${{ inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'site' }}
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q osmium-tool jq
           pip install -r scripts/requirements.txt
 
       - name: Cache altitude (tuiles SRTM) et jar GraphHopper
-        if: ${{ inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'site' }}
         uses: actions/cache@v4
         with:
           path: |
@@ -106,16 +122,16 @@ jobs:
           key: gh-${{ env.GH_VERSION }}-elevation-v1
 
       - name: Télécharger GraphHopper
-        if: ${{ inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'site' }}
         run: |
           [ -f graphhopper-web.jar ] || curl -fL --retry 3 -o graphhopper-web.jar \
             "https://github.com/graphhopper/graphhopper/releases/download/${GH_VERSION}/graphhopper-web-${GH_VERSION}.jar"
 
       - name: Télécharger l'extrait OSM (Geofabrik) et le découper
-        if: ${{ inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'site' }}
         env:
           BBOX_INPUT: ${{ inputs.bbox }}
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ env.EFFECTIVE_MODE }}
         run: |
           mkdir -p data
           curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
@@ -131,10 +147,10 @@ jobs:
           ls -lh data
 
       - name: Plan de couverture des départs (par zone)
-        if: ${{ inputs.mode != 'generate_names' && inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'generate_names' && env.EFFECTIVE_MODE != 'site' }}
         env:
           SCENARIO: ${{ inputs.scenario }}
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ env.EFFECTIVE_MODE }}
           PAIRS: ${{ inputs.detour_pairs }}
         run: |
           SAMPLE=300
@@ -146,7 +162,7 @@ jobs:
             --scenario "$SCENARIO" --sample-per-zone "$SAMPLE"
 
       - name: Publier le plan (départs, couverture, échantillon)
-        if: ${{ inputs.mode != 'generate_names' && inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'generate_names' && env.EFFECTIVE_MODE != 'site' }}
         uses: actions/upload-artifact@v4
         with:
           name: plan-departs
@@ -157,7 +173,7 @@ jobs:
           retention-days: 30
 
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
-        if: ${{ inputs.mode != 'plan' && inputs.mode != 'site' }}
+        if: ${{ env.EFFECTIVE_MODE != 'plan' && env.EFFECTIVE_MODE != 'site' }}
         run: |
           nohup java -Xmx8g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
             -jar graphhopper-web.jar server config/graphhopper.yml > gh.log 2>&1 &
@@ -170,7 +186,7 @@ jobs:
           echo "Délai dépassé"; tail -50 gh.log; exit 1
 
       - name: Mesurer le détour et la vitesse d'approche
-        if: ${{ inputs.mode == 'detour' }}
+        if: ${{ env.EFFECTIVE_MODE == 'detour' }}
         env:
           CASES: ${{ inputs.detour_cases }}
           PAIRS: ${{ inputs.detour_pairs }}
@@ -180,7 +196,7 @@ jobs:
             --n "$PAIRS" --neighbours 30 --cases "$CASES" --out data/detour.json
 
       - name: Publier la mesure de détour
-        if: ${{ inputs.mode == 'detour' }}
+        if: ${{ env.EFFECTIVE_MODE == 'detour' }}
         uses: actions/upload-artifact@v4
         with:
           name: detour-mesure
@@ -190,12 +206,12 @@ jobs:
           retention-days: 30
 
       - name: Générer les boucles
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full') }}
         env:
           MAX_STARTS: ${{ inputs.max_starts }}
           DURATIONS: ${{ inputs.durations }}
           WORKERS: ${{ inputs.workers }}
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ env.EFFECTIVE_MODE }}
           PER_ZONE: ${{ inputs.per_zone }}
           REUSE: ${{ inputs.reuse }}
         run: |
@@ -221,7 +237,7 @@ jobs:
             --durations $DURATIONS
 
       - name: Publier les mesures du pilote (temps de calcul, gain des départs voisins)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full') }}
         uses: actions/upload-artifact@v4
         with:
           name: pilote-mesures
@@ -232,7 +248,7 @@ jobs:
           retention-days: 30
 
       - name: Archiver les données générées (14 jours)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full') }}
         uses: actions/upload-artifact@v4
         with:
           name: loops-data
@@ -240,14 +256,14 @@ jobs:
           retention-days: 14
 
       - name: Récupérer les données déjà publiées (mode site)
-        if: ${{ inputs.mode == 'site' }}
+        if: ${{ env.EFFECTIVE_MODE == 'site' }}
         env:
           OWNER: ${{ github.repository_owner }}
         run: |
           python scripts/fetch_published.py --site "https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}" --out web/data
 
       - name: Assembler le site (web app + données fraîches)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full' || inputs.mode == 'site') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full' || env.EFFECTIVE_MODE == 'site') }}
         run: |
           mkdir -p _site
           rsync -a \
@@ -259,7 +275,7 @@ jobs:
           du -sh _site _site/web/data
 
       - name: Rapport de génération (critères de réussite)
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full') }}
         run: |
           python scripts/report_generation.py --data web/data --timings data/timings.json --skipped data/skipped.json \
             --plan data/starts_plan.json --site _site --job-seconds "$(( $(date +%s) - JOB_START ))" \
@@ -268,7 +284,7 @@ jobs:
           cat data/rapport-generation.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publier le rapport de génération
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full') }}
         uses: actions/upload-artifact@v4
         with:
           name: rapport-generation
@@ -279,17 +295,17 @@ jobs:
           retention-days: 90
 
       - name: Préparer GitHub Pages
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full' || inputs.mode == 'site') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full' || env.EFFECTIVE_MODE == 'site') }}
         uses: actions/configure-pages@v5
 
       - name: Envoyer le site
-        if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full' || inputs.mode == 'site') }}
+        if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full' || env.EFFECTIVE_MODE == 'site') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    if: ${{ (startsWith(inputs.mode, 'generate') || inputs.mode == 'pilot' || inputs.mode == 'full' || inputs.mode == 'site') }}
+    if: ${{ (startsWith(env.EFFECTIVE_MODE, 'generate') || env.EFFECTIVE_MODE == 'pilot' || env.EFFECTIVE_MODE == 'full' || env.EFFECTIVE_MODE == 'site') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
