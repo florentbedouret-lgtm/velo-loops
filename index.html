@@ -325,7 +325,7 @@
           Montées : ${o.terrain.n_climbs}
         </div>
         <ul class="climbs">${climbs}</ul>
-        <button onclick="downloadGpx(startData, shown[current], indexData.levels[shown[current].level].label)" style="font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 0">Télécharger le GPX</button><br>
+        <button onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)" style="font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 0">Télécharger le GPX</button><br>
         ${feedbackHtml(o)}
         <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
     }
