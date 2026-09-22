@@ -338,9 +338,7 @@
       const pct = f => Math.round(f * 100) + ' %';
       const pitch = (o.pitch || []).map(p => '<li>' + esc(p) + '</li>').join('');
             const climbs = (o.terrain.climbs || []).map(c =>
-        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km à ' +
-        km(c.avg_grade_pct) + ' %, +' + Math.round(c.gain_m) + ' m</li>').join('');
-
+        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
             // ville : uniquement à partir de exit_dense_km, comparé à la distance réelle (pas de null en pratique)
       let cityLine = '';
       if (o.exit_dense_km === 0) {
