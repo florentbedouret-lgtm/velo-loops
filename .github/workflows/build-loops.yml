@@ -20,6 +20,9 @@ name: Générer les boucles vélo
 #                       Rapport de fin de génération : résumé de l'exécution + artefact `rapport-generation` (à envoyer).
 #  - site             : republie le site avec la dernière version des fichiers de la page web (index.html, *.js, ...) et les
 #                       données DÉJÀ PUBLIÉES, sans rien recalculer (3 à 5 min). À utiliser après chaque modification de la page.
+#  - slope_check      : diagnostic (rien n'est publié) : échantillonne des départs réels du plan (province), calcule leur
+#                       pente sur données SRTM réelles à 3 niveaux de lissage (sans lissage / 300 m / 500 m), et teste la
+#                       robustesse de plusieurs seuils candidats. Artefact `diagnostic-pente` à envoyer pour analyse.
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
@@ -29,9 +32,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Mode : plan, detour, pilot (pilote), full (génération complète), site (republier la page web, sans calcul), generate_names ou generate_planned"
+        description: "Mode : plan, detour, pilot (pilote), full (génération complète), site (republier la page web, sans calcul), slope_check (diagnostic pente/lissage), generate_names ou generate_planned"
         type: choice
-        options: [plan, detour, pilot, full, site, generate_names, generate_planned]
+        options: [plan, detour, pilot, full, site, slope_check, generate_names, generate_planned]
         default: plan
       scenario:
         description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
@@ -140,7 +143,7 @@ jobs:
           curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
           BBOX="$BBOX_INPUT"
           if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
-            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "$MODE" = "full" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
+            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "$MODE" = "full" ] || [ "$MODE" = "slope_check" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
           fi
           if [ "$BBOX" = "province" ]; then BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"; fi
           echo "Emprise utilisée : $BBOX"
@@ -187,6 +190,23 @@ jobs:
             sleep 10
           done
           echo "Délai dépassé"; tail -50 gh.log; exit 1
+
+      - name: Diagnostic pente (sensibilité au lissage, données SRTM réelles)
+        if: ${{ steps.resolve_mode.outputs.mode == 'slope_check' }}
+        run: |
+          python scripts/slope_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+            --n 60 --out data/slope_check.json --out-md data/slope_check.md
+          cat data/slope_check.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier le diagnostic pente
+        if: ${{ steps.resolve_mode.outputs.mode == 'slope_check' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-pente
+          path: |
+            data/slope_check.json
+            data/slope_check.md
+          retention-days: 30
 
       - name: Mesurer le détour et la vitesse d'approche
         if: ${{ steps.resolve_mode.outputs.mode == 'detour' }}
