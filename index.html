@@ -8,9 +8,22 @@
   <style>
     html, body { margin: 0; }
     body { height: 100dvh; display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+    #search { display: flex; gap: 6px; padding: 8px 8px 0; }
+    #addr { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
+    #search button { font-size: 16px; padding: 8px 12px; border: 0; border-radius: 8px; background: #e8590c; color: #fff; }
+    #search button#me { background: #1c7ed6; }
+    #results { padding: 0 8px; }
+    #results button { display: block; width: 100%; text-align: left; font-size: 15px; padding: 8px; margin-top: 4px;
+                      border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+    #geoattr { display: block; color: #666; padding: 4px 8px 0; }
     #controls { display: flex; gap: 8px; padding: 8px; }
     #controls select { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
-    #map { flex: 0 0 45%; }
+    #where { padding: 0 8px 6px; line-height: 1.4; }
+    #where button { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; border: 0; border-radius: 8px; background: #6b7280; color: #fff; }
+    .warn { color: #b45309; }
+    #adv { padding: 0 8px 6px; }
+    #adv select { width: 100%; font-size: 16px; padding: 8px; margin-top: 6px; }
+    #map { flex: 0 0 38%; }
     #list { flex: 1; overflow: auto; padding: 8px; }
     .card { border: 2px solid #ddd; border-radius: 10px; padding: 10px; margin-bottom: 8px; line-height: 1.5; }
     .card.active { border-color: #e8590c; }
@@ -21,13 +34,20 @@
   </style>
 </head>
 <body>
+  <div id="search">
+    <input id="addr" type="search" placeholder="Adresse de départ (rue, ville…)" enterkeyhint="search" autocomplete="off">
+    <button id="go" type="button">Chercher</button>
+    <button id="me" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">📍</button>
+  </div>
+  <div id="results"></div>
   <div id="controls">
-    <select id="start"></select>
     <select id="level"></select>
     <select id="duration"></select>
   </div>
+  <div id="where">Saisissez une adresse, touchez la carte ou utilisez votre position.</div>
+  <details id="adv"><summary>Choisir un départ dans la liste</summary><select id="start"></select></details>
   <div id="map"></div>
-  <div id="list">Chargement…</div>
+  <div id="list"></div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
   <script src="gpx.js"></script>
   <script src="profile.js"></script>
@@ -68,13 +88,139 @@
     const esc = s => String(s).replace(/[&<>"]/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+    // ---------- modèle d'approche (repli si le fichier est absent)
+    let model = { zones: {
+      dense: { detour_ratio_median: 1.56, detour_ratio_p90: 2.55, speed_kmh_110W_median: 16.45 },
+      peri:  { detour_ratio_median: 1.58, detour_ratio_p90: 2.52, speed_kmh_110W_median: 19.57 },
+      rural: { detour_ratio_median: 1.69, detour_ratio_p90: 3.69, speed_kmh_110W_median: 18.07 } } };
+
+    // ---------- géographie
+    const rad = d => d * Math.PI / 180;
+    function crowKm(lon1, lat1, lon2, lat2) {
+      const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 +
+        Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lon2 - lon1) / 2) ** 2;
+      return 2 * 6371 * Math.asin(Math.sqrt(a));
+    }
+    function nearestStart(lon, lat) {
+      let best = null;
+      for (const s of indexData.starts) {
+        const d = crowKm(lon, lat, s.lon, s.lat);
+        if (!best || d < best.km) best = { s, km: d };
+      }
+      return best;
+    }
+    // emprise des départs générés (champ coverage_bbox de l'index, sinon calculée ici)
+    function coverageBox(padDeg) {
+      let b = indexData.coverage_bbox;
+      if (!b) {
+        const xs = indexData.starts.map(s => s.lon), ys = indexData.starts.map(s => s.lat);
+        b = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      }
+      return [b[0] - padDeg, b[1] - padDeg, b[2] + padDeg, b[3] + padDeg];
+    }
+
+    // ---------- recherche d'adresse : Photon (Komoot), service public à usage raisonnable
+    // Règles respectées : une requête au plus par seconde, déclenchée par le bouton ou la touche Entrée (pas d'autocomplétion),
+    // 3 caractères au moins, résultats gardés en mémoire, attribution OpenStreetMap affichée.
+    const GEO = { url: 'https://photon.komoot.io/api/', last: 0, cache: new Map() };
+    const photonLabel = p => [p.name, [p.street, p.housenumber].filter(Boolean).join(' '), p.postcode, p.city]
+      .filter((v, i, a) => v && a.indexOf(v) === i).join(', ');
+    async function geocode(q) {
+      const key = q.trim().toLowerCase();
+      if (GEO.cache.has(key)) return GEO.cache.get(key);
+      const wait = 1100 - (Date.now() - GEO.last);
+      if (wait > 0) await new Promise(r => setTimeout(r, wait));
+      GEO.last = Date.now();
+      const bbox = coverageBox(0.3).map(v => v.toFixed(4)).join(',');
+      const res = await fetch(GEO.url + '?q=' + encodeURIComponent(q) + '&limit=5&lang=fr&bbox=' + bbox);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const items = (data.features || []).map(f => ({
+        lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], label: photonLabel(f.properties || {})
+      }));
+      GEO.cache.set(key, items);
+      return items;
+    }
+
+    const addr = document.getElementById('addr');
+    const resultsEl = document.getElementById('results');
+    const whereEl = document.getElementById('where');
+    let userMarker = null;
+
+    async function searchAddress() {
+      const q = addr.value.trim();
+      if (q.length < 3) { resultsEl.textContent = 'Saisissez au moins 3 caractères.'; return; }
+      resultsEl.textContent = 'Recherche…';
+      try {
+        const items = await geocode(q);
+        if (!items.length) { resultsEl.textContent = 'Aucune adresse trouvée dans la zone couverte.'; return; }
+        resultsEl.innerHTML = items.map((it, i) =>
+          '<button type="button" data-i="' + i + '">' + esc(it.label) + '</button>').join('') +
+          '<small id="geoattr">Adresses : Photon (Komoot) · © contributeurs OpenStreetMap</small>';
+        resultsEl.onclick = e => {
+          const b = e.target.closest('button');
+          if (!b) return;
+          const it = items[Number(b.dataset.i)];
+          resultsEl.textContent = '';
+          addr.value = it.label;
+          setPosition(it.lon, it.lat);
+        };
+      } catch (err) {
+        resultsEl.textContent = 'La recherche d\'adresse est indisponible pour le moment. Touchez la carte ou utilisez votre position.';
+      }
+    }
+
+    // ---------- position de l'utilisateur -> départ le plus proche -> temps d'approche
+    function setPosition(lon, lat) {
+      if (userMarker) userMarker.remove();
+      userMarker = new maplibregl.Marker({ color: '#1c7ed6' }).setLngLat([lon, lat]).addTo(map);
+      const { s, km } = nearestStart(lon, lat);
+      const z = model.zones[s.zone] || model.zones.peri;
+      const speed = z.speed_kmh_110W_median;
+      const med = Math.round(km * z.detour_ratio_median / speed * 60);
+      const hi = Math.round(km * z.detour_ratio_p90 / speed * 60);
+      const name = esc(s.display_name || s.name);
+      const b = coverageBox(0.03);
+      const outside = lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3] || km > 10;
+      const range = s.zone === 'rural' && hi > med + 3 ? ', jusqu\'à ≈ ' + hi + ' min' : '';
+      const nav = 'https://www.openstreetmap.org/directions?engine=fossgis_osrm_bike&route=' +
+        lat.toFixed(5) + '%2C' + lon.toFixed(5) + '%3B' + s.lat.toFixed(5) + '%2C' + s.lon.toFixed(5);
+      pendingStart = s.id;
+      if (outside) {
+        whereEl.innerHTML = '<span class="warn">Cette adresse est hors de la zone couverte.</span><br>Le départ le plus proche est <b>' +
+          name + '</b> (' + km.toFixed(1).replace('.', ',') + ' km à vol d\'oiseau).<br><button type="button" id="see">Voir quand même</button>';
+        document.getElementById('see').onclick = () => chooseStart(s.id);
+        map.fitBounds(new maplibregl.LngLatBounds([lon, lat], [s.lon, s.lat]), { padding: 60, duration: 500 });
+        return;
+      }
+      if (med > 30) {
+        whereEl.innerHTML = '<span class="warn">Trop loin : le départ le plus proche est à ≈ ' + med + ' min à vélo' + range +
+          '.</span><br>Départ : <b>' + name + '</b><br><button type="button" id="see">Voir quand même</button>' +
+          ' <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>';
+        document.getElementById('see').onclick = () => chooseStart(s.id);
+        map.fitBounds(new maplibregl.LngLatBounds([lon, lat], [s.lon, s.lat]), { padding: 60, duration: 500 });
+        return;
+      }
+      whereEl.innerHTML = 'Départ : <b>' + name + '</b><br>' +
+        (med > 20 ? '<span class="warn">Un peu loin : </span>' : '') + '≈ ' + med + ' min à vélo pour le rejoindre' + range +
+        (med > 20 ? ' · <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>' : '');
+      chooseStart(s.id);
+    }
+    let pendingStart = null;
+    function chooseStart(id) { startSel.value = id; loadStart(); }
+
     async function init() {
       const [index] = await Promise.all([
         fetch('web/data/index.json').then(r => r.json()),
         new Promise(ok => map.once('load', ok))
       ]);
       indexData = index;
-      index.starts.forEach(s => startSel.add(new Option(s.name, s.id)));
+      try {
+        const m = await fetch('web/approach_model.json');
+        if (m.ok) model = await m.json();
+      } catch (e) { /* modèle par défaut */ }
+      index.starts.forEach(s => startSel.add(new Option(s.display_name || s.name, s.id)));
+      startSel.selectedIndex = -1;
       Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
       levelSel.value = 'modere';
       index.durations_h.forEach(h => durSel.add(new Option(hm(h * 60), h)));
@@ -91,13 +237,25 @@
         }
       });
 
-      startSel.onchange = loadStart;
+      startSel.onchange = () => { whereEl.textContent = 'Départ choisi dans la liste.'; loadStart(); };
       levelSel.onchange = showLevel;
       list.onclick = e => {
         const card = e.target.closest('.card');
         if (card && Number(card.dataset.i) !== current) select(Number(card.dataset.i));
       };
-      loadStart();
+      document.getElementById('go').onclick = searchAddress;
+      addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
+      document.getElementById('me').onclick = () => {
+        if (!navigator.geolocation) { whereEl.textContent = 'La localisation n\'est pas disponible sur cet appareil.'; return; }
+        whereEl.textContent = 'Localisation…';
+        navigator.geolocation.getCurrentPosition(
+          p => { addr.value = ''; setPosition(p.coords.longitude, p.coords.latitude); },
+          () => { whereEl.textContent = 'Localisation refusée. Saisissez une adresse ou touchez la carte.'; },
+          { enableHighAccuracy: true, timeout: 15000 });
+      };
+      map.on('click', e => { addr.value = ''; setPosition(e.lngLat.lng, e.lngLat.lat); });
+      const b = coverageBox(0.02);
+      map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
     }
 
     async function loadStart() {
@@ -106,17 +264,27 @@
       if (!res.ok) { list.textContent = 'Erreur de chargement (' + res.status + ')'; return; }
       startData = await res.json();
       if (marker) marker.remove();
-      marker = new maplibregl.Marker()
+      marker = new maplibregl.Marker({ color: '#e8590c' })
         .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
       showLevel();
     }
 
     function showLevel() {
+      if (!startData) return;
       shown = startData.options.filter(o => o.level === levelSel.value &&
         (o.duration_target_min == null ||
          Math.round(o.duration_target_min) === Math.round(Number(durSel.value) * 60)));
       if (!shown.length) {
-        list.textContent = 'Aucune option pour ce niveau et cette durée.';
+        const avail = [...new Set(startData.options.filter(o => o.level === levelSel.value)
+          .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);
+        list.innerHTML = 'Non disponible : pas de trajet de ' + hm(Number(durSel.value) * 60) + ' (' +
+          esc(levelSel.options[levelSel.selectedIndex].text) + ') depuis ce départ.' +
+          (avail.length ? '<br>Autre durée possible : ' + avail.map(m =>
+            '<button type="button" data-min="' + m + '" style="font-size:15px;padding:6px 10px;margin:6px 6px 0 0;border:0;border-radius:8px;background:#e8590c;color:#fff">' +
+            hm(m) + '</button>').join('') : '<br>Essayez un autre niveau.');
+        list.querySelectorAll('button[data-min]').forEach(b => {
+          b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
+        });
         map.getSource('routes').setData(EMPTY);
         return;
       }

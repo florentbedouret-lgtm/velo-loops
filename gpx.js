@@ -1,5 +1,5 @@
 const GPX_ATTRIBUTION = '© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)';
-const GPX_LEVELS = { facile: 'tranquille', modere: 'soutenu modéré', soutenu: 'sportif' };
+const GPX_LEVELS = { facile: 'tranquille', modere: 'modéré', soutenu: 'sportif' };
 const GPX_LABELS = {
   equilibre: 'équilibrée', moins_de_relief: 'moins de relief',
   plus_de_relief: 'plus de relief', variante: 'variante'
