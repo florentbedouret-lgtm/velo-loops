@@ -1,5 +1,4 @@
 const GPX_ATTRIBUTION = '© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)';
-const GPX_LEVELS = { facile: 'tranquille', modere: 'modéré', soutenu: 'sportif' };
 const GPX_LABELS = {
   equilibre: 'équilibrée', moins_de_relief: 'moins de relief',
   plus_de_relief: 'plus de relief', variante: 'variante'
@@ -8,8 +7,8 @@ const GPX_LABELS = {
 const xmlEsc = s => String(s).replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
-function buildGpx(start, o) {
-  const title = start.name + ' · ' + (GPX_LEVELS[o.level] || o.level) + ' · ' +
+function buildGpx(start, o, levelLabel) {
+  const title = start.name + ' · ' + (levelLabel || o.level) + ' · ' +
     (GPX_LABELS[o.label] || o.label) + ' · ' + Math.round(o.distance_km) + ' km';
   const pts = o.coords.map(c =>
     '      <trkpt lat="' + c[1].toFixed(6) + '" lon="' + c[0].toFixed(6) + '">' +
@@ -31,8 +30,8 @@ function buildGpx(start, o) {
     '</gpx>\n';
 }
 
-function downloadGpx(start, o) {
-  const blob = new Blob([buildGpx(start, o)], { type: 'application/gpx+xml' });
+function downloadGpx(start, o, levelLabel) {
+  const blob = new Blob([buildGpx(start, o, levelLabel)], { type: 'application/gpx+xml' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
