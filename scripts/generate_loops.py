@@ -783,9 +783,11 @@ def pitch_from_option(o: dict) -> list[str]:
     """Phrases construites uniquement à partir de mesures déjà exportées (aucune affirmation non vérifiée).
     Prend le même dict que celui écrit dans starts/<id>.json (voir to_json) : peut être appelé à la génération
     ET, plus tard, en relecture seule sur des données déjà publiées (voir scripts/rewrite_pitch.py), sans
-    GraphHopper ni recalcul. Décision UX : aucun pourcentage de pente n'est affiché tant que la dispersion du
-    lissage n'est pas mesurée ; les champs bruts terrain.max_grade_pct et climbs[].avg_grade_pct restent dans
-    les données pour un usage futur, seul le TEXTE ne les montre plus.
+    GraphHopper ni recalcul. Décision UX (D17, docs/decisions.md) : aucun pourcentage de pente n'est affiché
+    dans le texte — le diagnostic scripts/slope_check.py a montré que la pente sans lissage est 1,55× plus
+    élevée en médiane (jusqu'à 2,85×) que lissée à 500 m, un chiffre précis serait trompeur. Les champs bruts
+    terrain.max_grade_pct et climbs[].avg_grade_pct restent dans les données (catégories qualitatives et badge
+    de seuil, voir index.html), seul le TEXTE du pitch ne les montre plus.
     """
     urban = o["shares"]["urban"]
     minutes = round(o["time_est_min"])
