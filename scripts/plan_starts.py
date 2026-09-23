@@ -53,8 +53,13 @@ ZONES = ("dense", "peri", "rural")
 SCENARIOS = {"A": (2.0, 3.0, 4.0), "B": (3.0, 3.0, 4.0)}
 CELL_KM = 0.5
 SAMPLE_KM2 = 0.16                 # surface résidentielle représentée par un point d'échantillonnage (0,4 km x 0,4 km)
-SEC_PER_START = (80, 190)         # ESTIMATION du calcul pour 4 durées x 4 combinaisons (à remplacer par la mesure)
-KB_PER_START = 170                # ESTIMATION : 4 durées dans un même fichier
+SEC_PER_START = (35, 65)          # MESURÉ (index.json stats.seconds_per_computed_start_by_zone, run du
+                                   # 22/09/2026, scénario 2/3/3, 4 durées, sans réutilisation) : 35,4-38,2 s/départ
+                                   # en moyenne par zone (max isolés jusqu'à ~108 s en rural) ; remplace une
+                                   # estimation (80-190 s) qui surestimait le calcul de 2 à 5x. Toujours pour
+                                   # 4 durées : le nombre réel de durées n'est connu qu'en génération, pas ici.
+KB_PER_START = 150                # MESURÉ (taille réelle des fichiers web/data/starts/*.json, 4 durées) ;
+                                   # remplace une estimation (170 Ko)
 
 
 def extract(pbf: Path, workdir: Path) -> Path:

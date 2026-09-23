@@ -1036,13 +1036,13 @@ def load_reuse(src: str, max_age_days: float):
             "by_key": {e["key"]: e for e in idx.get("starts", []) if e.get("key")}}
 
 
-def reuse_candidate(key: str, durations, levels):
-    """Entrée de la génération précédente réutilisable pour ce départ, ou None."""
+def reuse_candidate(key: str, levels):
+    """Entrée de la génération précédente pour ce départ (indépendamment des durées disponibles : c'est
+    l'appelant qui décide quelles durées, parmi celles de cette entrée, sont réutilisables), ou None."""
     if REUSE is None or key not in REUSE["by_key"]:
         return None
     old = REUSE["by_key"][key]
-    have = {float(d) for d in old.get("durations_h", [])}
-    if not {float(d) for d in durations} <= have or not set(levels) <= set(REUSE["index"].get("levels", {})):
+    if not set(levels) <= set(REUSE["index"].get("levels", {})):
         return None
     try:
         age = (time.time() - time.mktime(time.strptime(old["computed_at"], "%Y-%m-%dT%H:%M:%SZ"))) / 86400.0
@@ -1060,38 +1060,50 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         log(f"- {st['name']} : ignoré (budget de temps épuisé)")
         return None, buf, 0.0
     key0 = start_key(st["lon"], st["lat"])
-    old = reuse_candidate(key0, durations, levels)
-    if old is not None:                                   # même point, mêmes paramètres : on reprend le fichier existant
+    options: list = []
+    reused_entry = None
+    missing_durations = list(durations)
+    old = reuse_candidate(key0, levels)
+    if old is not None:                                   # même point, mêmes niveaux : reprendre ce qui est réutilisable
         try:
             prev = _read_json(REUSE["src"], f"web/data/starts/{old['id']}.json")
-            opts = [o for o in prev["options"] if o["level"] in levels and o["duration_target_min"] / 60 in
-                    {float(d) for d in durations}]
+            have = {float(d) for d in old.get("durations_h", [])}
+            reusable = {float(d) for d in durations} & have
+            opts = [o for o in prev["options"] if o["level"] in levels and
+                    round(o["duration_target_min"] / 60, 4) in reusable]
             if opts:
-                payload = {"start": {**prev["start"], "name": st["name"]}, "options": opts}
-                (out / "starts" / f"{old['id']}.json").write_text(
-                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-                by_dur: dict[str, int] = {}
-                for o in opts:
-                    k = f"{o['duration_target_min'] / 60:g}"
-                    by_dur[k] = by_dur.get(k, 0) + 1
-                entry = {**old, "name": st["name"], "kind": st.get("kind", "place"), "zone": st.get("zone"),
-                         **({"display_name": st["display_name"]} if st.get("display_name") else {}),
-                         "options": len(opts), "durations_h": sorted(float(k) for k in by_dur),
-                         "options_by_duration": by_dur, "compare": compare_block(opts), "reused": True}
-                log(f"- {st['name']} : réutilisé (calculé le {old['computed_at']})")
-                return entry, buf, time.time() - t0
-        except Exception as e:  # noqa: BLE001 : en cas de problème on recalcule
-            log(f"  réutilisation échouée ({type(e).__name__}) : recalcul")
+                options = opts
+                reused_entry = old
+                missing_durations = [d for d in durations if float(d) not in reusable]
+                if not missing_durations:                 # toutes les durées demandées étaient déjà calculées
+                    payload = {"start": {**prev["start"], "name": st["name"]}, "options": options}
+                    (out / "starts" / f"{old['id']}.json").write_text(
+                        json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+                    by_dur: dict[str, int] = {}
+                    for o in options:
+                        k = f"{o['duration_target_min'] / 60:g}"
+                        by_dur[k] = by_dur.get(k, 0) + 1
+                    entry = {**old, "name": st["name"], "kind": st.get("kind", "place"), "zone": st.get("zone"),
+                             **({"display_name": st["display_name"]} if st.get("display_name") else {}),
+                             "options": len(options), "durations_h": sorted(float(k) for k in by_dur),
+                             "options_by_duration": by_dur, "compare": compare_block(options), "reused": True}
+                    log(f"- {st['name']} : réutilisé en entier (calculé le {old['computed_at']})")
+                    return entry, buf, time.time() - t0
+                log(f"- {st['name']} : {len(reusable)}/{len(durations)} durée(s) réutilisée(s) "
+                    f"(calculé le {old['computed_at']}), {len(missing_durations)} à calculer")
+        except Exception as e:  # noqa: BLE001 : en cas de problème on recalcule tout
+            log(f"  réutilisation échouée ({type(e).__name__}) : recalcul complet")
+            options, reused_entry, missing_durations = [], None, list(durations)
     gh = GraphHopper(gh_url)
     snapped = gh.nearest(st["lat"], st["lon"])
     if snapped is None or snapped[2] > 400:
         log(f"- {st['name']} : pas de route à moins de 400 m, ignoré")
         return None, buf, time.time() - t0
     st = {**st, "lon0": st["lon"], "lat0": st["lat"], "lon": snapped[0], "lat": snapped[1]}
-    log(f"- {st['name']}")
-    options = []
+    if reused_entry is None:
+        log(f"- {st['name']}")
     dur_seconds: dict[str, float] = {}
-    for duration in durations:
+    for duration in missing_durations:
         t_dur = time.time()
         for level in levels:
             pool: list[Loop] = []
@@ -1408,7 +1420,7 @@ def main() -> int:
     ids = []
     reserved = {}
     for st in starts:                                   # un départ réutilisé garde l'identifiant de la génération précédente
-        old = reuse_candidate(start_key(st["lon"], st["lat"]), durations, levels)
+        old = reuse_candidate(start_key(st["lon"], st["lat"]), levels)
         if old is not None:
             reserved[id(st)] = old["id"]
     taken = set(reserved.values())
