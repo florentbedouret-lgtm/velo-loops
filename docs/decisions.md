@@ -19,3 +19,4 @@ Format : une ligne par décision. Ajouter en bas ; ne pas effacer — si une dé
 | D13 | sept. 2026 | Dmax au départ : 2 km dense / 3 km périphérie / 3 km rural ; affichage en temps d'approche, > 30 min = « trop loin » | Lisibilité pour l'utilisateur | UX |
 | D14 | sept. 2026 | Site GitHub Pages = version de travail ; départs hors province conservés ; ne pas afficher la province comme limite | Couverture perçue | Produit / UX |
 | D15 | sept. 2026 | Géocodage via Photon (Komoot) | Gratuit, sans clé | Dev front-end |
+| D16 | 23/09/2026 | Dmax au départ : 1,75 km dense / 2,5 km périphérie / 2,5 km rural (remplace D13 : 2/3/3 km) | Densification O-3 : mesuré, tient dans le budget Actions (64 min/300 min) et améliore le pire cas rural (P90 temps d'approche 35,35 → 29,04 min) | Architecte |

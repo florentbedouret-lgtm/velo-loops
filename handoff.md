@@ -35,7 +35,7 @@ Une web app qui aide un cycliste amateur à **découvrir où s'entraîner** : il
 - Historique utilisateur (pour la « nouveauté ») : **on part de zéro**, pas d'import Strava ; il se construit au fil des sorties.
 
 ### 3.2 Périmètre du POC
-- Zone de test : **province de Barcelone et alentours** (~715 départs pré-calculés — confirmé sur le site publié au 22/09/2026 ; le dépôt Git committé n'en montre que 3, voir O-8). Les départs ruraux hors province sont conservés ; le front **ne présente pas** la province comme limite de la zone couverte.
+- Zone de test : **province de Barcelone et alentours** (~885 départs pré-calculés au 23/09/2026, scénario dmax 1,75/2,5/2,5 km — densifié depuis les ~715 du 22/09, scénario 2/3/3, voir O-3). Les départs ruraux hors province sont conservés ; le front **ne présente pas** la province comme limite de la zone couverte.
 - **Boucles pré-calculées** (départ pré-calculé le plus proche + durées à choix). Le routage à la demande par serveur est **repoussé**.
 - **Pas de GPS intégré** : export **GPX** vers Garmin, Wahoo, Apple Watch, Strava.
 - **Watts** : calcul interne uniquement pour estimer la difficulté, jamais affichés.
@@ -64,7 +64,7 @@ Une web app qui aide un cycliste amateur à **découvrir où s'entraîner** : il
 - Mentions légales et confidentialité (`mentions.html`, lien discret dans l'app).
 
 ### 3.5 Règle de distance au départ (reco UX retenue)
-- Distance max à vol d'oiseau : **2 km en zone dense, 3 km en périphérie, 3 km en rural**.
+- Distance max à vol d'oiseau : **1,75 km en zone dense, 2,5 km en périphérie, 2,5 km en rural** (resserré depuis 2/3/3 km le 23/09/2026, voir D16 et O-3).
 - Affichage en **temps d'approche aller**, pas en km ; au-delà de **30 min → « trop loin »**.
 
 ### 3.6 Principes produit non négociables
@@ -78,7 +78,7 @@ velo-loops/
 ├── .github/workflows/build-loops.yml   # unique workflow (8 modes : plan/detour/pilot/full/site/...)
 ├── config/                             # région, config GraphHopper, modèles de routage
 ├── scripts/                            # pipeline Python réel : plan_starts, generate_loops,
-│                                        #   measure_detour, fetch_published, report_generation…
+│                                        #   measure_detour, build_approach_model, fetch_published…
 ├── index.html, gpx.js, profile.js, feedback.js   # front (vanilla JS, sans build, MapLibre via CDN)
 ├── web/approach_model.json             # publié à chaque run ; suivi en Git (petit fichier)
 ├── web/data/                           # généré à chaque run, jamais committé (.gitignore, O-8)
@@ -103,7 +103,7 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
 ### Tâches
 - [x] **O-1 — Audit du dépôt** — fait le 23/09/2026 : arborescence, format des données, workflow, profils GraphHopper, niveaux/durées confirmés dans le code ; désynchronisation dépôt/site publié découverte (voir O-8).
 - [x] **O-2 — Règle dmax/temps d'approche (3.5)** — déjà codée, vérifié en O-1 : `DMAX_KM` et le calcul du temps d'approche sont dans `index.html` (zones dense/périphérie/rural, seuil 30 min).
-- [ ] **O-3 — Densifier la couverture** : plus de départs et plus de durées (demande faite à l'expert architecte) ; vérifier la limite de temps/stockage GitHub Actions et Pages.
+- [~] **O-3 — Densifier la couverture** — en cours, 23/09/2026 : départs resserrés de 2/3/3 km à 1,75/2,5/2,5 km (dense/périphérie/rural), 715 → 885 départs en ligne (+24 %). Mesuré, pas juste projeté : run complet en 64 min (budget 300 min), grâce à `reuse` (556 départs réutilisés sur 893). Gain réel confirmé par la remesure `detour` : temps d'approche médian rural 9,16 → 8,55 min, **P90 rural 35,35 → 29,04 min** (le pire cas repasse sous le seuil de 30 min pour plus de monde). `web/approach_model.json` reconstruit en v2.3 via le nouveau script `scripts/build_approach_model.py` (résout le point resté ouvert d'O-8 : ce fichier n'est plus édité à la main). **Reste à faire pour clore O-3** : le volet « plus de durées » n'a pas été touché (toujours 1 h/1 h 30/2 h/3 h) ; et le seuil `DMAX_KM` codé en dur dans `index.html` (toujours 2/3/3) n'a pas été aligné sur le nouveau scénario de génération — à décider explicitement (impact mineur : sous-estime légèrement la portée « confortable », ne change pas le seuil dur de 30 min).
 - [x] **O-4 — Qualité des boucles** — déjà fait, vérifié en O-1 : `scripts/generate_loops.py` rejette les candidats à plus de 25 % de tronçons répétés ou plus de 2 demi-tours, pénalise le score (poids « flow »), et le signale dans le pitch. Reste ouvert : régler/affiner ces seuils si des boucles publiées paraissent encore mauvaises en pratique.
 - [x] **O-5 — Pitch fiabilisé** — déjà fait, vérifié en O-1 : `pitch_from_option()` ne produit que des phrases adossées à un champ mesuré exporté (aucune affirmation non vérifiable).
 - [x] **O-6 — Feedback après sortie** — déjà fait, vérifié en O-1 : `feedback.js` capture note, minutes réelles, D+ réel, difficulté ressentie, tags +/−, commentaire ; stocké en `localStorage`, exportable en JSON, rien n'est envoyé. Décision « localStorage » prise de fait.
@@ -136,3 +136,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | sept. 2026 | Dev front-end + UX | Photon + géoloc + départ le plus proche + temps d'approche ; ~715 départs ; règle dmax | O-1 à O-7 |
 | 23/09/2026 | Dev / Architecte | O-1 : audit complet (code vs site publié) ; O-2/O-4/O-5/O-6 recochées comme faites ; désync dépôt/site trouvée et documentée (O-8) | Décider priorité entre O-8 (nettoyage) et O-3/O-7 |
 | 23/09/2026 | Dev / Architecte | O-8 : nettoyage dépôt (commité et poussé) ; O-7 : page `mentions.html` + lien dans `index.html` (pas encore committé) | Committer O-7, puis O-3 |
+| 23/09/2026 | Dev / Architecte | O-3 (en cours) : scénario de départs resserré à 1,75/2,5/2,5 km, 885 départs en ligne ; `scripts/build_approach_model.py` créé, `web/approach_model.json` reconstruit en v2.3 ; rien committé pour l'instant | Committer O-3 ; décider durées + `DMAX_KM` front |

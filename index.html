@@ -114,7 +114,7 @@
       peri:  { detour_ratio_median: 1.58, detour_ratio_p90: 2.52, speed_kmh_110W_median: 19.57 },
       rural: { detour_ratio_median: 1.69, detour_ratio_p90: 3.69, speed_kmh_110W_median: 18.07 } } };
     let modelOk = true; // false si la version majeure du modèle est inconnue : aucun temps chiffré
-    const DMAX_KM = { dense: 2, peri: 3, rural: 3 }; // seuil « à portée », par zone (brief UX)
+    const DMAX_KM = { dense: 1.75, peri: 2.5, rural: 2.5 }; // seuil « à portée », par zone (brief UX)
 
     // ---------- géographie
     const rad = d => d * Math.PI / 180;
