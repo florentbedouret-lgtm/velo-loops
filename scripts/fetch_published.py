@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Récupère les données déjà publiées sur le site (web/data/index.json, web/data/starts/*.json et
-web/approach_model.json) pour republier le site sans rien recalculer (mode « site » du workflow :
-nouvelle version de la page web, mêmes données).
+Récupère les données déjà publiées sur le site (web/data/index.json et web/data/starts/*.json) pour
+republier le site sans rien recalculer (mode « site » du workflow : nouvelle version de la page web,
+mêmes données de boucles).
 
-Sans ce script, un fichier committé dans le dépôt mais jamais republié depuis (ex. web/approach_model.json
-édité à la main) resterait périmé indéfiniment : le mode « site » se déclenche automatiquement à chaque
-modification du front et republierait alors la version périmée du dépôt à la place de celle réellement en
-ligne. En le retéléchargeant à chaque fois depuis le site publié, ce script rend le mode « site » sans effet
-de bord sur les données, quel que soit l'état du dépôt.
+web/approach_model.json n'est PAS concerné : contrairement à web/data/ (toujours régénéré par un run
+generate/pilot/full, jamais committé), ce fichier est un petit artefact reproductible via
+scripts/build_approach_model.py et committé comme n'importe quel fichier du front (index.html, etc.) : le
+mode « site » le republie tel quel depuis le dépôt, il n'y a pas besoin de le retélécharger depuis le site
+en ligne. (Une version antérieure de ce script le retéléchargeait aussi depuis le site publié ; ça a
+provoqué une régression le 23/09/2026 — voir handoff.md, O-8 — en écrasant un commit correct avec une
+version périmée toujours servie par le site au moment du fetch. Ne pas réintroduire ce mécanisme pour ce
+fichier : le dépôt Git est la source de vérité, pas le site déjà publié.)
 
 Usage : python scripts/fetch_published.py --site https://<compte>.github.io/<dépôt> --out web/data
 Échoue (code 1) si un fichier manque : mieux vaut ne rien publier qu'un site incomplet.
@@ -45,15 +48,9 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=16)
     args = ap.parse_args()
 
-    site = args.site.rstrip("/")
-    base = site + "/web/data"
+    base = args.site.rstrip("/") + "/web/data"
     out = Path(args.out)
     (out / "starts").mkdir(parents=True, exist_ok=True)
-
-    model_raw = get(site + "/web/approach_model.json")
-    model_path = out.parent / "approach_model.json"
-    model_path.write_bytes(model_raw)
-    print(f"approach_model.json récupéré ({model_path})", flush=True)
 
     raw = get(base + "/index.json")
     index = json.loads(raw)
