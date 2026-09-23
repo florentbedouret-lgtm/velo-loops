@@ -1,0 +1,14 @@
+# Boucles générées : publiées directement sur GitHub Pages par le workflow, jamais committées
+# (voir handoff.md §3.3 et §O-8 — un commit manuel de ces fichiers a causé une désynchronisation
+# entre le dépôt et le site publié).
+/web/data/index.json
+/web/data/starts/
+
+# Fichiers créés par un run local du pipeline (README §8) ou par le workflow, recréés à chaque fois
+/data/
+/graph-cache/
+/elevation-cache/
+/graphhopper-web.jar
+/gh.log
+/gh.pid
+/_site/

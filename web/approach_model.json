@@ -1,21 +1,11 @@
 {
- "version": "2.2",
- "versioning": "Chaîne « majeur.mineur ». Le mineur ajoute des champs ou change des valeurs (le front ignore les champs inconnus). Le majeur casse la structure : le front doit refuser un majeur qu'il ne connaît pas et n'afficher aucun temps d'approche chiffré.",
+ "version": "2.0",
  "measured_on": "2026-09-21",
- "status": "mesuré : détour exhaustif de la province (5 397 itinéraires calculés, 5 sans itinéraire)",
+ "status": "mesuré (deux échantillons de 200 paires ; valeurs poolées = moyennes pondérées des médianes : approximation)",
  "zone_key": "start",
  "zone_semantics": "Zones du DÉPART PRÉ-CALCULÉ le plus proche (celle que le front connaît). Chaque lieu habité est associé à son départ le plus proche ; la zone est celle de ce départ. Le mélange des zones des lieux est donc déjà inclus.",
  "plan": "scénario 2/3/3 km (dense/périphérie/rural), sans habitations isolées",
- "source": "mode detour, tous les lieux habités à couvrir situés à 0,6 km ou plus de leur départ le plus proche (69 % des lieux retenus) : itinéraires GraphHopper (profil 'approach') vers ce départ ; temps = modèle physique à 110 W + 10 s par feu OSM",
- "sample_scope": "Les lieux à moins de 0,6 km d'un départ ne sont pas dans les mesures (environ 3 min d'approche). Les parts au-delà d'un temps sont des parts des lieux à 0,6 km ou plus ; pour la part de TOUS les lieux retenus, multiplier par 0,69.",
- "bbox_order": "lon_min, lat_min, lon_max, lat_max",
- "bbox_union": [
-  1.3,
-  41.2,
-  2.75,
-  42.35
- ],
- "unmeasured_bboxes": [],
+ "source": "mode detour : itinéraires GraphHopper (profil 'approach') de lieux habités vers leur départ le plus proche ; temps = modèle physique à 110 W + 10 s par feu OSM",
  "bbox_regions": {
   "centre": [
    1.65,
@@ -30,206 +20,114 @@
    42.35
   ]
  },
- "region_rule": "Pour un point (départ le plus proche) : 1) hors de bbox_union, ou dans une des unmeasured_bboxes : aucun chiffre ; 2) dans une seule des régions : utiliser sa zone (regions[i].zones) ; 3) dans plusieurs régions (recouvrement) : utiliser les zones poolées (zones). Les zones poolées restent le repli.",
+ "bbox_order": "lon_min, lat_min, lon_max, lat_max",
+ "unmeasured_corners": "ouest du Penedès (lon 1.30-1.65, lat 41.20-41.55) et coin nord-est (lon 2.60-2.65, lat 41.85-42.35) : ne pas afficher de temps d'approche chiffré",
  "formula": "temps d'approche à l'aller (min) = distance à vol d'oiseau (km) × detour_ratio_median ÷ speed_kmh_110W_median × 60 ; borne pessimiste : detour_ratio_p90 ; aller-retour = 2 × aller",
- "precision": "Province entière : 1 464 (dense), 2 098 (périphérie), 1 835 (rural) lieux par zone du départ. Les valeurs par région varient de l'ordre de ±10 % ; le modèle poolé suffit.",
+ "precision": "environ 70 paires par zone et par région : les médianes varient de ±15 % d'un échantillon à l'autre, les parts de ±10 points. À resserrer avec 900 paires.",
  "zones": {
   "dense": {
-   "pairs": 1464,
-   "detour_ratio_median": 1.56,
-   "detour_ratio_p90": 2.55,
-   "speed_kmh_110W_median": 16.45,
-   "speed_kmh_150W_median": 19.08,
-   "time_min_110W_median": 6.87,
-   "time_min_110W_p90": 15.9,
-   "lights_per_km_median": 0.87,
-   "lights_per_km_p90": 4.47,
+   "pairs": 153,
+   "detour_ratio_median": 1.62,
+   "detour_ratio_p90": 2.64,
+   "speed_kmh_110W_median": 16.76,
+   "speed_kmh_150W_median": 19.68,
+   "time_min_110W_median": 6.9,
+   "time_min_110W_p90": 15.13,
+   "lights_per_km_median": 0.88,
+   "lights_per_km_p90": 3.85,
    "share_of_pairs_over_minutes_one_way_110W": {
-    "10": 0.283,
-    "15": 0.121,
-    "20": 0.037,
-    "30": 0.005,
-    "45": 0.001,
-    "60": 0.001
+    "10": 0.287,
+    "15": 0.079,
+    "20": 0.026,
+    "30": 0.013,
+    "45": 0.007,
+    "60": 0.0
+   },
+   "share_over_30min_ci95_pts": 1.8,
+   "by_region": {
+    "centre": {
+     "pairs": 77,
+     "ratio": 1.52,
+     "speed": 16.76,
+     "share_over_30min": 0.026
+    },
+    "nord_ouest": {
+     "pairs": 76,
+     "ratio": 1.73,
+     "speed": 16.77,
+     "share_over_30min": 0.0
+    }
    }
   },
   "peri": {
-   "pairs": 2098,
+   "pairs": 140,
    "detour_ratio_median": 1.58,
-   "detour_ratio_p90": 2.52,
-   "speed_kmh_110W_median": 19.57,
-   "speed_kmh_150W_median": 22.55,
-   "time_min_110W_median": 6.29,
-   "time_min_110W_p90": 16.7,
+   "detour_ratio_p90": 2.85,
+   "speed_kmh_110W_median": 19.14,
+   "speed_kmh_150W_median": 22.25,
+   "time_min_110W_median": 7.47,
+   "time_min_110W_p90": 18.15,
    "lights_per_km_median": 0.0,
-   "lights_per_km_p90": 1.37,
+   "lights_per_km_p90": 1.44,
    "share_of_pairs_over_minutes_one_way_110W": {
-    "10": 0.253,
-    "15": 0.122,
-    "20": 0.063,
-    "30": 0.02,
-    "45": 0.006,
-    "60": 0.004
+    "10": 0.328,
+    "15": 0.171,
+    "20": 0.079,
+    "30": 0.028,
+    "45": 0.021,
+    "60": 0.007
+   },
+   "share_over_30min_ci95_pts": 2.7,
+   "by_region": {
+    "centre": {
+     "pairs": 73,
+     "ratio": 1.59,
+     "speed": 19.51,
+     "share_over_30min": 0.027
+    },
+    "nord_ouest": {
+     "pairs": 67,
+     "ratio": 1.56,
+     "speed": 18.73,
+     "share_over_30min": 0.03
+    }
    }
   },
   "rural": {
-   "pairs": 1835,
-   "detour_ratio_median": 1.69,
-   "detour_ratio_p90": 3.69,
-   "speed_kmh_110W_median": 18.07,
-   "speed_kmh_150W_median": 21.38,
-   "time_min_110W_median": 9.16,
-   "time_min_110W_p90": 35.35,
+   "pairs": 108,
+   "detour_ratio_median": 1.75,
+   "detour_ratio_p90": 4.71,
+   "speed_kmh_110W_median": 16.28,
+   "speed_kmh_150W_median": 19.72,
+   "time_min_110W_median": 8.47,
+   "time_min_110W_p90": 44.32,
    "lights_per_km_median": 0.0,
-   "lights_per_km_p90": 0.26,
+   "lights_per_km_p90": 0.12,
    "share_of_pairs_over_minutes_one_way_110W": {
-    "10": 0.464,
-    "15": 0.289,
-    "20": 0.2,
-    "30": 0.126,
-    "45": 0.07,
-    "60": 0.039
+    "10": 0.454,
+    "15": 0.342,
+    "20": 0.241,
+    "30": 0.167,
+    "45": 0.102,
+    "60": 0.056
+   },
+   "share_over_30min_ci95_pts": 7.0,
+   "by_region": {
+    "centre": {
+     "pairs": 51,
+     "ratio": 1.85,
+     "speed": 15.97,
+     "share_over_30min": 0.216
+    },
+    "nord_ouest": {
+     "pairs": 57,
+     "ratio": 1.66,
+     "speed": 16.56,
+     "share_over_30min": 0.123
+    }
    }
   }
  },
- "regions": [
-  {
-   "id": "centre",
-   "bbox": [
-    1.65,
-    41.2,
-    2.65,
-    41.85
-   ],
-   "zones": {
-    "dense": {
-     "pairs": 1197,
-     "detour_ratio_median": 1.55,
-     "detour_ratio_p90": 2.52,
-     "speed_kmh_110W_median": 16.49,
-     "speed_kmh_150W_median": 19.03,
-     "time_min_110W_median": 6.7,
-     "time_min_110W_p90": 15.12,
-     "lights_per_km_median": 1.24,
-     "lights_per_km_p90": 4.79,
-     "share_of_pairs_over_minutes_one_way_110W": {
-      "10": 0.263,
-      "15": 0.104,
-      "20": 0.033,
-      "30": 0.006,
-      "45": 0.002,
-      "60": 0.002
-     }
-    },
-    "peri": {
-     "pairs": 1731,
-     "detour_ratio_median": 1.6,
-     "detour_ratio_p90": 2.54,
-     "speed_kmh_110W_median": 19.39,
-     "speed_kmh_150W_median": 22.47,
-     "time_min_110W_median": 6.31,
-     "time_min_110W_p90": 16.89,
-     "lights_per_km_median": 0.0,
-     "lights_per_km_p90": 1.53,
-     "share_of_pairs_over_minutes_one_way_110W": {
-      "10": 0.259,
-      "15": 0.123,
-      "20": 0.066,
-      "30": 0.021,
-      "45": 0.005,
-      "60": 0.002
-     }
-    },
-    "rural": {
-     "pairs": 741,
-     "detour_ratio_median": 1.76,
-     "detour_ratio_p90": 3.75,
-     "speed_kmh_110W_median": 17.84,
-     "speed_kmh_150W_median": 20.94,
-     "time_min_110W_median": 8.75,
-     "time_min_110W_p90": 33.81,
-     "lights_per_km_median": 0.0,
-     "lights_per_km_p90": 0.42,
-     "share_of_pairs_over_minutes_one_way_110W": {
-      "10": 0.433,
-      "15": 0.277,
-      "20": 0.188,
-      "30": 0.127,
-      "45": 0.058,
-      "60": 0.024
-     }
-    }
-   }
-  },
-  {
-   "id": "nord_ouest",
-   "bbox": [
-    1.3,
-    41.55,
-    2.6,
-    42.35
-   ],
-   "zones": {
-    "dense": {
-     "pairs": 501,
-     "detour_ratio_median": 1.58,
-     "detour_ratio_p90": 2.69,
-     "speed_kmh_110W_median": 16.86,
-     "speed_kmh_150W_median": 20.03,
-     "time_min_110W_median": 7.1,
-     "time_min_110W_p90": 15.53,
-     "lights_per_km_median": 0.52,
-     "lights_per_km_p90": 2.62,
-     "share_of_pairs_over_minutes_one_way_110W": {
-      "10": 0.295,
-      "15": 0.12,
-      "20": 0.042,
-      "30": 0.006,
-      "45": 0.004,
-      "60": 0.004
-     }
-    },
-    "peri": {
-     "pairs": 981,
-     "detour_ratio_median": 1.56,
-     "detour_ratio_p90": 2.56,
-     "speed_kmh_110W_median": 19.23,
-     "speed_kmh_150W_median": 22.46,
-     "time_min_110W_median": 6.5,
-     "time_min_110W_p90": 18.52,
-     "lights_per_km_median": 0.0,
-     "lights_per_km_p90": 0.83,
-     "share_of_pairs_over_minutes_one_way_110W": {
-      "10": 0.291,
-      "15": 0.162,
-      "20": 0.077,
-      "30": 0.021,
-      "45": 0.007,
-      "60": 0.005
-     }
-    },
-    "rural": {
-     "pairs": 995,
-     "detour_ratio_median": 1.73,
-     "detour_ratio_p90": 3.55,
-     "speed_kmh_110W_median": 17.32,
-     "speed_kmh_150W_median": 20.74,
-     "time_min_110W_median": 9.53,
-     "time_min_110W_p90": 35.97,
-     "lights_per_km_median": 0.0,
-     "lights_per_km_p90": 0.21,
-     "share_of_pairs_over_minutes_one_way_110W": {
-      "10": 0.48,
-      "15": 0.312,
-      "20": 0.218,
-      "30": 0.136,
-      "45": 0.077,
-      "60": 0.044
-     }
-    }
-   }
-  }
- ],
  "case_barcelona_to_montcada": {
   "crow_km": 10.9,
   "road_km": 14.53,
