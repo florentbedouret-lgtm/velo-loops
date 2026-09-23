@@ -61,6 +61,7 @@ Une web app qui aide un cycliste amateur à **découvrir où s'entraîner** : il
 - Export GPX (testé).
 - Recherche d'adresse (Photon) + géolocalisation.
 - Calcul de distance et de **temps d'approche** jusqu'au départ pré-calculé le plus proche.
+- Mentions légales et confidentialité (`mentions.html`, lien discret dans l'app).
 
 ### 3.5 Règle de distance au départ (reco UX retenue)
 - Distance max à vol d'oiseau : **2 km en zone dense, 3 km en périphérie, 3 km en rural**.
@@ -106,7 +107,7 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
 - [x] **O-4 — Qualité des boucles** — déjà fait, vérifié en O-1 : `scripts/generate_loops.py` rejette les candidats à plus de 25 % de tronçons répétés ou plus de 2 demi-tours, pénalise le score (poids « flow »), et le signale dans le pitch. Reste ouvert : régler/affiner ces seuils si des boucles publiées paraissent encore mauvaises en pratique.
 - [x] **O-5 — Pitch fiabilisé** — déjà fait, vérifié en O-1 : `pitch_from_option()` ne produit que des phrases adossées à un champ mesuré exporté (aucune affirmation non vérifiable).
 - [x] **O-6 — Feedback après sortie** — déjà fait, vérifié en O-1 : `feedback.js` capture note, minutes réelles, D+ réel, difficulté ressentie, tags +/−, commentaire ; stocké en `localStorage`, exportable en JSON, rien n'est envoyé. Décision « localStorage » prise de fait.
-- [ ] **O-7 — Mentions légales / responsabilité** et page RGPD simple. (confirmé absent du front en O-1)
+- [x] **O-7 — Mentions légales / responsabilité et RGPD** — fait le 23/09/2026 : page `mentions.html` (responsabilité sur les parcours à vérifier, données personnelles minimisées, attributions OSM/GraphHopper/OpenFreeMap/Photon, éditeur identifié en pseudonyme + contact GitHub), liée depuis `index.html`. ⚠️ Rédaction niveau POC, pas relue par un juriste — à faire avant un lancement plus large ou si le trafic augmente.
 - [x] **O-8 — Nettoyer le dépôt (dette trouvée en O-1)** — fait le 23/09/2026 :
   1. ✅ `web/approach_model.json` resynchronisé avec le site publié (v2.2).
   2. ✅ `scripts/fetch_published.py` retélécharge aussi `web/approach_model.json` en mode `site`, pour empêcher la dérive de se reproduire (fichier toujours géré à la main pour son contenu — voir « reste ouvert » ci-dessous — mais il ne peut plus rester périmé sur le site publié sans que le prochain run `site` ne le corrige).
@@ -134,3 +135,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | sept. 2026 | Dev front-end | Web app sur Pages : carte, niveaux, options, pitch, montées, GPX | Recherche d'adresse |
 | sept. 2026 | Dev front-end + UX | Photon + géoloc + départ le plus proche + temps d'approche ; ~715 départs ; règle dmax | O-1 à O-7 |
 | 23/09/2026 | Dev / Architecte | O-1 : audit complet (code vs site publié) ; O-2/O-4/O-5/O-6 recochées comme faites ; désync dépôt/site trouvée et documentée (O-8) | Décider priorité entre O-8 (nettoyage) et O-3/O-7 |
+| 23/09/2026 | Dev / Architecte | O-8 : nettoyage dépôt (commité et poussé) ; O-7 : page `mentions.html` + lien dans `index.html` (pas encore committé) | Committer O-7, puis O-3 |
