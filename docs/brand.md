@@ -77,3 +77,4 @@ L'analyse détaillée de la concurrence relève de l'expert marketing.
 ## Suite
 
 Étape 2 : le nom.
+Décision : Oyan
