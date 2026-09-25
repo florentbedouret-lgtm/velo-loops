@@ -28,7 +28,7 @@ name: Générer les boucles vélo
 on:
   push:
     branches: [main]
-    paths: [index.html, gpx.js, profile.js, feedback.js]
+    paths: [index.html, mentions.html, gpx.js, profile.js, feedback.js, 'brand/**', 'fonts/**']
   workflow_dispatch:
     inputs:
       mode:
