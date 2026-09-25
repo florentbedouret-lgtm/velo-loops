@@ -34,6 +34,15 @@ GREEN_MIN_AREA_DEG2 = 5e-5      # ~0,5 km² à cette latitude : on ignore les pe
 GREEN_MIN_ENTRY_KM = 1.5        # en deçà, le départ touche déjà la nature : pas un « centre-ville »
 GREEN_MAX_KM = 8.0              # au-delà, pas d'espace vert « proche »
 GREEN_OFFSETS = (40, -40, 70, -70)
+# Boucles de référence tracées par un cycliste local (v3) : points INTERMÉDIAIRES seulement (routes publiques, loin du
+# point de départ réel, sans horaire ni données de la montre). GraphHopper relie le départ Oyan à ces points.
+# Gràcia, variante préférée (reconstruite, sans trace) : Via Augusta jusqu'à Sarrià (2 points, géocodés avec Photon),
+# montée au col ~494 m (montée laissée au choix de GraphHopper), descente par l'Arrabassada (2 points d'une trace réelle).
+# La trace réelle (par la Diagonal et Pedralbes) : ~24 km, ~450 m D+, ~1 h 30.
+REFERENCE_LOOPS = {
+    "Gràcia": [(2.14116, 41.39825), (2.12622, 41.39812),                      # Via Augusta (n°200, puis vers Sarrià)
+               (2.11905, 41.42325), (2.13446, 41.43420), (2.12845, 41.42478)],  # col, puis descente par l'Arrabassada
+}
 PART_LABELS = {"calm": "calme (ville)", "lights": "feux", "axes": "grands axes", "infra": "pistes cyclables",
                "flow": "fluidité (tronçons répétés)", "scenery": "paysage"}
 
@@ -173,8 +182,23 @@ def run_start(s, gh_url, durations, levels, entry):
             rows.append({"duration_h": d, "level": level, "valid_a": len(pool_a), "valid_b": len(pool_b),
                          "rejects_b": dict(why_b), "A": summary(ba), "B": summary(bb),
                          "b_wins": bool(bb and ba and best(pool_a + pool_b) is bb)})
+    reference = []
+    for level in levels if s["name"] in REFERENCE_LOOPS else []:
+        wps = [[lon, lat] for lon, lat in REFERENCE_LOOPS[s["name"]]]
+        for profile in g.LEVELS[level]["profiles"]:
+            path = gh.via([[st_["lon"], st_["lat"]]] + wps + [[st_["lon"], st_["lat"]]], profile)
+            loop = g.analyse(path, level, profile, 1.5, 800, None) if path else None
+            if loop is None:
+                reference.append({"level": level, "profile": profile, "error": gh.last_error or "pas de boucle"})
+                continue
+            ref = summary(loop)
+            near = min((r for r in rows if r["level"] == level and r["A"]),
+                       key=lambda r: abs(r["duration_h"] * 60 - ref["min"]), default=None)
+            reference.append({"level": level, "profile": profile, "ref": ref,
+                              "compared_to": near and {"duration_h": near["duration_h"], "A": near["A"]},
+                              "ref_beats_a": bool(near and ref["score"] > near["A"]["score"])})
     return {"name": s["name"], "zone": s.get("zone"), "municipality": s.get("municipality"),
-            "green_entry_km": round(entry[2], 2), "rows": rows}
+            "green_entry_km": round(entry[2], 2), "rows": rows, "reference": reference}
 
 
 def main() -> int:
@@ -269,6 +293,22 @@ def main() -> int:
     L += ["\n## Candidats « vers le vert » rejetés", "| Raison | Nombre |", "|---|---|"]
     for k, n in rejects.most_common():
         L.append(f"| {k} | {n} |")
+    for res in results:
+        for ref in res.get("reference", []):
+            if not any("## Boucle de référence" in x for x in L):
+                L.append("\n## Boucle de référence d'un cycliste local (même score que la production)")
+            head = f"- **{res['name']}**, {ref['level']} / profil {ref['profile']}"
+            if ref.get("error"):
+                L.append(f"{head} : calcul impossible ({ref['error'][:150]})")
+                continue
+            c = ref["compared_to"]
+            L.append(f"{head} — {ref['ref']['km']} km, {ref['ref']['min']} min — "
+                     + ("**la référence bat A**" if ref["ref_beats_a"] else "A reste devant"))
+            L.append(f"  - référence : {fmt(ref['ref'])}")
+            if c:
+                L.append(f"  - A ({c['duration_h']:g} h) : {fmt(c['A'])}")
+                L.append("  - points référence − A : " + ", ".join(
+                    f"{PART_LABELS[k]} {ref['ref']['points'].get(k, 0) - c['A']['points'].get(k, 0):+.1f}" for k in c["A"]["points"]))
     L.append("\n## Détail (A = production, B = meilleure boucle « vers le vert »)")
     for res in results:
         if res.get("skipped"):
