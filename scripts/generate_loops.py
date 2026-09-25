@@ -556,6 +556,20 @@ def meters_by_value(detail, cum) -> dict:
     return out
 
 
+def joint_meters(det_a, det_b, cum) -> dict:
+    """Mètres par couple de valeurs (détail a, détail b), ex. (classe de route, densité urbaine)."""
+    n = len(cum) - 1
+    va, vb = [None] * n, [None] * n
+    for det, arr in ((det_a, va), (det_b, vb)):
+        for a, b, val in det or []:
+            for i in range(max(0, a), min(b, n)):
+                arr[i] = str(val).lower()
+    out: dict = {}
+    for i in range(n):
+        out[(va[i], vb[i])] = out.get((va[i], vb[i]), 0.0) + (cum[i + 1] - cum[i])
+    return out
+
+
 def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, heading) -> Loop | None:
     coords = path["points"]["coordinates"]
     if len(coords) < 10:
@@ -604,6 +618,11 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         "main_roads": frac(rclass, ["primary", "trunk", "secondary"]),
         "unpaved": frac(surf, list(UNPAVED)),
     }
+    # grandes routes par densité urbaine (diagnostic O-12 ; n'entre pas dans score() ni dans les fichiers publiés)
+    joint = joint_meters(det.get("road_class"), det.get("urban_density"), cum)
+    shares["main_roads_by_urban"] = {
+        u: sum(m for (rc, ud), m in joint.items() if rc in ("primary", "trunk", "secondary") and ud == u) / total
+        for u in ("city", "residential", "rural")}
     watts = LEVELS[level]["watts"]
     ds, prof = elevation_profile(coords, cum)
     ascend, descend = gain_loss(prof)

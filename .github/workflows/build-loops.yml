@@ -186,9 +186,17 @@ jobs:
 
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
         if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' }}
+        env:
+          MODE: ${{ steps.resolve_mode.outputs.mode }}
         run: |
+          GH_CONFIG=config/graphhopper.yml
+          if [ "$MODE" = "nature_check" ]; then        # O-12 test A : rayon « ville » 500 m au lieu de 1 500 (défaut GraphHopper)
+            GH_CONFIG=data/graphhopper_nature.yml
+            sed 's/^  graph.urban_density.threads: 2$/&\n  graph.urban_density.city_radius: 500/' config/graphhopper.yml > "$GH_CONFIG"
+            grep -q "city_radius: 500" "$GH_CONFIG" || { echo "réglage city_radius non appliqué"; exit 1; }
+          fi
           nohup java -Xmx8g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
-            -jar graphhopper-web.jar server config/graphhopper.yml > gh.log 2>&1 &
+            -jar graphhopper-web.jar server "$GH_CONFIG" > gh.log 2>&1 &
           echo $! > gh.pid
           for i in $(seq 1 360); do
             if curl -fs http://localhost:8989/health > /dev/null; then echo "GraphHopper prêt"; exit 0; fi
@@ -219,7 +227,8 @@ jobs:
         run: |
           python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
             --pbf data/region.osm.pbf --workdir data --n 12 --durations "1 1.5 2" \
-            --out data/nature_check.json --out-md data/nature_check.md
+            --out data/nature_check.json --out-md data/nature_check.md \
+            --note "rayon « ville » de GraphHopper = 500 m (1 500 m en production) ; grands axes v2 calculé à côté"
           cat data/nature_check.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publier le diagnostic nature

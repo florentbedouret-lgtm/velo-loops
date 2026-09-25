@@ -43,6 +43,10 @@ REFERENCE_LOOPS = {
     "Gràcia": [(2.14116, 41.39825), (2.12622, 41.39812),                      # Via Augusta (n°200, puis vers Sarrià)
                (2.11905, 41.42325), (2.13446, 41.43420), (2.12845, 41.42478)],  # col, puis descente par l'Arrabassada
 }
+# Grands axes v2 (règle de Florent, 25/09/2026) : une grande route est acceptable si elle mène vers la nature ; pénalité
+# entière en ville ou zone résidentielle, demi-pénalité hors de la ville (une route plus petite aux mêmes avantages
+# doit rester préférée).
+AXES_V2_RURAL_FACTOR = 0.5
 PART_LABELS = {"calm": "calme (ville)", "lights": "feux", "axes": "grands axes", "infra": "pistes cyclables",
                "flow": "fluidité (tronçons répétés)", "scenery": "paysage"}
 
@@ -151,8 +155,22 @@ def summary(loop):
             "overlap_pct": round(100 * loop.overlap), "u_turns": loop.u_turns,
             "lights_per_km": round(loop.signals / max(loop.distance_m / 1000.0, 0.1), 2) if loop.signals is not None else None,
             "unpaved_pct": round(100 * loop.shares["unpaved"]),
+            "score_v2": score_v2(loop),
+            "main_roads_pct": round(100 * loop.shares["main_roads"]),
+            "main_roads_rural_pct": round(100 * loop.shares.get("main_roads_by_urban", {}).get("rural", 0.0)),
             # points de note apportés par chaque critère (somme = note hors pénalité non goudronné)
             "points": {k: round(100 * weights[k] * parts[k] / wsum, 1) for k in weights}}
+
+
+def score_v2(loop) -> float:
+    """Note de production, avec le critère « grands axes » v2."""
+    parts, weights = g.score_parts(loop)
+    mr = loop.shares.get("main_roads_by_urban", {})
+    eff = mr.get("city", 0.0) + mr.get("residential", 0.0) + AXES_V2_RURAL_FACTOR * mr.get("rural", 0.0)
+    parts["axes"] = 1.0 - min(1.0, 2.0 * eff)
+    total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
+    total -= min(0.3, max(0.0, loop.shares["unpaved"] - 0.03) * 2.0)
+    return round(100 * max(0.0, total), 1)
 
 
 def best(pool):
@@ -179,8 +197,9 @@ def run_start(s, gh_url, durations, levels, entry):
                 why_b.update(why)
             ba = best(pool_a)
             bb = max(pool_b, key=lambda l: l.score) if pool_b else None
+            ba2 = max(pool_a, key=score_v2) if pool_a else None      # meilleure boucle de production avec le score v2
             rows.append({"duration_h": d, "level": level, "valid_a": len(pool_a), "valid_b": len(pool_b),
-                         "rejects_b": dict(why_b), "A": summary(ba), "B": summary(bb),
+                         "rejects_b": dict(why_b), "A": summary(ba), "A_v2": summary(ba2), "B": summary(bb),
                          "b_wins": bool(bb and ba and best(pool_a + pool_b) is bb)})
     reference = []
     for level in levels if s["name"] in REFERENCE_LOOPS else []:
@@ -195,8 +214,10 @@ def run_start(s, gh_url, durations, levels, entry):
             near = min((r for r in rows if r["level"] == level and r["A"]),
                        key=lambda r: abs(r["duration_h"] * 60 - ref["min"]), default=None)
             reference.append({"level": level, "profile": profile, "ref": ref,
-                              "compared_to": near and {"duration_h": near["duration_h"], "A": near["A"]},
-                              "ref_beats_a": bool(near and ref["score"] > near["A"]["score"])})
+                              "compared_to": near and {"duration_h": near["duration_h"], "A": near["A"],
+                                                       "A_v2": near["A_v2"]},
+                              "ref_beats_a": bool(near and ref["score"] > near["A"]["score"]),
+                              "ref_beats_a_v2": bool(near and near["A_v2"] and ref["score_v2"] > near["A_v2"]["score_v2"])})
     return {"name": s["name"], "zone": s.get("zone"), "municipality": s.get("municipality"),
             "green_entry_km": round(entry[2], 2), "rows": rows, "reference": reference}
 
@@ -216,6 +237,7 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--out", required=True)
     ap.add_argument("--out-md", required=True)
+    ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     args = ap.parse_args()
     t0 = time.time()
 
@@ -272,16 +294,26 @@ def main() -> int:
               "mean_points_delta_b_minus_a": mean_delta, "rejects_b": dict(rejects), "seconds": round(time.time() - t0)}
     Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
 
+    def med(rs, key, field):
+        vals = [r[key][field] for r in rs if r.get(key) and r[key][field] is not None]
+        return round(sorted(vals)[len(vals) // 2]) if vals else None
+
     def fmt(x):
         if x is None:
             return "—"
         ex_ = x["exit_dense_km"] if x["exit_dense_km"] is not None else "jamais"
-        return (f"note {x['score']} · ville {x['city_pct']} % · sortie {ex_} · forêt {x['forest_pct']} % · "
-                f"D+ {x['dplus_m']} · répété {x['overlap_pct']} % · feux {x['lights_per_km']}/km")
+        return (f"note {x['score']} (v2 {x['score_v2']}) · ville {x['city_pct']} % · sortie {ex_} · forêt {x['forest_pct']} % · "
+                f"D+ {x['dplus_m']} · grandes routes {x['main_roads_pct']} % dont hors ville {x['main_roads_rural_pct']} % · "
+                f"répété {x['overlap_pct']} % · feux {x['lights_per_km']}/km")
     L = [f"# Diagnostic O-12 v2 : pourquoi les boucles « vers le vert » perdent ({len(results)} départs, "
          f"{len(rows)} combinaisons, {round((time.time() - t0) / 60)} min)",
+         (f"\n**Réglage de ce run : {args.note}**" if args.note else ""),
          f"\nUne boucle « vers le vert » valide existe dans {len(with_b)} combinaisons ; elle devient la meilleure dans "
          f"{report['b_wins']}.",
+         f"\nAvec « grands axes » v2, la meilleure boucle de production change dans "
+         f"{sum(1 for r in rows if r['A'] and r['A_v2'] and (r['A']['km'], r['A']['dplus_m']) != (r['A_v2']['km'], r['A_v2']['dplus_m']))}"
+         f" combinaisons sur {len(rows)} ; part en ville médiane A {med(rows, 'A', 'city_pct')} % -> A v2 {med(rows, 'A_v2', 'city_pct')} %"
+         f", forêt {med(rows, 'A', 'forest_pct')} % -> {med(rows, 'A_v2', 'forest_pct')} %.",
          "\n## Quand B perd, critère qui lui coûte le plus de points",
          "| Critère | Combinaisons |", "|---|---|"]
     for k, n in culprit.most_common():
@@ -302,11 +334,13 @@ def main() -> int:
                 L.append(f"{head} : calcul impossible ({ref['error'][:150]})")
                 continue
             c = ref["compared_to"]
-            L.append(f"{head} — {ref['ref']['km']} km, {ref['ref']['min']} min — "
-                     + ("**la référence bat A**" if ref["ref_beats_a"] else "A reste devant"))
+            L.append(f"{head} — {ref['ref']['km']} km, {ref['ref']['min']} min — score actuel : "
+                     + ("**la référence bat A**" if ref["ref_beats_a"] else "A reste devant") + " ; score v2 : "
+                     + ("**la référence bat A v2**" if ref.get("ref_beats_a_v2") else "A v2 reste devant"))
             L.append(f"  - référence : {fmt(ref['ref'])}")
             if c:
                 L.append(f"  - A ({c['duration_h']:g} h) : {fmt(c['A'])}")
+                L.append(f"  - A v2 ({c['duration_h']:g} h) : {fmt(c.get('A_v2'))}")
                 L.append("  - points référence − A : " + ", ".join(
                     f"{PART_LABELS[k]} {ref['ref']['points'].get(k, 0) - c['A']['points'].get(k, 0):+.1f}" for k in c["A"]["points"]))
     L.append("\n## Détail (A = production, B = meilleure boucle « vers le vert »)")
