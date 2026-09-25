@@ -26,9 +26,9 @@ name: Générer les boucles vélo
 #  - slope_check      : diagnostic (rien n'est publié) : échantillonne des départs réels du plan (province), calcule leur
 #                       pente sur données SRTM réelles à 3 niveaux de lissage (sans lissage / 300 m / 500 m), et teste la
 #                       robustesse de plusieurs seuils candidats. Artefact `diagnostic-pente` à envoyer pour analyse.
-#  - nature_check     : diagnostic O-12 (rien n'est publié) : pour ~12 départs de centre-ville proches d'un grand espace
-#                       vert, compare la meilleure boucle actuelle à des variantes (candidats « vers le vert », côtes non
-#                       freinées). Artefact `diagnostic-nature` à envoyer pour analyse. ~30-60 min.
+#  - nature_check     : diagnostic O-12 v2 (rien n'est publié) : pour ~12 départs de CENTRE-VILLE (espace vert à plus
+#                       de 1,5 km), compare la meilleure boucle actuelle à la meilleure boucle « vers le vert » et dit
+#                       quel critère du score la fait perdre. Artefact `diagnostic-nature` à envoyer pour analyse.
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
@@ -218,7 +218,7 @@ jobs:
         if: ${{ steps.resolve_mode.outputs.mode == 'nature_check' }}
         run: |
           python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-            --pbf data/region.osm.pbf --workdir data --names "Gràcia" --n 12 --durations "1 1.5 2" \
+            --pbf data/region.osm.pbf --workdir data --n 12 --durations "1 1.5 2" \
             --out data/nature_check.json --out-md data/nature_check.md
           cat data/nature_check.md >> "$GITHUB_STEP_SUMMARY"
 

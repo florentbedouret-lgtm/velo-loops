@@ -642,7 +642,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     return loop
 
 
-def score(l: Loop) -> float:
+def score_parts(l: Loop) -> tuple[dict, dict]:
+    """Sous-scores (0 à 1) et poids utilisés par score() : exposés pour les diagnostics (nature_check.py)."""
     s = l.shares
     parts = {
         "calm": 1.0 - (s["urban"]["city"] + 0.4 * s["urban"]["residential"]),
@@ -660,8 +661,13 @@ def score(l: Loop) -> float:
         parts["scenery"] = l.scenery["score"] / 100.0
     else:
         weights.pop("scenery")
+    return parts, weights
+
+
+def score(l: Loop) -> float:
+    parts, weights = score_parts(l)
     total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
-    total -= min(0.3, max(0.0, s["unpaved"] - 0.03) * 2.0)
+    total -= min(0.3, max(0.0, l.shares["unpaved"] - 0.03) * 2.0)
     return round(100 * max(0.0, total), 1)
 
 
