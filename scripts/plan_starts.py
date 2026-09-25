@@ -19,7 +19,9 @@ Départs candidats : centres de villes / villages / quartiers, gares (hors zone 
 on complète par des départs de remplissage (nom du lieu le plus proche + direction) là où un lieu reste trop loin.
 
 Sorties :
-  --out          JSON de départs [{name, lon, lat, kind, zone}] pour generate_loops.py --starts-file
+  --out          JSON de départs [{name, lon, lat, kind, zone, municipality}] pour generate_loops.py --starts-file
+                 (municipality = commune OSM, boundary=administrative + admin_level=8, qui contient le départ ; absente
+                 si le départ n'est dans aucune commune complète de l'extrait, par ex. au bord de l'emprise)
   --report       JSON de couverture (par scénario et par zone : nombre de départs, distances médiane / P90 / P95 / max,
                  temps de calcul et taille estimés)
   --demand-out   échantillon de lieux habités avec leur départ le plus proche (pour measure_detour.py)
@@ -102,6 +104,44 @@ def load(seq: Path):
             elif geom.geom_type in ("Polygon", "MultiPolygon") and props.get("landuse") == "residential":
                 residential.append(geom)
     return places, stations, residential, place_pop
+
+
+def load_municipalities(pbf: Path, workdir: Path):
+    """Communes (boundary=administrative, admin_level=8) de l'extrait : (arbre spatial, polygones, noms).
+    Une commune coupée par le bord de l'emprise peut manquer (polygone incomplet) : ses départs restent sans commune."""
+    filt, out = workdir / "communes.osm.pbf", workdir / "communes.geojsonseq"
+    subprocess.run(["osmium", "tags-filter", str(pbf), "r/boundary=administrative", "-o", str(filt), "--overwrite"],
+                   check=True, capture_output=True)
+    subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"],
+                   check=True, capture_output=True)
+    polys, names = [], []
+    with out.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip("\x1e\n ")
+            if not line:
+                continue
+            try:
+                feat = json.loads(line)
+                geom = shape(feat["geometry"])
+            except (ValueError, KeyError):
+                continue
+            props = feat.get("properties", {})
+            if (geom.geom_type in ("Polygon", "MultiPolygon") and not geom.is_empty
+                    and str(props.get("admin_level")) == "8" and props.get("name")):
+                polys.append(geom)
+                names.append(props["name"])
+    return shapely.STRtree(polys), polys, names
+
+
+def municipality_of(lon: float, lat: float, communes) -> str | None:
+    tree, polys, names = communes
+    pt = shapely.Point(lon, lat)
+    try:
+        for i in tree.query(pt, predicate="intersects"):
+            return names[int(i)]
+    except Exception:  # noqa: BLE001 : polygone OSM invalide, le départ reste sans commune
+        pass
+    return None
 
 
 class Proj:
@@ -451,6 +491,8 @@ def main() -> int:
                 "skipped_demand_distance_to_nearest_start": skipped_stats(st, mask)}
 
     starts, d, zones = results[chosen_key]
+    communes = load_municipalities(pbf, Path(args.workdir) if args.workdir else pbf.parent)
+    print(f"Communes (admin_level=8) chargées : {len(communes[2])}")
     # --- fichier de départs (noms uniques ; remplissage = nom du lieu le plus proche + direction)
     named = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3]]
     nx = np.array([n[0] for n in named]); ny = np.array([n[1] for n in named])
@@ -473,12 +515,19 @@ def main() -> int:
             name = f"{name} {used[name]}"
         kind = "station" if starts["kind"][i] == "station" else "fill" if starts["kind"][i] == "fill" else "place"
         entry = {"name": name, "lon": round(float(lon), 5), "lat": round(float(lat), 5), "kind": kind, "zone": zones[i]}
+        muni = municipality_of(float(lon), float(lat), communes)
+        if muni:
+            entry["municipality"] = muni
         if kind == "fill" and len(tx):                   # nom d'affichage : « Près de <ville ou village le plus proche> »
             jt = int(np.argmin(np.hypot(tx - starts["x"][i], ty - starts["y"][i])))
             entry["display_name"] = f"Près de {towns[jt][2]}"
         out.append(entry)
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     report["chosen_scenario"] = chosen_key
+    report["municipality"] = {"communes_loaded": len(communes[2]),
+                              "starts_with_municipality": sum(1 for e in out if e.get("municipality")),
+                              "starts_without": [e["name"] for e in out if not e.get("municipality")][:50]}
+    print(f"Départs avec commune : {report['municipality']['starts_with_municipality']} / {len(out)}")
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
 
     # --- échantillon de lieux habités et de leur départ le plus proche (pour mesurer le détour)

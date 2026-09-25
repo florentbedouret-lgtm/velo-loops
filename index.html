@@ -121,9 +121,11 @@
     const esc = s => String(s).replace(/[&<>"]/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-    // ---------- nom d'un départ : « Ville · lieu » pour les départs intermédiaires (display_name « Près de Ville »),
-    // sinon son nom ; la ville est la plus proche, pas forcément la commune (voir O-10 dans handoff.md)
+    // ---------- nom d'un départ : « Commune · lieu » (commune OSM, champ municipality du pipeline, O-10.2) ;
+    // sans commune (données plus anciennes) : « Ville la plus proche · lieu » pour les départs intermédiaires
     function startLabel(s) {
+      const m = s.municipality;
+      if (m) return s.name === m || fold(s.name).includes(fold(m)) ? s.name : m + ' · ' + s.name;
       const near = /^Près de (.+)$/.exec(s.display_name || '');
       return near ? near[1] + ' · ' + s.name : (s.display_name || s.name);
     }
@@ -277,7 +279,7 @@
     // ---------- liste des départs, filtrée par le texte tapé (sans tenir compte des accents ni des majuscules)
     const startFilter = document.getElementById('startFilter');
     const fold = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-    let startItems = []; // [libellé, id, texte de recherche], triés par libellé
+    let startItems = []; // [libellé, id, texte de recherche, clé de tri], triés par commune puis par libellé
     function fillStarts() {
       const words = fold(startFilter.value).split(/\s+/).filter(Boolean);
       const keep = startItems.filter(it => words.every(w => it[2].includes(w)));
@@ -304,7 +306,10 @@
           else modelOk = false; // version majeure inconnue : on ignore ce fichier, aucun temps chiffré
         }
       } catch (e) { /* réseau indisponible : on garde le repli */ }
-      startItems = index.starts.map(s => [startLabel(s), s.id, fold(startLabel(s))]).sort((a, b) => byName(a[0], b[0]));
+      startItems = index.starts.map(s => {
+        const label = startLabel(s);
+        return [label, s.id, fold((s.municipality || '') + ' ' + label), s.municipality || label];
+      }).sort((a, b) => byName(a[3], b[3]) || byName(a[0], b[0]));
       fillStarts();
       startFilter.oninput = fillStarts;
       Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
