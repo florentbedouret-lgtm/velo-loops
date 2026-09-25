@@ -401,6 +401,50 @@
       select(i >= 0 ? i : 0);
     }
 
+    // ---------- O-14 : départ voisin qui sort plus vite de la ville (même durée, même niveau), quand la boucle reste en
+    // ville ou n'en sort qu'après 5 km. Critère : km de sortie de la zone dense (bloc compare de index.json), pas le % de
+    // bâti, pour rester cohérent avec « Sort de la ville après X km » affiché sur la fiche.
+    const NEIGHBOUR_MAX_MIN = 25;      // approche maximale d'un départ à l'autre (l'app juge « trop loin » au-delà de 30)
+    const NEIGHBOUR_GAIN_KM = 3;       // la boucle voisine doit sortir de la ville au moins 3 km plus tôt
+    const CLIMB_M_PER_H = 400;         // montée à allure d'approche (~110 W, 85 kg) : environ 400 m de dénivelé par heure
+    function approachBetween(a, b) {   // même modèle que depuis une adresse (setPosition), plus la montée entre les deux départs
+      if (a.alt_m == null || b.alt_m == null) return Infinity;   // altitude inconnue : pas de temps honnête, pas de suggestion
+      const z = model.zones[b.zone] || model.zones.peri;
+      const flat = crowKm(a.lon, a.lat, b.lon, b.lat) * z.detour_ratio_median / z.speed_kmh_110W_median * 60;
+      return Math.max(flat, Math.max(0, b.alt_m - a.alt_m) / CLIMB_M_PER_H * 60);
+    }
+    function natureNeighbour(o) {
+      if (!modelOk || o.duration_target_min == null) return '';
+      const cur = indexData.starts.find(s => s.id === startSel.value);
+      if (!cur) return '';
+      const stays = o.exit_dense_km == null || o.exit_dense_km >= o.distance_km - 0.05;
+      if (!stays && o.exit_dense_km <= 5) return '';
+      const curExit = stays ? Infinity : o.exit_dense_km;
+      const dur = String(Math.round(o.duration_target_min) / 60);   // clés du bloc compare : "0.75", "1", "1.5"…
+      let best = null;
+      for (const s of indexData.starts) {
+        const c = s.compare && s.compare[dur] && s.compare[dur][o.level];
+        if (s.id === cur.id || !c || c.exit_dense_km == null || c.exit_dense_km > curExit - NEIGHBOUR_GAIN_KM) continue;
+        const min = approachBetween(cur, s);
+        if (min > NEIGHBOUR_MAX_MIN) continue;
+        if (!best || c.exit_dense_km < best.exit || (c.exit_dense_km === best.exit && min < best.min)) {
+          best = { s, min: Math.round(min), exit: c.exit_dense_km };
+        }
+      }
+      if (!best) return '';
+      return '<br>Plus vite dans la nature : depuis <b>' + esc(startLabel(best.s)) + '</b>, à ≈ ' + best.min +
+        ' min à vélo, la boucle de ' + hm(o.duration_target_min) + (best.exit === 0 ? ' part directement hors de la ville.'
+        : ' sort de la ville après ' + km(best.exit) + ' km.') +
+        ' <button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">Voir ce départ</button>';
+    }
+    function goNeighbour(id, min) {
+      const s = indexData.starts.find(x => x.id === id);
+      whereEl.innerHTML = 'Départ voisin : <b>' + esc(startLabel(s)) + '</b>' + stationNote(s.kind) +
+        '<br>≈ ' + min + ' min à vélo depuis le départ précédent';
+      approachMin = null;                               // la position de l'utilisateur n'est pas connue ici : pas de total chiffré
+      chooseStart(id);
+    }
+
     // change pour la durée disponible suivante, sans changer le niveau (bouton "Essayer plus long")
     function nextDuration() {
       const durs = indexData.durations_h.map(Number).sort((a, b) => a - b);
@@ -425,6 +469,7 @@
       } else {
         cityLine = 'Sort de la ville après ' + km(o.exit_dense_km) + ' km.';
       }
+      cityLine += natureNeighbour(o);
 
       // pente : catégorie qualitative + badge à seuil unique, jamais de chiffre
       const slopeCat = o.terrain.avg_climb_grade_pct != null ? slopeCategory(o.terrain.avg_climb_grade_pct) : null;
