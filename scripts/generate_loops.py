@@ -61,6 +61,7 @@ MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
 WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}
+FLOW_OVERLAP_FACTOR = 1.0     # pénalité des tronçons répétés (2.0 jusqu'à la v4 ; D21 : diagnostic nature_check v5)
 LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km ou plus, le sous-score "feux" tombe à 0
 SIGNALS = None                  # SignalIndex des feux tricolores, chargé dans main()
 STOPS = None                    # SignalIndex des panneaux stop
@@ -198,14 +199,15 @@ def load_signals(pbf: Path, workdir: Path):
 class LandscapeIndex:
     """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
 
-    def __init__(self, forests, waters, protected, viewpoints):
+    def __init__(self, forests, waters, protected, viewpoints, builtup=()):
         import numpy as np  # noqa: F401
         from shapely.strtree import STRtree
+        builtup = list(builtup)
         self.trees = {k: (STRtree(v) if v else None)
                       for k, v in (("forest", forests), ("water", waters), ("protected", protected),
-                                   ("view", viewpoints))}
+                                   ("view", viewpoints), ("builtup", builtup))}
         self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
-                       "view": len(viewpoints)}
+                       "view": len(viewpoints), "builtup": len(builtup)}
 
     def measure(self, coords, cum) -> dict:
         import numpy as np
@@ -228,7 +230,28 @@ class LandscapeIndex:
         protected = share("protected", SCENERY_PROTECTED_DEG)
         index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
-                "score": round(100 * index)}
+                "score": round(100 * index), "landcover": self.landcover(pts)}
+
+    def landcover(self, pts) -> dict | None:
+        """Répartition du tracé (points tous les 100 m), UNE catégorie par point, par priorité : ville (dans une zone
+        bâtie OSM : landuse residential/commercial/industrial/retail) > eau (< ~100 m) > forêt (dans ou au bord)
+        > campagne. Les 4 parts font 100 % : barre de terrain de la charte (O-9.4). Sans zones bâties chargées : None."""
+        import numpy as np
+        if self.trees["builtup"] is None:
+            return None
+        n = len(pts)
+        cls = np.full(n, 3)                                   # 3 = campagne
+        for code, key, pred, dist in ((2, "forest", "dwithin", SCENERY_FOREST_DEG),
+                                      (1, "water", "dwithin", SCENERY_WATER_DEG),
+                                      (0, "builtup", "intersects", None)):   # du moins au plus prioritaire
+            tree = self.trees[key]
+            if tree is None:
+                continue
+            hit = (tree.query(pts, predicate=pred, distance=dist) if dist else tree.query(pts, predicate=pred))[0]
+            cls[np.unique(hit)] = code
+        counts = np.bincount(cls, minlength=4) / max(n, 1)
+        return {"city": round(float(counts[0]), 3), "water": round(float(counts[1]), 3),
+                "forest": round(float(counts[2]), 3), "countryside": round(float(counts[3]), 3)}
 
 
 def load_landscape(pbf: Path, workdir: Path):
@@ -244,7 +267,8 @@ def load_landscape(pbf: Path, workdir: Path):
         print(f"! paysage non chargé (fichier {pbf} ou osmium introuvable)", file=sys.stderr)
         return None
     filt, out = workdir / "landscape.osm.pbf", workdir / "landscape.geojsonseq"
-    filters = ["nwr/landuse=forest", "nwr/natural=wood", "nwr/natural=water", "nwr/waterway=river",
+    filters = ["nwr/landuse=forest,residential,commercial,industrial,retail", "nwr/natural=wood",
+               "nwr/natural=water", "nwr/waterway=river",
                "w/natural=coastline", "nwr/natural=beach", "nwr/leisure=park", "nwr/leisure=nature_reserve",
                "nwr/boundary=protected_area", "nwr/boundary=national_park", "n/tourism=viewpoint"]
     try:
@@ -255,7 +279,7 @@ def load_landscape(pbf: Path, workdir: Path):
     except subprocess.CalledProcessError as e:
         print(f"! extraction du paysage échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
         return None
-    forests, waters, protected, views = [], [], [], []
+    forests, waters, protected, views, builtup = [], [], [], [], []
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -280,10 +304,12 @@ def load_landscape(pbf: Path, workdir: Path):
                 waters.append(geom)
             elif props.get("landuse") == "forest" or props.get("natural") == "wood":
                 forests.append(geom)
+            elif props.get("landuse") in ("residential", "commercial", "industrial", "retail"):
+                builtup.append(geom)                       # zones bâties : « ville » de la répartition du terrain
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
-    return LandscapeIndex(forests, waters, protected, views)
+    return LandscapeIndex(forests, waters, protected, views, builtup)
 
 
 # --------------------------------------------------------------------------- modèle physique
@@ -668,7 +694,7 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         "calm": 1.0 - (s["urban"]["city"] + 0.4 * s["urban"]["residential"]),
         "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
         "infra": min(1.0, 2.0 * s["dedicated_cycleway"]),
-        "flow": 1.0 - min(1.0, 2.0 * l.overlap + 0.15 * l.u_turns),
+        "flow": 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap + 0.15 * l.u_turns),
     }
     weights = dict(WEIGHTS)
     if l.signals is not None:
@@ -932,7 +958,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "scenery": (None if l.scenery is None else {
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
-            "score": l.scenery["score"]}),
+            "score": l.scenery["score"], "landcover": l.scenery.get("landcover")}),
         "exit_dense_km": None if l.exit_dense_m is None else round(l.exit_dense_m / 1000.0, 1),
         "score": l.score,
         "pitch": pitch(l, label),
@@ -983,7 +1009,7 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "4"
+GENERATOR_VERSION = "5"   # 5 : O-15 (landcover, tronçons répétés facteur 1), 25/09/2026
 
 
 def compare_block(options: list) -> dict:
@@ -1034,6 +1060,7 @@ def params_hash(config_dir: str = "config") -> str:
     Deux générations avec la même empreinte produisent les mêmes boucles pour un même départ (aux données OSM près)."""
     import hashlib
     consts = {"version": GENERATOR_VERSION, "levels": LEVELS, "candidates": CANDIDATES, "weights": WEIGHTS,
+              "flow_overlap": FLOW_OVERLAP_FACTOR,
               "tol": TIME_TOLERANCE, "overlap": MAX_OVERLAP, "unpaved": MAX_UNPAVED, "uturns": MAX_UTURNS,
               "signal": [SIGNAL_DELAY_S, SIGNAL_RADIUS_M, SIGNAL_CLUSTER_M, LIGHTS_PER_KM_ZERO_SCORE],
               "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
