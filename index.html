@@ -5,51 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>velo-loops</title>
   <link href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" rel="stylesheet">
+  <link href="brand/oyan-tokens.css" rel="stylesheet">
   <style>
+    /* couleurs : uniquement les variables de brand/oyan-tokens.css ; l'argile est réservée au tracé et au bouton GPX */
     html, body { margin: 0; }
-    body { height: 100dvh; display: flex; flex-direction: column; font-family: system-ui, sans-serif; }
+    body { height: 100dvh; display: flex; flex-direction: column; font-family: var(--font-sans);
+           background: var(--color-bg); color: var(--color-text); }
+    a { color: var(--color-text); }
+    input, select { font: inherit; font-size: 16px; padding: 8px; color: var(--color-text); background: var(--color-surface);
+                    border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+    .btn { font: inherit; font-size: 16px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer;
+           background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-text); }
+    .btn-accent { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
     #search { display: flex; gap: 6px; padding: 8px 8px 0; }
-    #addr { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
-    #search button { font-size: 16px; padding: 8px 12px; border: 0; border-radius: 8px; background: #e8590c; color: #fff; }
-    #search button#me { background: #1c7ed6; }
+    #addr { flex: 1; min-width: 0; }
     #results { padding: 0 8px; }
-    #results button { display: block; width: 100%; text-align: left; font-size: 15px; padding: 8px; margin-top: 4px;
-                      border: 1px solid #ccc; border-radius: 8px; background: #fff; }
-    #geoattr { display: block; color: #666; padding: 4px 8px 0; }
+    #results button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 8px; margin-top: 4px;
+                      color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+    #geoattr { display: block; color: var(--color-text-2); padding: 4px 8px 0; }
     #controls { display: flex; gap: 8px; padding: 8px; }
-    #controls select { flex: 1; min-width: 0; font-size: 16px; padding: 8px; }
+    #controls select { flex: 1; min-width: 0; }
+    #durlabel { padding: 0 8px; font-size: 13px; color: var(--color-text-2); }
+    #totalApproach { padding: 0 8px 6px; font-size: 14px; color: var(--color-text-2); }
     #where { padding: 0 8px 6px; line-height: 1.4; }
-    #where button { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; border: 0; border-radius: 8px; background: #6b7280; color: #fff; }
-    .warn { color: #b45309; }
+    #where .btn { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; }
+    .warn { font-weight: 500; }
+    .warn::before { content: '⚠️ '; }
     #adv { padding: 0 8px 6px; }
-    #adv select { width: 100%; font-size: 16px; padding: 8px; margin-top: 6px; }
+    #adv select { width: 100%; margin-top: 6px; }
     #map { flex: 0 0 38%; }
     #list { flex: 1; overflow: auto; padding: 8px; }
-    .card { border: 2px solid #ddd; border-radius: 10px; padding: 10px; margin-bottom: 8px; line-height: 1.5; }
-    .card.active { border-color: #e8590c; }
-    .card small { color: #555; }
+    .card { background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-md);
+            padding: 10px; margin-bottom: 8px; line-height: 1.5; }
+    .card.active { border-color: var(--color-text); }
+    .card small { color: var(--color-text-2); }
     .pitch { margin: 8px 0; padding-left: 18px; }
     .facts, .climbs { font-size: 14px; }
     .climbs { margin: 6px 0; padding-left: 18px; }
-    .badge { display: inline-block; font-size: 13px; background: #fff3e0; color: #b45309; padding: 2px 6px; border-radius: 6px; }
+    .badge { display: inline-block; font-size: 13px; background: var(--color-border); color: var(--color-text); padding: 2px 6px; border-radius: 6px; }
     .city { font-size: 14px; margin: 6px 0; }
-    #legal { padding: 0 8px 4px; font-size: 12px; color: #888; }
-    #legal a { color: #888; }
+    .city .btn { font-size: 14px; padding: 4px 8px; }
+    .other-dur { font-size: 15px; padding: 6px 10px; margin: 6px 6px 0 0; }
+    .gpx { margin: 8px 0; padding: 10px 14px; }
+    #legal { padding: 0 8px 4px; font-size: 12px; color: var(--color-text-2); }
+    #legal a { color: var(--color-text-2); }
   </style>
 </head>
 <body>
   <div id="search">
     <input id="addr" type="search" placeholder="Adresse de départ (rue, ville…)" enterkeyhint="search" autocomplete="off">
-    <button id="go" type="button">Chercher</button>
-    <button id="me" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">📍</button>
+    <button id="go" class="btn" type="button">Chercher</button>
+    <button id="me" class="btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">📍</button>
   </div>
   <div id="results"></div>
   <div id="controls">
     <select id="level"></select>
     <select id="duration" aria-label="Durée de la boucle"></select>
   </div>
-  <div id="durlabel" style="padding:0 8px;font-size:13px;color:#666">Durée de la boucle</div>
-  <div id="totalApproach" style="padding:0 8px 6px;font-size:14px;color:#555"></div>
+  <div id="durlabel">Durée de la boucle</div>
+  <div id="totalApproach"></div>
   <div id="where">Saisissez une adresse, touchez la carte ou utilisez votre position.</div>
   <details id="adv"><summary>Choisir un départ dans la liste</summary><select id="start"></select></details>
   <div id="legal">Parcours indicatifs, à vérifier avant de partir · <a href="mentions.html" target="_blank" rel="noopener">Mentions légales &amp; confidentialité</a></div>
@@ -226,7 +240,7 @@
 
       if (med > 30) {
         whereEl.innerHTML = '<span class="warn">Trop loin : le départ le plus proche est à ≈ ' + med + ' min à vélo' + range +
-          '.</span><br>Départ : <b>' + name + '</b><br><button type="button" id="see">Voir quand même</button>' +
+          '.</span><br>Départ : <b>' + name + '</b><br><button type="button" class="btn" id="see">Voir quand même</button>' +
           ' <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>';
         document.getElementById('see').onclick = () => chooseStart(s.id);
         map.fitBounds(new maplibregl.LngLatBounds([lon, lat], [s.lon, s.lat]), { padding: 60, duration: 500 });
@@ -323,7 +337,7 @@
         list.innerHTML = 'Non disponible : pas de trajet de ' + hm(Number(durSel.value) * 60) + ' (' +
           esc(levelSel.options[levelSel.selectedIndex].text) + ') depuis ce départ.' +
           (avail.length ? '<br>Autre durée possible : ' + avail.map(m =>
-            '<button type="button" data-min="' + m + '" style="font-size:15px;padding:6px 10px;margin:6px 6px 0 0;border:0;border-radius:8px;background:#e8590c;color:#fff">' +
+            '<button type="button" class="btn other-dur" data-min="' + m + '">' +
             hm(m) + '</button>').join('') : '<br>Essayez un autre niveau.');
         list.querySelectorAll('button[data-min]').forEach(b => {
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
@@ -355,7 +369,7 @@
       } else if (o.exit_dense_km == null || o.exit_dense_km >= o.distance_km - 0.05) {
         const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
         cityLine = 'Depuis ici, une sortie de ' + hm(o.time_est_min) + ' reste en ville.' +
-          (hasLonger ? ' <button type="button" onclick="nextDuration()" style="font-size:14px;padding:4px 8px;border:0;border-radius:6px;background:#6b7280;color:#fff">Essayer plus long</button>' : '');
+          (hasLonger ? ' <button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button>' : '');
       } else {
         cityLine = 'Sort de la ville après ' + km(o.exit_dense_km) + ' km.';
       }
@@ -376,7 +390,7 @@
           ${steepBadge ? '<br><span class="badge">⚠️ Au moins une rampe très raide</span>' : ''}
         </div>
         <ul class="climbs">${climbs}</ul>
-        <button onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)" style="font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 0">Télécharger le GPX</button><br>
+        <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button><br>
         ${feedbackHtml(o)}
         <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
     }

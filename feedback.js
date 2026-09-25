@@ -17,8 +17,10 @@ document.head.insertAdjacentHTML('beforeend', '<style>' +
   '.fb label{display:block;margin:6px 0}' +
   '.fb label.chip{display:inline-block;margin:2px 10px 2px 0}' +
   '.fb select,.fb input[type=number],.fb input[type=text]{font-size:16px;padding:6px;width:100%;box-sizing:border-box}' +
-  '.fb button{font-size:16px;padding:10px 14px;border:0;border-radius:8px;background:#e8590c;color:#fff;margin:8px 8px 8px 0}' +
-  '.fb button.sec{background:#6b7280}' +
+  // boutons secondaires (charte Oyan : l'argile est réservée au bouton GPX)
+  '.fb button{font:inherit;font-size:16px;padding:10px 14px;border:1px solid var(--color-text);border-radius:var(--radius-sm);' +
+  'background:var(--color-surface);color:var(--color-text);margin:8px 8px 8px 0;cursor:pointer}' +
+  '.fb button.sec{border-color:var(--color-border);color:var(--color-text-2)}' +
   '</style>');
 
 function fbLoad() {

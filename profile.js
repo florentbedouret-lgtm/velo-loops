@@ -51,11 +51,12 @@ function profileSvg(o) {
   const line = 'M' + pts.join(' L');
   const area = line + ' L' + x(p.total).toFixed(1) + ',' + y(lo).toFixed(1) +
     ' L' + x(0).toFixed(1) + ',' + y(lo).toFixed(1) + ' Z';
-  const txt = 'font-size="10" fill="#555" font-family="system-ui, sans-serif"';
+  // couleurs de brand/oyan-tokens.css : argile (comme le tracé), galet (texte), filet (axe)
+  const txt = 'font-size="10" fill="#625D55" font-family="system-ui, sans-serif"';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique">
-    <path d="${area}" fill="#e8590c" fill-opacity="0.18"/>
-    <path d="${line}" fill="none" stroke="#e8590c" stroke-width="1.5" stroke-linejoin="round"/>
-    <line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" stroke="#bbb"/>
+    <path d="${area}" fill="#A8522F" fill-opacity="0.15"/>
+    <path d="${line}" fill="none" stroke="#A8522F" stroke-width="1.5" stroke-linejoin="round"/>
+    <line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" stroke="#E6E2DB"/>
     <text x="${mL - 4}" y="${mT + 8}" text-anchor="end" ${txt}>${hi} m</text>
     <text x="${mL - 4}" y="${H - mB}" text-anchor="end" ${txt}>${lo} m</text>
     <text x="${mL}" y="${H - 6}" ${txt}>0</text>
