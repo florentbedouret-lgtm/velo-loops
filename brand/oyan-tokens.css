@@ -1,0 +1,48 @@
+:root {
+  /* Couleurs */
+  --oyan-argile:   #A8522F; /* accent unique */
+  --oyan-basalte:  #24221F;
+  --oyan-galet:    #625D55;
+  --oyan-chaux:    #F6F4F0;
+  --oyan-surface:  #FFFFFF;
+  --oyan-filet:    #E6E2DB;
+
+  /* Répartition du terrain (barre de boucle) */
+  --oyan-terrain-ville:    #3A3F3B;
+  --oyan-terrain-foret:    #6E7A5A;
+  --oyan-terrain-eau:      #8FA3AB;
+  --oyan-terrain-campagne: #D4C3A3;
+
+  /* Rôles */
+  --color-bg:        var(--oyan-chaux);
+  --color-surface:   var(--oyan-surface);
+  --color-text:      var(--oyan-basalte);
+  --color-text-2:    var(--oyan-galet);
+  --color-border:    var(--oyan-filet);
+  --color-accent:    var(--oyan-argile);
+  --color-on-accent: #FFFFFF;
+
+  /* Tracé carte */
+  --route-color:  var(--oyan-argile);
+  --route-width:  4.5px;
+  --route-casing: #FFFFFF;
+  --route-casing-width: 8.5px; /* tracé + 2 × 2 px */
+
+  /* Typographie */
+  --font-sans: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --fw-light:   300;
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fs-hero:  48px; /* distance */
+  --fs-h1:    26px;
+  --fs-h2:    18px;
+  --fs-body:  15px;
+  --fs-small: 13px;
+  --fs-label: 10px; /* mono, capitales, espacement .12em */
+
+  /* Formes */
+  --radius-sm:    8px;
+  --radius-md:    12px;
+  --radius-sheet: 20px;
+}

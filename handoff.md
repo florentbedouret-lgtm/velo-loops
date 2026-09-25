@@ -76,6 +76,7 @@ Une web app qui aide un cycliste amateur à **découvrir où s'entraîner** : il
 ```
 velo-loops/
 ├── .github/workflows/build-loops.yml   # unique workflow (8 modes : plan/detour/pilot/full/site/...)
+├── brand/                              # logos, icônes, favicons, oyan-tokens.css (charte Oyan v1, D19)
 ├── config/                             # région, config GraphHopper, modèles de routage
 ├── scripts/                            # pipeline Python réel : plan_starts, generate_loops,
 │                                        #   measure_detour, build_approach_model, fetch_published…
@@ -119,7 +120,7 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
   4. ✅ `.gitignore` ajouté ; `web/data/` retiré du suivi Git (fichiers gardés sur le disque de Florent, juste plus committés). **`web/data/approach_model.json` supprimé aussi** (copie redondante sans usage réel — c'est elle qui a causé la confusion du point 1 ; il n'y a plus qu'un seul exemplaire, `web/approach_model.json`).
   **Leçon retenue** : après toute action affectant le site publié, vérifier le résultat avec un en-tête `Last-Modified`/`X-Cache` (`curl -I`), pas seulement le contenu — un contenu qui semble correct peut venir d'un déploiement antérieur non encore remplacé par la CDN.
 - [ ] **O-9 — Identité Oyan** — nom (D18) et identité visuelle v1 « Argile » (D19) actés et consignés dans `docs/brand.md` §12-13 le 25/09/2026. Reste à faire :
-  1. Verser les exports (SVG, PNG, `oyan-tokens.css`) dans un dossier `brand/` du dépôt — **jamais les images du moodboard** (droits non vérifiés).
+  1. ✅ Exports versés dans `brand/` le 25/09/2026 (10 SVG, 13 PNG, `oyan-tokens.css`, `logo-paths.json`, `README.md`) — sans le moodboard ni les maquettes HTML. Métadonnées C2PA conservées dans ces originaux.
   2. Appliquer la charte à l'app (`index.html`, `mentions.html`) : titre « Oyan », favicon, couleurs, polices hébergées dans le dépôt (pas Google Fonts), tracé argile avec liseré blanc, neutre pour les boucles non sélectionnées. Rôle : dev front / UX. Tester sur le site publié.
   3. Tester la lisibilité du logo à 16 px (risque de lecture « Cyan »).
   4. Vérifier si le pipeline calcule les % ville/forêt/eau/campagne avant d'afficher la barre de terrain (expert dev).
@@ -151,3 +152,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | 23/09/2026 | Dev / Architecte | O-3 terminée : durées 0,75/1/1,5/2/3/4 h générées et publiées (run #44, 889 départs, 219 min/300, reuse inefficace ici) ; vérifié en direct | Choisir la prochaine tâche (O-4 à O-7 restants, ou nouvelle priorité) |
 | 23/09/2026 | Dev / Architecte | Diagnostic pente (`slope_check`, run manuel, 59 boucles) : confirme le choix du lissage 500 m et l'absence de % affiché (D17) ; seuil du badge gardé à 20 %. `reuse` corrigé pour fonctionner par durée (pas encore validé sur un run réel) ; estimateur `plan_starts.py` recalé sur les mesures | Validation terrain du POC (reste bloquée côté Florent) ; identité/nom si besoin |
 | 25/09/2026 | Branding / DA | Nom Oyan (D18) et identité visuelle v1 « Argile » (D19) consignés dans `docs/brand.md` §12-13, à partir de l'export Claude Design ; `.claude/` ajouté au `.gitignore` | O-9 : verser les exports dans `brand/`, puis appliquer la charte à l'app |
+| 25/09/2026 | Branding / DA | O-9 étape 1 : dossier `brand/` créé (logos, icônes, favicons, tokens CSS), sans images du moodboard ; §3.7 complété (accord de Florent) | O-9 étape 2 : appliquer la charte à l'app (rôle dev front / UX) |
