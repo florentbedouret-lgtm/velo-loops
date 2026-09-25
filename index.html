@@ -46,6 +46,11 @@
             padding: 10px; margin-bottom: 8px; line-height: 1.5; }
     .card.active { border-color: var(--color-text); }
     .card small { color: var(--color-text-2); }
+    .card .label { color: var(--color-text-2); }
+    .card .hero { font-weight: var(--fw-light); font-size: var(--fs-hero); line-height: 1.05; margin: 2px 0; }
+    .card .hero .unit { font-size: var(--fs-h2); font-weight: var(--fw-regular); }
+    .card .sub { color: var(--color-text-2); font-size: var(--fs-body); }
+    .card .row { font-size: var(--fs-body); }
     .pitch { margin: 8px 0; padding-left: 18px; }
     .facts, .climbs { font-size: 14px; }
     .climbs { margin: 6px 0; padding-left: 18px; }
@@ -535,14 +540,14 @@
 
       return `
         <ul class="pitch">${pitch}</ul>
-        ${profileSvg(o)}
-        ${cityLine ? '<p class="city">' + cityLine + '</p>' : ''}
         ${steepBadge ? '<p><span class="badge">⚠️ Au moins une rampe très raide</span></p>' : ''}
+        ${profileSvg(o)}
+        <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button>
+        ${cityLine ? '<p class="city">' + cityLine + '</p>' : ''}
         <details class="facts"><summary>Tous les chiffres</summary>
           <ul class="pitch">${facts}</ul>
           ${climbs ? '<ul class="climbs">' + climbs + '</ul>' : ''}
         </details>
-        <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button><br>
         ${feedbackHtml(o)}
         <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
     }
@@ -555,10 +560,12 @@
         : '';
       list.innerHTML = shown.map((o, k) => `
         <div class="card ${k === current ? 'active' : ''}" data-i="${k}">
-          <b>${LABELS[o.label] || o.label}</b><br>
-          ${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m<br>
-          <small>≈ ${hm(o.time_est_min)} · ${km(o.distance_km / (o.time_est_min / 60))} km/h · en ville ${Math.round(o.shares.urban.city * 100)} %</small>
-          ${k === current ? detailHtml(o) : ''}
+          <div class="label">${LABELS[o.label] || o.label}</div>
+          ${k === current
+            ? `<div class="hero">${km(o.distance_km)} <span class="unit">km</span></div>
+               <div class="sub">D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)} · en ville ${Math.round(o.shares.urban.city * 100)} %</div>
+               ${detailHtml(o)}`
+            : `<div class="row">${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)}</div>`}
         </div>`).join('');
       list.querySelector('.card.active').scrollIntoView({ block: 'nearest' });
       map.getSource('cursor').setData(EMPTY);
