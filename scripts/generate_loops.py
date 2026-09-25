@@ -71,7 +71,7 @@ SCENERY_FOREST_DEG, SCENERY_WATER_DEG, SCENERY_PROTECTED_DEG, SCENERY_VIEW_DEG =
 UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand"}
 COBBLES = {"cobblestone", "sett", "paving_stones"}
 ASPHALT = {"asphalt", "concrete", "paved"}
-DETAILS = ["road_class", "surface", "urban_density", "bike_network"]
+DETAILS = ["road_class", "surface", "urban_density", "bike_network", "bike_road_access"]
 
 
 # --------------------------------------------------------------------------- géométrie
@@ -639,7 +639,12 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     city, resid, rural = frac(urban, ["city"]), frac(urban, ["residential"]), frac(urban, ["rural"])
     shares = {
         "urban": {"rural": rural, "residential": resid, "city": city},
-        "dedicated_cycleway": frac(rclass, ["cycleway"]),
+        # pistes cyclables + voies vertes (chemin piéton ou sentier où le vélo est autorisé ou réservé, ex. Parc
+        # Fluvial del Besòs) : ce que les profils loop_calm / loop_sport préfèrent depuis O-15
+        "dedicated_cycleway": (sum(m for (rc, ba), m in joint_meters(det.get("road_class"), det.get("bike_road_access"),
+                                                                      cum).items()
+                                   if rc == "cycleway" or (rc in ("footway", "path") and ba in ("yes", "designated")))
+                               / total),
         "bike_network": 1.0 - frac(net, ["missing"]) if net else 0.0,
         "main_roads": frac(rclass, ["primary", "trunk", "secondary"]),
         "unpaved": frac(surf, list(UNPAVED)),

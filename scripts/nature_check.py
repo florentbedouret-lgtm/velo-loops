@@ -156,6 +156,7 @@ def summary(loop):
             "lights_per_km": round(loop.signals / max(loop.distance_m / 1000.0, 0.1), 2) if loop.signals is not None else None,
             "unpaved_pct": round(100 * loop.shares["unpaved"]),
             "score_v2": score_v2(loop),
+            "cycleway_pct": round(100 * loop.shares["dedicated_cycleway"]),
             "main_roads_pct": round(100 * loop.shares["main_roads"]),
             "main_roads_rural_pct": round(100 * loop.shares.get("main_roads_by_urban", {}).get("rural", 0.0)),
             # points de note apportés par chaque critère (somme = note hors pénalité non goudronné)
@@ -299,7 +300,8 @@ def report_references(results, path_json, path_md, note, t0):
             return "—"
         ex_ = x["exit_dense_km"] if x["exit_dense_km"] is not None else "jamais"
         return (f"{x['km']} km · {x['min']} min · D+ {x['dplus_m']} · ville {x['city_pct']} % · sortie {ex_} · forêt "
-                f"{x['forest_pct']} % · grandes routes {x['main_roads_pct']} % · répété {x['overlap_pct']} % · "
+                f"{x['forest_pct']} % · pistes et voies vertes {x['cycleway_pct']} % · grandes routes {x['main_roads_pct']} % · "
+                f"répété {x['overlap_pct']} % · "
                 f"non goudronné {x['unpaved_pct']} %")
     L = [f"# Diagnostic O-12 v5 : calibrage sur {len(results)} boucles de référence ({len(cases)} cas, "
          f"{round((time.time() - t0) / 60)} min)", (f"\n**Réglage de ce run : {note}**" if note else ""),
@@ -307,6 +309,14 @@ def report_references(results, path_json, path_md, note, t0):
          "| Pondération | Référence gagnante |", "|---|---|"]
     for v, n in wins.items():
         L.append(f"| {v} | {n} / {len(cases)} |")
+    def med(key, who):
+        v = sorted((lv["ref"] if who == "ref" else lv["variants"]["actuel"]["A_loop"])[key] for _, lv in cases
+                   if lv["variants"]["actuel"]["A_loop"])
+        return v[len(v) // 2] if v else None
+    L += ["\n## Profils médians (référence / Oyan)", "| Mesure | Référence | Oyan |", "|---|---|---|"]
+    for key, lab in (("cycleway_pct", "pistes et voies vertes %"), ("city_pct", "en ville %"), ("forest_pct", "forêt %"),
+                     ("main_roads_pct", "grandes routes %"), ("overlap_pct", "répété %"), ("dplus_m", "D+ m")):
+        L.append(f"| {lab} | {med(key, 'ref')} | {med(key, 'A')} |")
     L += ["\n## Écart moyen de points référence − Oyan par critère (score actuel ; négatif = la référence perd)",
           "| Critère | Δ points |", "|---|---|"]
     for k, v in deltas.items():
