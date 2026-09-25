@@ -67,6 +67,9 @@
       variante: 'Variante'
     };
     const EMPTY = { type: 'FeatureCollection', features: [] };
+    // couleurs de la carte, reprises de brand/oyan-tokens.css (MapLibre ne lit pas les variables CSS)
+    const ROUTE = { color: '#A8522F', width: 4.5, casing: '#FFFFFF', casingWidth: 8.5,
+                    other: '#625D55', otherWidth: 3, start: '#A8522F', user: '#24221F' };
 
     const startSel = document.getElementById('start');
     const levelSel = document.getElementById('level');
@@ -198,7 +201,7 @@
     let approachMin = null; // temps d'approche connu pour le départ actuellement choisi (null si choisi dans la liste)
     function setPosition(lon, lat) {
       if (userMarker) userMarker.remove();
-      userMarker = new maplibregl.Marker({ color: '#1c7ed6' }).setLngLat([lon, lat]).addTo(map);
+      userMarker = new maplibregl.Marker({ color: ROUTE.user }).setLngLat([lon, lat]).addTo(map);
       const { s, km } = nearestStart(lon, lat);
       const name = esc(s.display_name || s.name) + stationNote(s.kind);
       pendingStart = s.id;
@@ -260,15 +263,18 @@
       durSel.value = '2';
       durSel.onchange = showLevel;
 
+      // tracé Oyan : boucle choisie en argile avec liseré blanc, les autres en galet ; le tout sous les noms de lieux
       map.addSource('routes', { type: 'geojson', data: EMPTY });
-      map.addLayer({
-        id: 'routes', type: 'line', source: 'routes',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: {
-          'line-color': ['case', ['get', 'selected'], '#e8590c', '#7a8fa6'],
-          'line-width': ['case', ['get', 'selected'], 5, 3]
-        }
-      });
+      const labels = map.getStyle().layers.find(l => l.type === 'symbol');
+      const beforeId = labels ? labels.id : undefined;
+      const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
+      const isSel = ['get', 'selected'];
+      map.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['!', isSel], layout: lineLayout,
+        paint: { 'line-color': ROUTE.other, 'line-width': ROUTE.otherWidth, 'line-opacity': 0.7 } }, beforeId);
+      map.addLayer({ id: 'routes-casing', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
+        paint: { 'line-color': ROUTE.casing, 'line-width': ROUTE.casingWidth } }, beforeId);
+      map.addLayer({ id: 'routes', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
+        paint: { 'line-color': ROUTE.color, 'line-width': ROUTE.width } }, beforeId);
 
       startSel.onchange = () => {
         const entry = indexData.starts.find(x => x.id === startSel.value);
@@ -301,7 +307,7 @@
       if (!res.ok) { list.textContent = 'Erreur de chargement (' + res.status + ')'; return; }
       startData = await res.json();
       if (marker) marker.remove();
-      marker = new maplibregl.Marker({ color: '#e8590c' })
+      marker = new maplibregl.Marker({ color: ROUTE.start })
         .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
       showLevel();
     }
