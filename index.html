@@ -50,6 +50,11 @@
     .card .hero .unit { font-size: var(--fs-h2); font-weight: var(--fw-regular); }
     .card .sub { color: var(--color-text-2); font-size: var(--fs-body); }
     .card .row { font-size: var(--fs-body); }
+    /* barre de terrain (charte §13.2 : couleurs terrain réservées à cette barre) */
+    .terrain { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 4px; }
+    .terrain span { display: block; height: 100%; }
+    .terrain-legend { color: var(--color-text-2); margin-bottom: 6px; }
+    .terrain-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 4px 0 0; }
     .pitch { margin: 8px 0; padding-left: 18px; }
     .facts, .climbs { font-size: 14px; }
     .climbs { margin: 6px 0; padding-left: 18px; }
@@ -518,6 +523,22 @@
       return L;
     }
 
+    // ---------- O-9.4 : barre de terrain (répartition ville / eau / forêt / campagne calculée par le pipeline, 100 %)
+    // affichée seulement si la donnée existe (scenery.landcover, générateur v5 et suivants)
+    const TERRAIN = [['city', 'ville', '--oyan-terrain-ville'], ['forest', 'forêt', '--oyan-terrain-foret'],
+                     ['water', 'eau', '--oyan-terrain-eau'], ['countryside', 'campagne', '--oyan-terrain-campagne']];
+    const cityShare = o => (o.scenery && o.scenery.landcover) ? o.scenery.landcover.city : o.shares.urban.city;
+    function terrainBar(o) {
+      const lc = o.scenery && o.scenery.landcover;
+      if (!lc) return '';
+      const parts = TERRAIN.filter(([k]) => lc[k] > 0);
+      return '<div class="terrain" role="img" aria-label="Répartition du terrain : ' +
+        parts.map(([k, lab]) => lab + ' ' + pc(lc[k])).join(', ') + '">' +
+        parts.map(([k, , v]) => '<span style="width:' + (lc[k] * 100).toFixed(1) + '%;background:var(' + v + ')"></span>').join('') +
+        '</div><div class="terrain-legend label">' +
+        parts.map(([k, lab, v]) => '<i style="background:var(' + v + ')"></i>' + lab + ' ' + pc(lc[k])).join(' · ') + '</div>';
+    }
+
     // détail affiché sous la carte sélectionnée
     function detailHtml(o) {
       const pitch = pitchLines(o).map(p => '<li>' + esc(p) + '</li>').join('');
@@ -538,6 +559,7 @@
       const steepBadge = o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20;
 
       return `
+        ${terrainBar(o)}
         <ul class="pitch">${pitch}</ul>
         ${steepBadge ? '<p><span class="badge">⚠️ Au moins une rampe très raide</span></p>' : ''}
         ${profileSvg(o)}
@@ -562,7 +584,7 @@
           <div class="label">${LABELS[o.label] || o.label}</div>
           ${k === current
             ? `<div class="hero">${km(o.distance_km)} <span class="unit">km</span></div>
-               <div class="sub">D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)} · en ville ${Math.round(o.shares.urban.city * 100)} %</div>
+               <div class="sub">D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)} · en ville ${Math.round(cityShare(o) * 100)} %</div>
                ${detailHtml(o)}`
             : `<div class="row">${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)}</div>`}
         </div>`).join('');
