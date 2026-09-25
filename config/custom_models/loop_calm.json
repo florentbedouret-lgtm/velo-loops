@@ -6,8 +6,8 @@
     { "if": "road_class == PRIMARY", "multiply_by": "0.35" },
     { "else_if": "road_class == SECONDARY", "multiply_by": "0.7" },
     { "if": "bike_network != MISSING", "multiply_by": "1.1" },
-    { "if": "road_class == CYCLEWAY", "multiply_by": "1.3" },
-    { "else_if": "(road_class == FOOTWAY || road_class == PATH) && (bike_road_access == YES || bike_road_access == DESIGNATED)", "multiply_by": "1.3" }
+    { "if": "urban_density == CITY && (road_class == CYCLEWAY || ((road_class == FOOTWAY || road_class == PATH) && (bike_road_access == YES || bike_road_access == DESIGNATED)))", "multiply_by": "1.1" },
+    { "else_if": "road_class == CYCLEWAY || ((road_class == FOOTWAY || road_class == PATH) && (bike_road_access == YES || bike_road_access == DESIGNATED))", "multiply_by": "1.3" }
   ],
   "speed": [
     { "if": "(road_class == FOOTWAY || road_class == PATH) && (bike_road_access == YES || bike_road_access == DESIGNATED)", "multiply_by": "1.5" }
