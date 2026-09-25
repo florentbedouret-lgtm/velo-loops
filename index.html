@@ -125,6 +125,11 @@
     // sans commune (données plus anciennes) : « Ville la plus proche · lieu » pour les départs intermédiaires
     function startLabel(s) {
       const m = s.municipality;
+      if (m && s.kind === 'station') {                 // « Gare Calella » -> « Calella · Gare », « Gare Granollers Centre » -> « Granollers · Gare Centre »
+        let rest = s.name.replace(/^Gare\s+/, '');
+        if (fold(rest).startsWith(fold(m))) rest = rest.slice(m.length).replace(/^[\s\-–|]+/, '');
+        return m + ' · Gare' + (rest ? ' ' + rest : '');
+      }
       if (m) return s.name === m || fold(s.name).includes(fold(m)) ? s.name : m + ' · ' + s.name;
       const near = /^Près de (.+)$/.exec(s.display_name || '');
       return near ? near[1] + ' · ' + s.name : (s.display_name || s.name);
