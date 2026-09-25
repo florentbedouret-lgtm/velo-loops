@@ -947,13 +947,14 @@ def load_starts(places_path: Path, names: list[str] | None, bbox, max_starts: in
 
 
 def load_starts_file(path: Path, bbox=None) -> list[dict]:
-    """Départs fournis par un fichier JSON [{name, lon, lat, kind?}] (ex. produit par plan_starts.py)."""
+    """Départs fournis par un fichier JSON [{name, lon, lat, kind?, key?}] (plan_starts.py ou published_starts.py)."""
     out = []
     for e in json.loads(path.read_text(encoding="utf-8")):
         if bbox and not (bbox[0] <= e["lon"] <= bbox[2] and bbox[1] <= e["lat"] <= bbox[3]):
             continue
         out.append({"name": e["name"], "lon": e["lon"], "lat": e["lat"], "kind": e.get("kind", "place"),
-                    "zone": e.get("zone"), "display_name": e.get("display_name"), "municipality": e.get("municipality")})
+                    "zone": e.get("zone"), "display_name": e.get("display_name"), "municipality": e.get("municipality"),
+                    "key": e.get("key")})
     return out
 
 
@@ -990,6 +991,12 @@ def start_key(lon: float, lat: float) -> str:
     """Clé stable d'un départ (coordonnées arrondies à ~10 m) : permet de réutiliser des résultats entre générations."""
     import hashlib
     return hashlib.sha1(f"{lon:.4f},{lat:.4f}".encode()).hexdigest()[:10]
+
+
+def st_key(st: dict) -> str:
+    """Clé d'un départ : celle fournie par le fichier de départs (départs déjà publiés, published_starts.py : leurs
+    lon/lat publiés sont recalés sur la route, la clé d'origine vient de la position du plan), sinon calculée."""
+    return st.get("key") or start_key(st["lon"], st["lat"])
 
 
 PARAMS_HASH = ""
@@ -1061,7 +1068,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     if BUDGET_END is not None and time.time() > BUDGET_END:
         log(f"- {st['name']} : ignoré (budget de temps épuisé)")
         return None, buf, 0.0
-    key0 = start_key(st["lon"], st["lat"])
+    key0 = st_key(st)
     options: list = []
     reused_entry = None
     missing_durations = list(durations)
@@ -1131,7 +1138,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         key = f"{o['duration_target_min'] / 60:g}"
         by_dur[key] = by_dur.get(key, 0) + 1
     entry = {"id": sid, "name": st["name"], "lon": payload["start"]["lon"], "lat": payload["start"]["lat"],
-             "kind": st.get("kind", "place"), "zone": st.get("zone"), "key": start_key(st["lon0"], st["lat0"]),
+             "kind": st.get("kind", "place"), "zone": st.get("zone"), "key": key0,
              **({"display_name": st["display_name"]} if st.get("display_name") else {}),
              **({"municipality": st["municipality"]} if st.get("municipality") else {}),
              "options": len(options), "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur,
@@ -1424,7 +1431,7 @@ def main() -> int:
     ids = []
     reserved = {}
     for st in starts:                                   # un départ réutilisé garde l'identifiant de la génération précédente
-        old = reuse_candidate(start_key(st["lon"], st["lat"]), levels)
+        old = reuse_candidate(st_key(st), levels)
         if old is not None:
             reserved[id(st)] = old["id"]
     taken = set(reserved.values())
