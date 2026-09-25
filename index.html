@@ -14,8 +14,7 @@
   <style>
     /* couleurs : uniquement les variables de brand/oyan-tokens.css ; l'argile est réservée au tracé et au bouton GPX */
     html, body { margin: 0; }
-    body { height: 100dvh; display: flex; flex-direction: column; font-family: var(--font-sans);
-           background: var(--color-bg); color: var(--color-text); }
+    body { font-family: var(--font-sans); background: var(--color-bg); color: var(--color-text); }
     a { color: var(--color-text); }
     b, strong { font-weight: var(--fw-medium); } /* charte : pas de typographie grasse */
     .label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
@@ -40,10 +39,10 @@
     .warn::before { content: '⚠️ '; }
     #adv { padding: 0 8px 6px; }
     #adv select, #adv input { width: 100%; box-sizing: border-box; margin-top: 6px; }
-    #map { flex: 0 0 38%; }
-    #list { flex: 1; overflow: auto; padding: 8px; }
+    #map { position: sticky; top: 0; z-index: 2; height: 38vh; height: 38dvh; }
+    #list { padding: 8px; }
     .card { background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-md);
-            padding: 10px; margin-bottom: 8px; line-height: 1.5; }
+            padding: 10px; margin-bottom: 8px; line-height: 1.5; scroll-margin-top: calc(38dvh + 8px); }
     .card.active { border-color: var(--color-text); }
     .card small { color: var(--color-text-2); }
     .card .label { color: var(--color-text-2); }
@@ -354,7 +353,7 @@
       levelSel.onchange = showLevel;
       list.onclick = e => {
         const card = e.target.closest('.card');
-        if (card && Number(card.dataset.i) !== current) select(Number(card.dataset.i));
+        if (card && Number(card.dataset.i) !== current) select(Number(card.dataset.i), true);
       };
       document.getElementById('go').onclick = searchAddress;
       addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
@@ -552,7 +551,7 @@
         <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
     }
 
-    function select(i) {
+    function select(i, scroll = false) {
       current = i;
       const totalEl = document.getElementById('totalApproach');
       totalEl.textContent = approachMin != null
@@ -567,7 +566,7 @@
                ${detailHtml(o)}`
             : `<div class="row">${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)}</div>`}
         </div>`).join('');
-      list.querySelector('.card.active').scrollIntoView({ block: 'nearest' });
+      if (scroll) list.querySelector('.card.active').scrollIntoView({ block: 'start', behavior: 'smooth' });
       map.getSource('cursor').setData(EMPTY);
       const pf = list.querySelector('.card.active svg.pf');
       if (pf) bindProfile(pf, pos => map.getSource('cursor').setData(pos
