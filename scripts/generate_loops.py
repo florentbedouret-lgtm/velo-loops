@@ -1085,6 +1085,15 @@ def reuse_candidate(key: str, levels):
     return old if age <= REUSE["max_age_days"] else None
 
 
+def start_alt(options) -> dict:
+    """Altitude du départ (m), lue au premier point des boucles (O-14 : temps d'approche entre départs voisins)."""
+    for o in options:
+        c = o.get("coords") or []
+        if c and len(c[0]) > 2:
+            return {"alt_m": round(c[0][2])}
+    return {}
+
+
 def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates, out: Path):
     """Calcule toutes les options d'un départ. Retourne (entrée d'index ou None, lignes de journal, secondes)."""
     t0 = time.time()
@@ -1120,6 +1129,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
                     entry = {**old, "name": st["name"], "kind": st.get("kind", "place"), "zone": st.get("zone"),
                              **({"display_name": st["display_name"]} if st.get("display_name") else {}),
                              **({"municipality": st["municipality"]} if st.get("municipality") else {}),
+                             **start_alt(options),
                              "options": len(options), "durations_h": sorted(float(k) for k in by_dur),
                              "options_by_duration": by_dur, "compare": compare_block(options), "reused": True}
                     log(f"- {st['name']} : réutilisé en entier (calculé le {old['computed_at']})")
@@ -1166,6 +1176,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
              "kind": st.get("kind", "place"), "zone": st.get("zone"), "key": key0,
              **({"display_name": st["display_name"]} if st.get("display_name") else {}),
              **({"municipality": st["municipality"]} if st.get("municipality") else {}),
+             **start_alt(options),
              "options": len(options), "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur,
              "compare": compare_block(options), "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "compute_seconds": round(time.time() - t0, 1), "compute_seconds_by_duration": dur_seconds}
