@@ -71,7 +71,7 @@
   </div>
   <div id="durlabel" class="label">Durée de la boucle</div>
   <div id="totalApproach"></div>
-  <div id="where">Saisissez une adresse, touchez la carte ou utilisez votre position.</div>
+  <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
   <details id="adv"><summary>Choisir un départ dans la liste</summary>
     <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off">
     <select id="start" aria-label="Départ"></select></details>
@@ -214,7 +214,7 @@
 
     async function searchAddress() {
       const q = addr.value.trim();
-      if (q.length < 3) { resultsEl.textContent = 'Saisissez au moins 3 caractères.'; return; }
+      if (q.length < 3) { resultsEl.textContent = 'Tape au moins 3 caractères.'; return; }
       resultsEl.textContent = 'Recherche…';
       try {
         const items = await geocode(q);
@@ -231,7 +231,7 @@
           setPosition(it.lon, it.lat);
         };
       } catch (err) {
-        resultsEl.textContent = 'La recherche d\'adresse est indisponible pour le moment (délai dépassé ou réseau). Touchez la carte ou utilisez votre position.';
+        resultsEl.textContent = 'Recherche d\'adresse indisponible pour l\'instant. Touche la carte ou utilise ta position.';
       }
     }
 
@@ -358,7 +358,7 @@
         whereEl.textContent = 'Localisation…';
         navigator.geolocation.getCurrentPosition(
           p => { addr.value = ''; setPosition(p.coords.longitude, p.coords.latitude); },
-          () => { whereEl.textContent = 'Localisation refusée. Saisissez une adresse ou touchez la carte.'; },
+          () => { whereEl.textContent = 'Localisation refusée. Tape une adresse ou touche la carte.'; },
           { enableHighAccuracy: true, timeout: 15000 });
       };
       map.on('click', e => { addr.value = ''; setPosition(e.lngLat.lng, e.lngLat.lat); });
@@ -385,11 +385,11 @@
       if (!shown.length) {
         const avail = [...new Set(startData.options.filter(o => o.level === levelSel.value)
           .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);
-        list.innerHTML = 'Non disponible : pas de trajet de ' + hm(Number(durSel.value) * 60) + ' (' +
-          esc(levelSel.options[levelSel.selectedIndex].text) + ') depuis ce départ.' +
+        list.innerHTML = 'Pas de boucle de ' + hm(Number(durSel.value) * 60) + ' en « ' +
+          esc(levelSel.options[levelSel.selectedIndex].text) + ' » depuis ce départ.' +
           (avail.length ? '<br>Autre durée possible : ' + avail.map(m =>
             '<button type="button" class="btn other-dur" data-min="' + m + '">' +
-            hm(m) + '</button>').join('') : '<br>Essayez un autre niveau.');
+            hm(m) + '</button>').join('') : '<br>Essaie un autre niveau.');
         list.querySelectorAll('button[data-min]').forEach(b => {
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
         });
@@ -452,41 +452,96 @@
       if (next != null) { durSel.value = String(next); showLevel(); }
     }
 
+    // ---------- O-9.5 : pitch au ton Oyan (brand.md §8), construit ici à partir des mêmes mesures que le pitch du
+    // pipeline (o.pitch, gardé dans les données) : 3 phrases au plus, tout le reste dans « Tous les chiffres ».
+    const pc = f => Math.round(f * 100) + ' %';
+    const km1 = n => (Math.round(n * 10) / 10).toFixed(1).replace('.', ',');
+    function reliefCategory(per100) {                       // mêmes seuils que relief_category() du pipeline
+      return per100 < 500 ? 'plat' : per100 < 1000 ? 'peu vallonné' : per100 < 1600 ? 'vallonné' : 'très vallonné';
+    }
+    function pitchLines(o) {
+      const out = [];
+      const ex = o.exit_dense_km;
+      if (ex === 0) out.push('Tu pars directement hors de la ville.');
+      else if (ex == null || ex >= o.distance_km - 0.05) out.push('Tu restes en ville tout du long.');
+      else out.push('Tu sors de la ville après ' + km1(ex) + ' km.');
+      const sc = o.scenery;
+      if (sc) {                                             // la nature la plus présente, si elle compte vraiment
+        const nature = [['protected', 0.15, ' du parcours traverse un parc ou un espace protégé.'],
+                        ['forest', 0.15, ' du parcours longe la forêt.'],
+                        ['water', 0.05, ' du parcours au bord de l\'eau.']]
+          .filter(([k, min]) => sc[k] >= min).sort((a, b) => sc[b[0]] - sc[a[0]]);
+        if (nature.length) out.push(pc(sc[nature[0][0]]) + nature[0][2]);
+      }
+      const sh = o.shares;
+      if (sh.main_roads > 0.10) out.push(pc(sh.main_roads) + ' sur des routes principales : reste vigilant.');
+      else if (sh.dedicated_cycleway >= 0.20) out.push(pc(sh.dedicated_cycleway) + ' sur pistes cyclables.');
+      else if (o.traffic_lights === 0) out.push('Aucun feu tricolore sur le parcours.');
+      else if (o.terrain.climbs && o.terrain.climbs.length) {
+        const c = o.terrain.climbs[0];
+        out.push('Plus longue montée : ' + km1(c.length_km) + ' km (+' + Math.round(c.gain_m) + ' m).');
+      }
+      return out;
+    }
+    function allFacts(o) {                                  // tous les chiffres mesurés, sans pourcentage de pente (D17)
+      const L = [];
+      const per100 = o.ascend_m / Math.max(o.distance_km, 0.1) * 100;
+      L.push(km1(o.distance_km) + ' km, D+ ' + Math.round(o.ascend_m) + ' m : profil ' + reliefCategory(per100) +
+        ' (' + Math.round(per100) + ' m de D+ pour 100 km).');
+      L.push(pc(o.shares.urban.city) + ' en ville (zone urbaine dense).');
+      if (o.traffic_lights != null) {
+        L.push(o.traffic_lights === 0 ? 'Aucun feu tricolore recensé dans OpenStreetMap.'
+          : o.traffic_lights + ' feux tricolores recensés dans OpenStreetMap (' + km1(o.traffic_lights_per_km || 0) + ' par km).');
+      }
+      const tr = o.terrain;
+      L.push(tr.n_climbs ? tr.n_climbs + ' montée' + (tr.n_climbs > 1 ? 's' : '') + ' de plus de 20 m' +
+        (tr.avg_climb_grade_pct != null ? ' · ' + slopeCategory(tr.avg_climb_grade_pct) : '') + '.'
+        : 'Aucune montée de plus de 20 m d\'un seul tenant.');
+      const sc = o.scenery;
+      if (sc) {
+        if (sc.forest >= 0.05) L.push(pc(sc.forest) + ' dans ou en bordure de forêt.');
+        if (sc.protected >= 0.05) L.push(pc(sc.protected) + ' dans un parc ou un espace protégé.');
+        if (sc.water >= 0.05) L.push(pc(sc.water) + ' à moins de 100 m d\'un plan d\'eau, d\'une rivière ou de la mer.');
+        if (sc.viewpoints >= 1) L.push(sc.viewpoints + ' point' + (sc.viewpoints > 1 ? 's' : '') + ' de vue à moins de 300 m.');
+      }
+      const sh = o.shares;
+      L.push(pc(sh.dedicated_cycleway) + ' sur pistes cyclables ou voies vertes.');
+      L.push(sh.main_roads < 0.01 ? 'Aucune route principale.' : pc(sh.main_roads) + ' sur des routes principales.');
+      if (sh.unpaved > 0.05) L.push(pc(sh.unpaved) + ' sur revêtement non goudronné.');
+      if (o.surface && o.surface.unknown >= 0.3) L.push('Revêtement non renseigné dans OpenStreetMap sur ' + pc(o.surface.unknown) + '.');
+      if (o.overlap > 0.10) L.push(pc(o.overlap) + ' de tronçons empruntés deux fois.');
+      if (o.u_turns) L.push(o.u_turns + ' demi-tour' + (o.u_turns > 1 ? 's' : '') + ' sur le parcours.');
+      return L;
+    }
+
     // détail affiché sous la carte sélectionnée
     function detailHtml(o) {
-      const pct = f => Math.round(f * 100) + ' %';
-      const pitch = (o.pitch || []).map(p => '<li>' + esc(p) + '</li>').join('');
+      const pitch = pitchLines(o).map(p => '<li>' + esc(p) + '</li>').join('');
+      const facts = allFacts(o).map(p => '<li>' + esc(p) + '</li>').join('');
             const climbs = (o.terrain.climbs || []).map(c =>
-        '<li>km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
+        '<li>Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
             // ville : uniquement à partir de exit_dense_km, comparé à la distance réelle (pas de null en pratique)
       let cityLine = '';
       if (o.exit_dense_km === 0) {
         // rien à afficher
       } else if (o.exit_dense_km == null || o.exit_dense_km >= o.distance_km - 0.05) {
         const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
-        cityLine = 'Depuis ici, une sortie de ' + hm(o.time_est_min) + ' reste en ville.' +
-          (hasLonger ? ' <button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button>' : '');
-      } else {
-        cityLine = 'Sort de la ville après ' + km(o.exit_dense_km) + ' km.';
+        cityLine = hasLonger ? 'Une sortie plus longue va plus loin. <button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button>' : '';
       }
-      cityLine += natureNeighbour(o);
+      cityLine = (cityLine + natureNeighbour(o)).replace(/^<br>/, '');
 
       // pente : catégorie qualitative + badge à seuil unique, jamais de chiffre
-      const slopeCat = o.terrain.avg_climb_grade_pct != null ? slopeCategory(o.terrain.avg_climb_grade_pct) : null;
       const steepBadge = o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20;
 
       return `
         <ul class="pitch">${pitch}</ul>
         ${profileSvg(o)}
         ${cityLine ? '<p class="city">' + cityLine + '</p>' : ''}
-        <div class="facts">
-          Pistes cyclables : ${pct(o.shares.dedicated_cycleway)}<br>
-          Routes principales : ${pct(o.shares.main_roads)}<br>
-          ${o.traffic_lights != null ? 'Feux recensés dans OSM : ' + o.traffic_lights + '<br>' : ''}
-          Montées : ${o.terrain.n_climbs}${slopeCat ? ' · ' + slopeCat : ''}
-          ${steepBadge ? '<br><span class="badge">⚠️ Au moins une rampe très raide</span>' : ''}
-        </div>
-        <ul class="climbs">${climbs}</ul>
+        ${steepBadge ? '<p><span class="badge">⚠️ Au moins une rampe très raide</span></p>' : ''}
+        <details class="facts"><summary>Tous les chiffres</summary>
+          <ul class="pitch">${facts}</ul>
+          ${climbs ? '<ul class="climbs">' + climbs + '</ul>' : ''}
+        </details>
         <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button><br>
         ${feedbackHtml(o)}
         <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
