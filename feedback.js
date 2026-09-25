@@ -124,7 +124,7 @@ function exportFeedback() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'velo-loops-retours.json';
+  a.download = 'oyan-retours.json';
   document.body.appendChild(a);
   a.click();
   a.remove();
