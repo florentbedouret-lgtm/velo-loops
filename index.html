@@ -119,6 +119,14 @@
     const esc = s => String(s).replace(/[&<>"]/g,
       c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+    // ---------- nom d'un départ : « Ville · lieu » pour les départs intermédiaires (display_name « Près de Ville »),
+    // sinon son nom ; la ville est la plus proche, pas forcément la commune (voir O-10 dans handoff.md)
+    function startLabel(s) {
+      const near = /^Près de (.+)$/.exec(s.display_name || '');
+      return near ? near[1] + ' · ' + s.name : (s.display_name || s.name);
+    }
+    const byName = new Intl.Collator('ca', { sensitivity: 'base', numeric: true }).compare;
+
     // ---------- gare : mention affichée à côté du nom du départ
     const stationNote = kind => kind === 'station'
       ? ' <span class="badge">🚆 Gare : vérifie les conditions du transporteur.</span>' : '';
@@ -224,7 +232,7 @@
       if (userMarker) userMarker.remove();
       userMarker = new maplibregl.Marker({ color: ROUTE.user }).setLngLat([lon, lat]).addTo(map);
       const { s, km } = nearestStart(lon, lat);
-      const name = esc(s.display_name || s.name) + stationNote(s.kind);
+      const name = esc(startLabel(s)) + stationNote(s.kind);
       pendingStart = s.id;
 
       if (!modelOk) {
@@ -276,7 +284,8 @@
           else modelOk = false; // version majeure inconnue : on ignore ce fichier, aucun temps chiffré
         }
       } catch (e) { /* réseau indisponible : on garde le repli */ }
-      index.starts.forEach(s => startSel.add(new Option(s.display_name || s.name, s.id)));
+      index.starts.map(s => [startLabel(s), s.id]).sort((a, b) => byName(a[0], b[0]))
+        .forEach(([label, id]) => startSel.add(new Option(label, id)));
       startSel.selectedIndex = -1;
       Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
       levelSel.value = 'modere';
