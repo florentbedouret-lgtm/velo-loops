@@ -1,0 +1,17 @@
+/* Polices Oyan hébergées dans le dépôt (pas de Google Fonts : l'IP des visiteurs n'est envoyée à personne, règle 13).
+   Hanken Grotesk : fichier variable (toutes les graisses), github.com/marcologous/hanken-grotesk, licence OFL-HankenGrotesk.txt
+   IBM Plex Mono 400, alphabet Latin1 : paquet @ibm/plex-mono 2.5.0 (github.com/IBM/plex), licence OFL-IBMPlexMono.txt */
+@font-face {
+  font-family: 'Hanken Grotesk';
+  src: url('HankenGrotesk-VF.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('IBMPlexMono-Regular-Latin1.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

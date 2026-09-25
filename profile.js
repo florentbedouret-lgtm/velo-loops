@@ -52,7 +52,7 @@ function profileSvg(o) {
   const area = line + ' L' + x(p.total).toFixed(1) + ',' + y(lo).toFixed(1) +
     ' L' + x(0).toFixed(1) + ',' + y(lo).toFixed(1) + ' Z';
   // couleurs de brand/oyan-tokens.css : argile (comme le tracé), galet (texte), filet (axe)
-  const txt = 'font-size="10" fill="#625D55" font-family="system-ui, sans-serif"';
+  const txt = 'font-size="10" fill="#625D55" font-family="Hanken Grotesk, system-ui, sans-serif"';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique">
     <path d="${area}" fill="#A8522F" fill-opacity="0.15"/>
     <path d="${line}" fill="none" stroke="#A8522F" stroke-width="1.5" stroke-linejoin="round"/>
