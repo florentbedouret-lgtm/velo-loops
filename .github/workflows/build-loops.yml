@@ -26,9 +26,9 @@ name: Générer les boucles vélo
 #  - slope_check      : diagnostic (rien n'est publié) : échantillonne des départs réels du plan (province), calcule leur
 #                       pente sur données SRTM réelles à 3 niveaux de lissage (sans lissage / 300 m / 500 m), et teste la
 #                       robustesse de plusieurs seuils candidats. Artefact `diagnostic-pente` à envoyer pour analyse.
-#  - nature_check     : diagnostic O-12 v2 (rien n'est publié) : pour ~12 départs de CENTRE-VILLE (espace vert à plus
-#                       de 1,5 km), compare la meilleure boucle actuelle à la meilleure boucle « vers le vert » et dit
-#                       quel critère du score la fait perdre. Artefact `diagnostic-nature` à envoyer pour analyse.
+#  - nature_check     : diagnostic O-12 v5 (rien n'est publié) : compare des boucles de référence populaires
+#                       (scripts/reference_loops.json) à la boucle qu'Oyan propose depuis le même départ, pour plusieurs
+#                       pondérations du score. Province entière. Artefact `diagnostic-nature` à envoyer pour analyse.
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
@@ -149,7 +149,7 @@ jobs:
           curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
           BBOX="$BBOX_INPUT"
           if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
-            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "${MODE#full}" != "$MODE" ] || [ "$MODE" = "slope_check" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
+            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "${MODE#full}" != "$MODE" ] || [ "$MODE" = "slope_check" ] || [ "$MODE" = "nature_check" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
           fi
           if [ "$BBOX" = "province" ]; then BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"; fi
           echo "Emprise utilisée : $BBOX"
@@ -190,10 +190,11 @@ jobs:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
         run: |
           GH_CONFIG=config/graphhopper.yml
-          if [ "$MODE" = "nature_check" ]; then        # O-12 test A : rayon « ville » 500 m au lieu de 1 500 (défaut GraphHopper)
+          NATURE_CITY_RADIUS=""                        # O-12 : vide = réglage de production (1 500 m) ; ex. 500 pour le test v4
+          if [ "$MODE" = "nature_check" ] && [ -n "$NATURE_CITY_RADIUS" ]; then
             GH_CONFIG=data/graphhopper_nature.yml
-            sed 's/^  graph.urban_density.threads: 2$/&\n  graph.urban_density.city_radius: 500/' config/graphhopper.yml > "$GH_CONFIG"
-            grep -q "city_radius: 500" "$GH_CONFIG" || { echo "réglage city_radius non appliqué"; exit 1; }
+            sed "s/^  graph.urban_density.threads: 2\$/&\n  graph.urban_density.city_radius: $NATURE_CITY_RADIUS/" config/graphhopper.yml > "$GH_CONFIG"
+            grep -q "city_radius: $NATURE_CITY_RADIUS" "$GH_CONFIG" || { echo "réglage city_radius non appliqué"; exit 1; }
           fi
           nohup java -Xmx8g -Ddw.graphhopper.datareader.file=data/region.osm.pbf \
             -jar graphhopper-web.jar server "$GH_CONFIG" > gh.log 2>&1 &
@@ -226,9 +227,9 @@ jobs:
         if: ${{ steps.resolve_mode.outputs.mode == 'nature_check' }}
         run: |
           python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-            --pbf data/region.osm.pbf --workdir data --n 12 --durations "1 1.5 2" \
+            --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \
             --out data/nature_check.json --out-md data/nature_check.md \
-            --note "rayon « ville » de GraphHopper = 500 m (1 500 m en production) ; grands axes v2 calculé à côté"
+            --note "calibrage v5, réglages de production (rayon « ville » 1 500 m)"
           cat data/nature_check.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publier le diagnostic nature

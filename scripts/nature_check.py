@@ -222,6 +222,118 @@ def run_start(s, gh_url, durations, levels, entry):
             "green_entry_km": round(entry[2], 2), "rows": rows, "reference": reference}
 
 
+# ----------------------------------------------------------------------------- v5 : calibrage sur boucles de référence
+DURATIONS_H = [0.75, 1, 1.5, 2, 3, 4]         # durées proposées par l'app
+WEIGHT_VARIANTS = {                            # pondérations testées (aucune n'est appliquée en production)
+    "actuel": {},
+    "grands axes ÷2": {"weights": {"axes": 0.07}},
+    "paysage ×2": {"weights": {"scenery": 0.24}},
+    "répétitions tolérées": {"soft_flow": True},
+    "combiné (3 ci-dessus)": {"weights": {"axes": 0.07, "scenery": 0.24}, "soft_flow": True},
+}
+
+
+def score_variant(loop, variant) -> float:
+    parts, weights = g.score_parts(loop)
+    for k, w in variant.get("weights", {}).items():
+        if k in weights:
+            weights[k] = w
+    if variant.get("soft_flow"):                  # moitié moins pénalisant pour les tronçons répétés et demi-tours
+        parts["flow"] = 1.0 - min(1.0, loop.overlap + 0.075 * loop.u_turns)
+    total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
+    total -= min(0.3, max(0.0, loop.shares["unpaved"] - 0.03) * 2.0)
+    return round(100 * max(0.0, total), 1)
+
+
+def run_reference(ref, gh_url, levels):
+    """Boucle de référence recalculée par ses points de passage, contre la meilleure boucle de production depuis le
+    même départ et pour la durée la plus proche."""
+    gh = GH(gh_url)
+    lon0, lat0 = ref["start"]
+    snapped = gh.nearest(lat0, lon0)
+    if snapped is None or snapped[2] > 400:
+        return {"name": ref["name"], "skipped": "pas de route à moins de 400 m du départ"}
+    st_ = {"name": ref["name"], "lon": snapped[0], "lat": snapped[1]}
+    out = []
+    for level in levels:
+        profile = g.LEVELS[level]["profiles"][0]
+        path = gh.via([[st_["lon"], st_["lat"]]] + ref["waypoints"] + [[st_["lon"], st_["lat"]]], profile)
+        loop = g.analyse(path, level, profile, 1.0, 800, None) if path else None
+        if loop is None:
+            out.append({"level": level, "error": gh.last_error or "pas de boucle"})
+            continue
+        minutes = loop.time_s / 60
+        if minutes > 270:
+            out.append({"level": level, "ref": summary(loop), "error": f"trop long pour l'app ({round(minutes)} min)"})
+            continue
+        d = min(DURATIONS_H, key=lambda h: abs(h * 60 - minutes))
+        pool = []
+        for p in g.LEVELS[level]["profiles"]:
+            a, _ = g.fit_and_sample(gh, st_, level, p, d, g.CANDIDATES, lambda *_: None)
+            pool += a
+        res = {"level": level, "duration_h": d, "ref": summary(loop), "valid_a": len(pool), "variants": {}}
+        for vname, var in WEIGHT_VARIANTS.items():
+            ref_s = score_variant(loop, var)
+            best_a = max(pool, key=lambda l: score_variant(l, var)) if pool else None
+            res["variants"][vname] = {"ref": ref_s, "A": score_variant(best_a, var) if best_a else None,
+                                      "A_loop": summary(best_a), "ref_wins": bool(best_a is None or ref_s > score_variant(best_a, var))}
+        out.append(res)
+    return {"name": ref["name"], "source": ref.get("source"), "track_km": ref.get("track_km"),
+            "track_dplus_m": ref.get("track_dplus_m"), "levels": out}
+
+
+def report_references(results, path_json, path_md, note, t0):
+    cases = [(r, lv) for r in results for lv in r.get("levels", []) if lv.get("variants")]
+    wins = {v: sum(1 for _, lv in cases if lv["variants"][v]["ref_wins"]) for v in WEIGHT_VARIANTS}
+    deltas = {}
+    for k in PART_LABELS:                            # écart moyen de points référence − production (score actuel)
+        vals = [lv["ref"]["points"].get(k, 0) - lv["variants"]["actuel"]["A_loop"]["points"].get(k, 0)
+                for _, lv in cases if lv["variants"]["actuel"]["A_loop"]]
+        deltas[k] = round(sum(vals) / len(vals), 1) if vals else None
+    Path(path_json).write_text(json.dumps({"references": results, "wins": wins, "mean_points_delta": deltas,
+                                           "cases": len(cases), "seconds": round(time.time() - t0)},
+                                          ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def fmt(x):
+        if not x:
+            return "—"
+        ex_ = x["exit_dense_km"] if x["exit_dense_km"] is not None else "jamais"
+        return (f"{x['km']} km · {x['min']} min · D+ {x['dplus_m']} · ville {x['city_pct']} % · sortie {ex_} · forêt "
+                f"{x['forest_pct']} % · grandes routes {x['main_roads_pct']} % · répété {x['overlap_pct']} % · "
+                f"non goudronné {x['unpaved_pct']} %")
+    L = [f"# Diagnostic O-12 v5 : calibrage sur {len(results)} boucles de référence ({len(cases)} cas, "
+         f"{round((time.time() - t0) / 60)} min)", (f"\n**Réglage de ce run : {note}**" if note else ""),
+         "\n## Combien de boucles de référence battent la boucle d'Oyan, selon la pondération",
+         "| Pondération | Référence gagnante |", "|---|---|"]
+    for v, n in wins.items():
+        L.append(f"| {v} | {n} / {len(cases)} |")
+    L += ["\n## Écart moyen de points référence − Oyan par critère (score actuel ; négatif = la référence perd)",
+          "| Critère | Δ points |", "|---|---|"]
+    for k, v in deltas.items():
+        L.append(f"| {PART_LABELS[k]} | {v} |")
+    L.append("\n## Détail")
+    for r in results:
+        L.append(f"\n**{r['name']}** ({r.get('source')}, trace : {r.get('track_km')} km, D+ {r.get('track_dplus_m')} m)")
+        if r.get("skipped"):
+            L.append(f"- ignorée : {r['skipped']}")
+            continue
+        for lv in r["levels"]:
+            if not lv.get("variants"):
+                L.append(f"- {lv['level']} : {lv.get('error')}" + (f" — référence : {fmt(lv.get('ref'))}" if lv.get("ref") else ""))
+                continue
+            a = lv["variants"]["actuel"]
+            L.append(f"- {lv['level']}, durée Oyan {lv['duration_h']:g} h — notes référence / Oyan : "
+                     + " · ".join(f"{v} {x['ref']}/{x['A']}{' ✓' if x['ref_wins'] else ''}" for v, x in lv["variants"].items()))
+            L.append(f"  - référence : {fmt(lv['ref'])}")
+            L.append(f"  - Oyan : {fmt(a['A_loop'])}")
+            if a["A_loop"]:
+                L.append("  - points référence − Oyan : " + ", ".join(
+                    f"{PART_LABELS[k]} {lv['ref']['points'].get(k, 0) - a['A_loop']['points'].get(k, 0):+.1f}"
+                    for k in a["A_loop"]["points"]))
+    Path(path_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L[:20]), flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gh", required=True)
@@ -238,6 +350,8 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
+    ap.add_argument("--references", default=None,
+                    help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
     t0 = time.time()
 
@@ -247,6 +361,13 @@ def main() -> int:
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
+    if args.references:
+        refs = json.loads(Path(args.references).read_text(encoding="utf-8"))["loops"]
+        print(f"Boucles de référence : {len(refs)}", flush=True)
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda r: run_reference(r, args.gh, args.levels.split()), refs))
+        report_references(results, args.out, args.out_md, args.note, t0)
+        return 0
     import shapely
     polys = green_polygons()
     tree = shapely.STRtree(polys)

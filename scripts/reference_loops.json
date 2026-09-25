@@ -1,0 +1,1646 @@
+{
+ "_note": "Boucles de référence pour calibrer le score (diagnostic O-12, nature_check.py --references). Points de passage seulement, pas les traces ; source indiquée pour chaque boucle.",
+ "loops": [
+  {
+   "name": "Boucle Belvédère de Portell de Valldaura – Cerdanyola - Forat del Vent au départ de Penitents",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.14113,
+    41.41754
+   ],
+   "waypoints": [
+    [
+     2.15456,
+     41.44
+    ],
+    [
+     2.14206,
+     41.44638
+    ],
+    [
+     2.12263,
+     41.45281
+    ],
+    [
+     2.12688,
+     41.47087
+    ],
+    [
+     2.14521,
+     41.489
+    ],
+    [
+     2.16521,
+     41.47368
+    ],
+    [
+     2.15477,
+     41.45413
+    ],
+    [
+     2.15413,
+     41.4387
+    ]
+   ],
+   "track_km": 28.3,
+   "track_dplus_m": 475,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Belvédère du Turó d’en Corts – Col de Vallvidrera - Tibidabo au départ de Les Tres Torres",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.13087,
+    41.39777
+   ],
+   "waypoints": [
+    [
+     2.10979,
+     41.40557
+    ],
+    [
+     2.1096,
+     41.41547
+    ],
+    [
+     2.11361,
+     41.43055
+    ],
+    [
+     2.0918,
+     41.45263
+    ],
+    [
+     2.06917,
+     41.45934
+    ],
+    [
+     2.07129,
+     41.44213
+    ],
+    [
+     2.09711,
+     41.41953
+    ],
+    [
+     2.10707,
+     41.40713
+    ]
+   ],
+   "track_km": 33.2,
+   "track_dplus_m": 650,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Caldes de Montbui – Sant Llorenç Savall au départ de Santa Perpètua de Mogoda Riera de Caldes",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.18642,
+    41.52646
+   ],
+   "waypoints": [
+    [
+     2.1473,
+     41.58018
+    ],
+    [
+     2.16113,
+     41.62239
+    ],
+    [
+     2.22248,
+     41.633
+    ],
+    [
+     2.21556,
+     41.67256
+    ],
+    [
+     2.16354,
+     41.68344
+    ],
+    [
+     2.11277,
+     41.69321
+    ],
+    [
+     2.06297,
+     41.68171
+    ],
+    [
+     2.05428,
+     41.64408
+    ],
+    [
+     2.10484,
+     41.6204
+    ],
+    [
+     2.14895,
+     41.57728
+    ]
+   ],
+   "track_km": 85.2,
+   "track_dplus_m": 948,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Casa Milà (La Pedrera) – Sagrada Família au départ de Encants",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.18251,
+    41.40708
+   ],
+   "waypoints": [
+    [
+     2.19804,
+     41.4538
+    ],
+    [
+     2.16784,
+     41.47661
+    ],
+    [
+     2.15127,
+     41.44595
+    ],
+    [
+     2.12528,
+     41.46859
+    ],
+    [
+     2.08506,
+     41.47118
+    ],
+    [
+     2.12086,
+     41.42746
+    ],
+    [
+     2.08285,
+     41.40816
+    ],
+    [
+     2.04066,
+     41.42737
+    ],
+    [
+     2.03701,
+     41.38371
+    ],
+    [
+     2.11316,
+     41.38511
+    ]
+   ],
+   "track_km": 78.1,
+   "track_dplus_m": 1095,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Château de Castellet – Réservoir de Foix au départ de els Monjos",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.65991,
+    41.31477
+   ],
+   "waypoints": [
+    [
+     1.64738,
+     41.27961
+    ],
+    [
+     1.64953,
+     41.25805
+    ],
+    [
+     1.67351,
+     41.22944
+    ],
+    [
+     1.72565,
+     41.24026
+    ],
+    [
+     1.76078,
+     41.24012
+    ],
+    [
+     1.79511,
+     41.24348
+    ],
+    [
+     1.76679,
+     41.26785
+    ],
+    [
+     1.72602,
+     41.29068
+    ],
+    [
+     1.71628,
+     41.32296
+    ],
+    [
+     1.69902,
+     41.34464
+    ]
+   ],
+   "track_km": 63.2,
+   "track_dplus_m": 505,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col d'Estenalles – Sant Llorenç Savall au départ de Sabadell Nord",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.09611,
+    41.56181
+   ],
+   "waypoints": [
+    [
+     2.04503,
+     41.59051
+    ],
+    [
+     2.00144,
+     41.62245
+    ],
+    [
+     1.98704,
+     41.65808
+    ],
+    [
+     1.99956,
+     41.69011
+    ],
+    [
+     2.00834,
+     41.72807
+    ],
+    [
+     2.04175,
+     41.70033
+    ],
+    [
+     2.04763,
+     41.66192
+    ],
+    [
+     2.06864,
+     41.63311
+    ],
+    [
+     2.07009,
+     41.60802
+    ],
+    [
+     2.04248,
+     41.59203
+    ]
+   ],
+   "track_km": 64.8,
+   "track_dplus_m": 1002,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col de Parpers – Coll de Font de Cera au départ de Montmeló",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.24532,
+    41.54982
+   ],
+   "waypoints": [
+    [
+     2.2889,
+     41.55368
+    ],
+    [
+     2.32222,
+     41.58002
+    ],
+    [
+     2.35381,
+     41.57876
+    ],
+    [
+     2.383,
+     41.58026
+    ],
+    [
+     2.4048,
+     41.54708
+    ],
+    [
+     2.39499,
+     41.51359
+    ],
+    [
+     2.36194,
+     41.48984
+    ],
+    [
+     2.31028,
+     41.47674
+    ],
+    [
+     2.29583,
+     41.50825
+    ],
+    [
+     2.28734,
+     41.53565
+    ]
+   ],
+   "track_km": 51.1,
+   "track_dplus_m": 535,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col de Santa Helena – Mirador de Les Goitadores au départ de Montseny",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.39423,
+    41.76017
+   ],
+   "waypoints": [
+    [
+     2.41536,
+     41.74989
+    ],
+    [
+     2.43499,
+     41.72995
+    ],
+    [
+     2.46182,
+     41.72135
+    ],
+    [
+     2.44894,
+     41.73351
+    ],
+    [
+     2.45737,
+     41.74051
+    ],
+    [
+     2.47332,
+     41.74904
+    ],
+    [
+     2.46468,
+     41.76452
+    ],
+    [
+     2.4441,
+     41.76225
+    ],
+    [
+     2.42653,
+     41.75465
+    ],
+    [
+     2.41577,
+     41.75163
+    ]
+   ],
+   "track_km": 42.8,
+   "track_dplus_m": 1219,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col de Santa Helena – Mirador de Les Goitadores au départ de Palautordera",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.45423,
+    41.67182
+   ],
+   "waypoints": [
+    [
+     2.48638,
+     41.68912
+    ],
+    [
+     2.45908,
+     41.72151
+    ],
+    [
+     2.44333,
+     41.73353
+    ],
+    [
+     2.45163,
+     41.74247
+    ],
+    [
+     2.47244,
+     41.76231
+    ],
+    [
+     2.45031,
+     41.75995
+    ],
+    [
+     2.42672,
+     41.7537
+    ],
+    [
+     2.41945,
+     41.743
+    ],
+    [
+     2.4508,
+     41.71965
+    ],
+    [
+     2.48644,
+     41.68996
+    ]
+   ],
+   "track_km": 52.1,
+   "track_dplus_m": 1140,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col de Vallvidrera - Tibidabo – Cerdanyola - Forat del Vent au départ de Vallcarca",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.14453,
+    41.41192
+   ],
+   "waypoints": [
+    [
+     2.12828,
+     41.43045
+    ],
+    [
+     2.11428,
+     41.42959
+    ],
+    [
+     2.09181,
+     41.45237
+    ],
+    [
+     2.09854,
+     41.47593
+    ],
+    [
+     2.13266,
+     41.48314
+    ],
+    [
+     2.12173,
+     41.4571
+    ],
+    [
+     2.13796,
+     41.44738
+    ],
+    [
+     2.15318,
+     41.43653
+    ]
+   ],
+   "track_km": 33.9,
+   "track_dplus_m": 640,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col de Vallvidrera - Tibidabo – Monastère de Sant Cugat au départ de Espanya",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.15152,
+    41.37496
+   ],
+   "waypoints": [
+    [
+     2.13684,
+     41.40666
+    ],
+    [
+     2.13393,
+     41.4339
+    ],
+    [
+     2.10437,
+     41.41354
+    ],
+    [
+     2.07451,
+     41.43724
+    ],
+    [
+     2.07241,
+     41.46883
+    ],
+    [
+     2.10911,
+     41.48331
+    ],
+    [
+     2.1249,
+     41.46394
+    ],
+    [
+     2.14506,
+     41.44548
+    ],
+    [
+     2.15723,
+     41.44329
+    ],
+    [
+     2.13539,
+     41.40966
+    ]
+   ],
+   "track_km": 57.9,
+   "track_dplus_m": 891,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Col de Vallvidrera - Tibidabo – Tibidabo au départ de Hospital General",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.04644,
+    41.47621
+   ],
+   "waypoints": [
+    [
+     2.07215,
+     41.46894
+    ],
+    [
+     2.08935,
+     41.45454
+    ],
+    [
+     2.10766,
+     41.43482
+    ],
+    [
+     2.12114,
+     41.42512
+    ],
+    [
+     2.1044,
+     41.4147
+    ],
+    [
+     2.0913,
+     41.42744
+    ],
+    [
+     2.06787,
+     41.44251
+    ],
+    [
+     2.06375,
+     41.46178
+    ]
+   ],
+   "track_km": 28.4,
+   "track_dplus_m": 469,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Ermitage de Santa Creu d'Olorda – Col de Vallvidrera - Tibidabo au départ de Plaça Molina",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.1474,
+    41.40129
+   ],
+   "waypoints": [
+    [
+     2.11245,
+     41.40717
+    ],
+    [
+     2.08766,
+     41.40829
+    ],
+    [
+     2.06025,
+     41.41783
+    ],
+    [
+     2.03833,
+     41.42976
+    ],
+    [
+     2.06772,
+     41.44161
+    ],
+    [
+     2.09893,
+     41.41923
+    ],
+    [
+     2.12089,
+     41.42185
+    ],
+    [
+     2.12826,
+     41.42459
+    ]
+   ],
+   "track_km": 37.8,
+   "track_dplus_m": 815,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle La Séquia de Manresa – La Bòbila Zone humide au départ de Santpedor",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.84228,
+    41.78204
+   ],
+   "waypoints": [
+    [
+     1.87974,
+     41.7746
+    ],
+    [
+     1.9197,
+     41.78265
+    ],
+    [
+     1.95129,
+     41.80543
+    ],
+    [
+     1.96968,
+     41.84147
+    ],
+    [
+     1.96248,
+     41.87736
+    ],
+    [
+     1.92832,
+     41.88236
+    ],
+    [
+     1.89412,
+     41.8654
+    ],
+    [
+     1.87753,
+     41.83711
+    ],
+    [
+     1.9,
+     41.80428
+    ],
+    [
+     1.88077,
+     41.77702
+    ]
+   ],
+   "track_km": 51.1,
+   "track_dplus_m": 447,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Parc Güell – Ermitage de Santa Creu d'Olorda au départ de Alfons X",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.16548,
+    41.41214
+   ],
+   "waypoints": [
+    [
+     2.1202,
+     41.40608
+    ],
+    [
+     2.09234,
+     41.40807
+    ],
+    [
+     2.06136,
+     41.42309
+    ],
+    [
+     2.04835,
+     41.43773
+    ],
+    [
+     2.07205,
+     41.46519
+    ],
+    [
+     2.11845,
+     41.48584
+    ],
+    [
+     2.12169,
+     41.45807
+    ],
+    [
+     2.15029,
+     41.44586
+    ],
+    [
+     2.15553,
+     41.46737
+    ],
+    [
+     2.18875,
+     41.45249
+    ]
+   ],
+   "track_km": 57.9,
+   "track_dplus_m": 970,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Parc fluvial du Besòs – Piste cyclable du Besòs au départ de Mataró",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.4458,
+    41.53285
+   ],
+   "waypoints": [
+    [
+     2.40579,
+     41.55841
+    ],
+    [
+     2.37161,
+     41.58186
+    ],
+    [
+     2.32659,
+     41.58555
+    ],
+    [
+     2.27901,
+     41.54749
+    ],
+    [
+     2.22381,
+     41.52192
+    ],
+    [
+     2.19062,
+     41.47535
+    ],
+    [
+     2.21981,
+     41.427
+    ],
+    [
+     2.26161,
+     41.45601
+    ],
+    [
+     2.32004,
+     41.47921
+    ],
+    [
+     2.39011,
+     41.50083
+    ]
+   ],
+   "track_km": 69.4,
+   "track_dplus_m": 365,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Parc fluvial du Besòs – Piste cyclable du Besòs au départ de Parc de Montjuïc",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.16304,
+    41.36883
+   ],
+   "waypoints": [
+    [
+     2.20472,
+     41.3924
+    ],
+    [
+     2.23745,
+     41.43225
+    ],
+    [
+     2.26857,
+     41.46822
+    ],
+    [
+     2.25271,
+     41.49565
+    ],
+    [
+     2.22419,
+     41.52217
+    ],
+    [
+     2.19243,
+     41.48262
+    ],
+    [
+     2.2164,
+     41.48357
+    ],
+    [
+     2.18983,
+     41.46053
+    ],
+    [
+     2.22367,
+     41.42474
+    ],
+    [
+     2.19997,
+     41.39377
+    ]
+   ],
+   "track_km": 60.6,
+   "track_dplus_m": 615,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Phare de Calella – Canet de Mar au départ de Mataró",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.4458,
+    41.53285
+   ],
+   "waypoints": [
+    [
+     2.48971,
+     41.55723
+    ],
+    [
+     2.50444,
+     41.57968
+    ],
+    [
+     2.51881,
+     41.60152
+    ],
+    [
+     2.54274,
+     41.61901
+    ],
+    [
+     2.59158,
+     41.61869
+    ],
+    [
+     2.61965,
+     41.60032
+    ],
+    [
+     2.65142,
+     41.61256
+    ],
+    [
+     2.60447,
+     41.5946
+    ],
+    [
+     2.54765,
+     41.57708
+    ],
+    [
+     2.49795,
+     41.55573
+    ]
+   ],
+   "track_km": 58.9,
+   "track_dplus_m": 471,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Piste cyclable du Besòs – Parc fluvial du Besòs au départ de Selva de Mar",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.2091,
+    41.40803
+   ],
+   "waypoints": [
+    [
+     2.20981,
+     41.44019
+    ],
+    [
+     2.19272,
+     41.47841
+    ],
+    [
+     2.15913,
+     41.47269
+    ],
+    [
+     2.15252,
+     41.44205
+    ],
+    [
+     2.12417,
+     41.4487
+    ],
+    [
+     2.13269,
+     41.48288
+    ],
+    [
+     2.08388,
+     41.47074
+    ],
+    [
+     2.10747,
+     41.43494
+    ],
+    [
+     2.13059,
+     41.42668
+    ],
+    [
+     2.16106,
+     41.42959
+    ]
+   ],
+   "track_km": 58.1,
+   "track_dplus_m": 796,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Pla de Forn – Plage du Balí au départ de Caldes d'Estrac",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.52603,
+    41.56843
+   ],
+   "waypoints": [
+    [
+     2.51072,
+     41.59718
+    ],
+    [
+     2.53713,
+     41.61226
+    ],
+    [
+     2.52423,
+     41.6354
+    ],
+    [
+     2.48272,
+     41.65893
+    ],
+    [
+     2.45236,
+     41.65861
+    ],
+    [
+     2.4074,
+     41.63206
+    ],
+    [
+     2.4056,
+     41.59459
+    ],
+    [
+     2.40153,
+     41.56001
+    ],
+    [
+     2.42744,
+     41.52427
+    ],
+    [
+     2.47272,
+     41.54763
+    ]
+   ],
+   "track_km": 62.2,
+   "track_dplus_m": 710,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Plage de Castelldefels – Parc du Río Llobregat au départ de Port de la Ginesta",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.92975,
+    41.26205
+   ],
+   "waypoints": [
+    [
+     1.9818,
+     41.26607
+    ],
+    [
+     2.02655,
+     41.26889
+    ],
+    [
+     2.04409,
+     41.2916
+    ],
+    [
+     2.06718,
+     41.30681
+    ],
+    [
+     2.09084,
+     41.33034
+    ],
+    [
+     2.09856,
+     41.32019
+    ],
+    [
+     2.06327,
+     41.30547
+    ],
+    [
+     2.05052,
+     41.2804
+    ],
+    [
+     2.01971,
+     41.26931
+    ],
+    [
+     1.97843,
+     41.26958
+    ]
+   ],
+   "track_km": 50.0,
+   "track_dplus_m": 19,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Pont d'en Gatús – Collformic (1145m) au départ de Palautordera",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.45423,
+    41.67182
+   ],
+   "waypoints": [
+    [
+     2.41532,
+     41.73095
+    ],
+    [
+     2.42156,
+     41.75569
+    ],
+    [
+     2.46583,
+     41.76033
+    ],
+    [
+     2.43305,
+     41.80286
+    ],
+    [
+     2.40444,
+     41.85052
+    ],
+    [
+     2.33052,
+     41.85187
+    ],
+    [
+     2.28346,
+     41.83176
+    ],
+    [
+     2.3476,
+     41.80094
+    ],
+    [
+     2.38281,
+     41.77746
+    ],
+    [
+     2.4144,
+     41.73129
+    ]
+   ],
+   "track_km": 96.4,
+   "track_dplus_m": 1978,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Promenade de Castelldefels – Plage de Castelldefels au départ de Zona marìtim terrestre",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.94866,
+    41.26727
+   ],
+   "waypoints": [
+    [
+     1.96819,
+     41.26575
+    ],
+    [
+     1.99178,
+     41.26566
+    ],
+    [
+     2.01612,
+     41.26606
+    ],
+    [
+     2.01959,
+     41.2766
+    ],
+    [
+     2.01275,
+     41.29492
+    ],
+    [
+     1.99728,
+     41.29383
+    ],
+    [
+     1.9776,
+     41.28524
+    ],
+    [
+     1.96091,
+     41.27468
+    ]
+   ],
+   "track_km": 20.2,
+   "track_dplus_m": 92,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Sagrada Família – Parc fluvial du Besòs au départ de Verdaguer",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.16841,
+    41.40008
+   ],
+   "waypoints": [
+    [
+     2.21935,
+     41.40631
+    ],
+    [
+     2.21076,
+     41.43671
+    ],
+    [
+     2.19062,
+     41.47535
+    ],
+    [
+     2.21444,
+     41.51469
+    ],
+    [
+     2.2521,
+     41.54566
+    ],
+    [
+     2.2859,
+     41.53591
+    ],
+    [
+     2.2932,
+     41.50768
+    ],
+    [
+     2.2954,
+     41.47229
+    ],
+    [
+     2.25144,
+     41.44774
+    ],
+    [
+     2.21971,
+     41.41178
+    ]
+   ],
+   "track_km": 55.4,
+   "track_dplus_m": 328,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Tibidabo – Col de Vallvidrera - Tibidabo au départ de Plaça Molina",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.1474,
+    41.40129
+   ],
+   "waypoints": [
+    [
+     2.12322,
+     41.40073
+    ],
+    [
+     2.10971,
+     41.40536
+    ],
+    [
+     2.10192,
+     41.40887
+    ],
+    [
+     2.11958,
+     41.41966
+    ],
+    [
+     2.1172,
+     41.41855
+    ],
+    [
+     2.13076,
+     41.43165
+    ],
+    [
+     2.13059,
+     41.42668
+    ],
+    [
+     2.14072,
+     41.41744
+    ]
+   ],
+   "track_km": 20.6,
+   "track_dplus_m": 451,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Via Blava de l'Anoia – Pont de Can Titó au départ de Capellades",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.69534,
+    41.52139
+   ],
+   "waypoints": [
+    [
+     1.67943,
+     41.54119
+    ],
+    [
+     1.65006,
+     41.53823
+    ],
+    [
+     1.60979,
+     41.53073
+    ],
+    [
+     1.56897,
+     41.52476
+    ],
+    [
+     1.53196,
+     41.5236
+    ],
+    [
+     1.56791,
+     41.54023
+    ],
+    [
+     1.60608,
+     41.55888
+    ],
+    [
+     1.625,
+     41.57438
+    ],
+    [
+     1.66017,
+     41.56493
+    ],
+    [
+     1.68658,
+     41.54683
+    ]
+   ],
+   "track_km": 43.9,
+   "track_dplus_m": 508,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Village de Mura – Col d'Estenalles au départ de La Creu Alta",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.1003,
+    41.55507
+   ],
+   "waypoints": [
+    [
+     2.04258,
+     41.58319
+    ],
+    [
+     1.97678,
+     41.59719
+    ],
+    [
+     1.93498,
+     41.62549
+    ],
+    [
+     1.87436,
+     41.63798
+    ],
+    [
+     1.86489,
+     41.6805
+    ],
+    [
+     1.91255,
+     41.71326
+    ],
+    [
+     1.97367,
+     41.70193
+    ],
+    [
+     1.9999,
+     41.67844
+    ],
+    [
+     1.98805,
+     41.64252
+    ],
+    [
+     2.03704,
+     41.59318
+    ]
+   ],
+   "track_km": 82.6,
+   "track_dplus_m": 1369,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Boucle Vue sur Begues – Plaça de l'Ateneu, Begues au départ de Castelldefels",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.9794,
+    41.27876
+   ],
+   "waypoints": [
+    [
+     1.98315,
+     41.3088
+    ],
+    [
+     1.94663,
+     41.32722
+    ],
+    [
+     1.89231,
+     41.33784
+    ],
+    [
+     1.84676,
+     41.34716
+    ],
+    [
+     1.89409,
+     41.36414
+    ],
+    [
+     1.93381,
+     41.38916
+    ],
+    [
+     1.99224,
+     41.40276
+    ],
+    [
+     2.01878,
+     41.38026
+    ],
+    [
+     2.04433,
+     41.34807
+    ],
+    [
+     2.01869,
+     41.31383
+    ]
+   ],
+   "track_km": 60.2,
+   "track_dplus_m": 592,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Mare de Déu de l'Ajuda y Sant Jaume de Viladrover - circuit autour de la plaine de Vic",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.22379,
+    41.7983
+   ],
+   "waypoints": [
+    [
+     2.22631,
+     41.82757
+    ],
+    [
+     2.23552,
+     41.85915
+    ],
+    [
+     2.24497,
+     41.89222
+    ],
+    [
+     2.25341,
+     41.91817
+    ],
+    [
+     2.27104,
+     41.89825
+    ],
+    [
+     2.25687,
+     41.86875
+    ],
+    [
+     2.24754,
+     41.84733
+    ],
+    [
+     2.2459,
+     41.82229
+    ]
+   ],
+   "track_km": 36.7,
+   "track_dplus_m": 282,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Monastère de Montserrat depuis Monistrol - circuit dans le Parc Naturel de Montserrat",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    1.84287,
+    41.60908
+   ],
+   "waypoints": [
+    [
+     1.86438,
+     41.62118
+    ],
+    [
+     1.85593,
+     41.64245
+    ],
+    [
+     1.82166,
+     41.65009
+    ],
+    [
+     1.79973,
+     41.63853
+    ],
+    [
+     1.79175,
+     41.61595
+    ],
+    [
+     1.82076,
+     41.60684
+    ],
+    [
+     1.83483,
+     41.59222
+    ],
+    [
+     1.82656,
+     41.60916
+    ]
+   ],
+   "track_km": 30.4,
+   "track_dplus_m": 808,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Tibidabo depuis Sant Cugat - circuit dans le Parc Naturel de Collserola",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.09589,
+    41.47052
+   ],
+   "waypoints": [
+    [
+     2.11584,
+     41.44854
+    ],
+    [
+     2.12249,
+     41.4286
+    ],
+    [
+     2.12294,
+     41.41779
+    ],
+    [
+     2.10821,
+     41.41243
+    ],
+    [
+     2.08521,
+     41.40762
+    ],
+    [
+     2.05351,
+     41.41935
+    ],
+    [
+     2.03859,
+     41.43212
+    ],
+    [
+     2.07423,
+     41.44807
+    ]
+   ],
+   "track_km": 38.3,
+   "track_dplus_m": 798,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Visite de la ville de Barcelone - de l'Arco de Triunfo à l'embouchure du Besòs",
+   "source": "komoot (itinéraire populaire)",
+   "start": [
+    2.18098,
+    41.39206
+   ],
+   "waypoints": [
+    [
+     2.17645,
+     41.4059
+    ],
+    [
+     2.18393,
+     41.4226
+    ],
+    [
+     2.18329,
+     41.44063
+    ],
+    [
+     2.20674,
+     41.44524
+    ],
+    [
+     2.21981,
+     41.427
+    ],
+    [
+     2.232,
+     41.4183
+    ],
+    [
+     2.21751,
+     41.40445
+    ],
+    [
+     2.19923,
+     41.38885
+    ]
+   ],
+   "track_km": 21.7,
+   "track_dplus_m": 84,
+   "closed_km": 0.0
+  },
+  {
+   "name": "Gràcia – Via Augusta, col de Vallvidrera, Arrabassada (variante préférée de Florent)",
+   "source": "cycliste local (points reconstruits)",
+   "start": [
+    2.1583,
+    41.40659
+   ],
+   "waypoints": [
+    [
+     2.14116,
+     41.39825
+    ],
+    [
+     2.12622,
+     41.39812
+    ],
+    [
+     2.11905,
+     41.42325
+    ],
+    [
+     2.13446,
+     41.4342
+    ],
+    [
+     2.12845,
+     41.42478
+    ]
+   ],
+   "track_km": 22.0,
+   "track_dplus_m": 457,
+   "closed_km": 0.0
+  }
+ ]
+}
