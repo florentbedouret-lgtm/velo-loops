@@ -24,6 +24,9 @@ name: Générer les boucles vélo
 #  - slope_check      : diagnostic (rien n'est publié) : échantillonne des départs réels du plan (province), calcule leur
 #                       pente sur données SRTM réelles à 3 niveaux de lissage (sans lissage / 300 m / 500 m), et teste la
 #                       robustesse de plusieurs seuils candidats. Artefact `diagnostic-pente` à envoyer pour analyse.
+#  - nature_check     : diagnostic O-12 (rien n'est publié) : pour ~12 départs de centre-ville proches d'un grand espace
+#                       vert, compare la meilleure boucle actuelle à des variantes (candidats « vers le vert », côtes non
+#                       freinées). Artefact `diagnostic-nature` à envoyer pour analyse. ~30-60 min.
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
@@ -35,7 +38,7 @@ on:
       mode:
         description: "Mode : plan, detour, pilot (pilote), full (génération complète), site (republier la page web, sans calcul), slope_check (diagnostic pente/lissage), generate_names ou generate_planned"
         type: choice
-        options: [plan, detour, pilot, full, site, slope_check, generate_names, generate_planned]
+        options: [plan, detour, pilot, full, site, slope_check, nature_check, generate_names, generate_planned]
         default: plan
       scenario:
         description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
@@ -207,6 +210,25 @@ jobs:
           path: |
             data/slope_check.json
             data/slope_check.md
+          retention-days: 30
+
+      - name: Diagnostic sortie vers la nature (O-12)
+        if: ${{ steps.resolve_mode.outputs.mode == 'nature_check' }}
+        run: |
+          python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+            --pbf data/region.osm.pbf --workdir data --names "Gràcia" --n 12 --durations "1 1.5 2" \
+            --out data/nature_check.json --out-md data/nature_check.md
+          cat data/nature_check.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publier le diagnostic nature
+        if: ${{ always() && steps.resolve_mode.outputs.mode == 'nature_check' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-nature
+          path: |
+            data/nature_check.json
+            data/nature_check.md
+          if-no-files-found: ignore
           retention-days: 30
 
       - name: Mesurer le détour et la vitesse d'approche
