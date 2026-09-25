@@ -325,6 +325,10 @@
         paint: { 'line-color': ROUTE.casing, 'line-width': ROUTE.casingWidth } }, beforeId);
       map.addLayer({ id: 'routes', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
         paint: { 'line-color': ROUTE.color, 'line-width': ROUTE.width } }, beforeId);
+      // point de la carte qui suit le doigt sur le profil altimétrique
+      map.addSource('cursor', { type: 'geojson', data: EMPTY });
+      map.addLayer({ id: 'cursor', type: 'circle', source: 'cursor',
+        paint: { 'circle-radius': 6, 'circle-color': ROUTE.user, 'circle-stroke-color': ROUTE.casing, 'circle-stroke-width': 2.5 } });
 
       startSel.onchange = () => {
         if (!startSel.value) return; // ligne « N départs : choisir… »
@@ -380,6 +384,7 @@
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
         });
         map.getSource('routes').setData(EMPTY);
+        map.getSource('cursor').setData(EMPTY);
         return;
       }
       const i = shown.findIndex(o => o.label === 'equilibre');
@@ -446,6 +451,10 @@
           ${k === current ? detailHtml(o) : ''}
         </div>`).join('');
       list.querySelector('.card.active').scrollIntoView({ block: 'nearest' });
+      map.getSource('cursor').setData(EMPTY);
+      const pf = list.querySelector('.card.active svg.pf');
+      if (pf) bindProfile(pf, pos => map.getSource('cursor').setData(pos
+        ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY));
 
       const features = shown
         .map((o, k) => ({

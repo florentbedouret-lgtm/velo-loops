@@ -34,8 +34,19 @@ function profileData(coords, distKm) {
     for (let m = Math.max(0, k - 2); m <= Math.min(alt.length - 1, k + 2); m++) { s += alt[m]; c++; }
     return s / c;
   });
-  return { total, step, alt: smooth };
+  return { total, step, alt: smooth, dist };
 }
+
+// position [lon, lat] sur le tracé à la distance d (km), par interpolation entre deux points
+function profilePoint(coords, dist, d) {
+  let j = 0;
+  while (j < dist.length - 2 && dist[j + 1] < d) j++;
+  const span = dist[j + 1] - dist[j];
+  const t = span > 0 ? Math.min(1, Math.max(0, (d - dist[j]) / span)) : 0;
+  return [coords[j][0] + t * (coords[j + 1][0] - coords[j][0]), coords[j][1] + t * (coords[j + 1][1] - coords[j][1])];
+}
+
+let pfLast = null; // géométrie du dernier profil dessiné, utilisée par bindProfile
 
 function profileSvg(o) {
   if (!o.coords[0] || o.coords[0].length < 3) return '';
@@ -53,7 +64,10 @@ function profileSvg(o) {
     ' L' + x(0).toFixed(1) + ',' + y(lo).toFixed(1) + ' Z';
   // couleurs de brand/oyan-tokens.css : argile (comme le tracé), galet (texte), filet (axe)
   const txt = 'font-size="10" fill="#625D55" font-family="Hanken Grotesk, system-ui, sans-serif"';
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique">
+  pfLast = { coords: o.coords, p, W, mL, mR, x, y };
+  // touch-action pan-y : un glissement vertical fait défiler la page, un glissement horizontal déplace le curseur
+  return `<svg class="pf" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique"
+    style="touch-action: pan-y; cursor: crosshair">
     <path d="${area}" fill="#A8522F" fill-opacity="0.15"/>
     <path d="${line}" fill="none" stroke="#A8522F" stroke-width="1.5" stroke-linejoin="round"/>
     <line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" stroke="#E6E2DB"/>
@@ -61,5 +75,37 @@ function profileSvg(o) {
     <text x="${mL - 4}" y="${H - mB}" text-anchor="end" ${txt}>${lo} m</text>
     <text x="${mL}" y="${H - 6}" ${txt}>0</text>
     <text x="${W - mR}" y="${H - 6}" text-anchor="end" ${txt}>${pfKm(p.total)} km</text>
+    <g class="pf-cursor" visibility="hidden">
+      <line y1="${mT}" y2="${H - mB}" stroke="#24221F" stroke-width="1"/>
+      <circle r="3.5" fill="#24221F" stroke="#FFFFFF" stroke-width="1.5"/>
+      <text y="${mT + 8}" font-size="10" fill="#24221F" font-family="Hanken Grotesk, system-ui, sans-serif"></text>
+    </g>
   </svg>`;
+}
+
+// relie le profil à la carte : onMove([lon, lat]) quand le doigt ou la souris bouge, onMove(null) quand elle sort
+function bindProfile(svg, onMove) {
+  const g = pfLast;
+  const cur = svg.querySelector('.pf-cursor');
+  const [line, dot, label] = [cur.querySelector('line'), cur.querySelector('circle'), cur.querySelector('text')];
+  const show = e => {
+    const r = svg.getBoundingClientRect();
+    const vx = (e.clientX - r.left) / r.width * g.W;               // position dans le repère du dessin
+    const d = Math.min(1, Math.max(0, (vx - g.mL) / (g.W - g.mL - g.mR))) * g.p.total;
+    const a = g.p.alt[Math.min(g.p.alt.length - 1, Math.round(d / g.p.step))];
+    const cx = g.x(d);
+    line.setAttribute('x1', cx); line.setAttribute('x2', cx);
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', g.y(a));
+    label.textContent = 'km ' + pfKm(d) + ' · ' + Math.round(a) + ' m';
+    const right = cx > g.W / 2;                                     // étiquette du côté où il reste de la place
+    label.setAttribute('x', right ? cx - 5 : cx + 5);
+    label.setAttribute('text-anchor', right ? 'end' : 'start');
+    cur.setAttribute('visibility', 'visible');
+    onMove(profilePoint(g.coords, g.p.dist, d));
+  };
+  const hide = () => { cur.setAttribute('visibility', 'hidden'); onMove(null); };
+  svg.addEventListener('pointerdown', show);
+  svg.addEventListener('pointermove', show);
+  // au doigt, le point reste affiché après avoir levé le doigt ; à la souris, il disparaît en sortant du profil
+  svg.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hide(); });
 }
