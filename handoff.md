@@ -77,6 +77,7 @@ Une web app qui aide un cycliste amateur à **découvrir où s'entraîner** : il
 velo-loops/
 ├── .github/workflows/build-loops.yml   # unique workflow (8 modes : plan/detour/pilot/full/site/...)
 ├── brand/                              # logos, icônes, favicons, oyan-tokens.css (charte Oyan v1, D19)
+├── fonts/                              # polices Oyan hébergées (Hanken Grotesk, IBM Plex Mono) + licences OFL
 ├── config/                             # région, config GraphHopper, modèles de routage
 ├── scripts/                            # pipeline Python réel : plan_starts, generate_loops,
 │                                        #   measure_detour, build_approach_model, fetch_published…
@@ -121,10 +122,16 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
   **Leçon retenue** : après toute action affectant le site publié, vérifier le résultat avec un en-tête `Last-Modified`/`X-Cache` (`curl -I`), pas seulement le contenu — un contenu qui semble correct peut venir d'un déploiement antérieur non encore remplacé par la CDN.
 - [ ] **O-9 — Identité Oyan** — nom (D18) et identité visuelle v1 « Argile » (D19) actés et consignés dans `docs/brand.md` §12-13 le 25/09/2026. Reste à faire :
   1. ✅ Exports versés dans `brand/` le 25/09/2026 (10 SVG, 13 PNG, `oyan-tokens.css`, `logo-paths.json`, `README.md`) — sans le moodboard ni les maquettes HTML. Métadonnées C2PA conservées dans ces originaux.
-  2. Appliquer la charte à l'app (`index.html`, `mentions.html`) : titre « Oyan », favicon, couleurs, polices hébergées dans le dépôt (pas Google Fonts), tracé argile avec liseré blanc, neutre pour les boucles non sélectionnées. Rôle : dev front / UX. Tester sur le site publié.
-  3. Tester la lisibilité du logo à 16 px (risque de lecture « Cyan »).
+  2. ✅ Charte appliquée à l'app le 25/09/2026 (5 commits, runs #46 à #50, chacun vérifié en ligne avec `curl -I`) : (a) tracé argile 4,5 px + liseré blanc 8,5 px, autres boucles en galet, sous les noms de lieux ; marqueurs départ argile / position basalte ; (b) couleurs via `brand/oyan-tokens.css` (lié, pas copié), un seul bouton argile (GPX), les autres en secondaire, alertes basalte + ⚠️ ; (c) polices dans `fonts/` (Hanken Grotesk variable 61 Ko + IBM Plex Mono Latin1 17 Ko, licences OFL jointes, zéro appel à Google) ; (d) titre « Oyan », favicon/apple-touch-icon pointant vers `brand/` (C2PA gardé, pas de copie), « Oyan » dans le GPX ; (e) `mentions.html` aligné. Le workflow publie désormais aussi à chaque push de `mentions.html`, `brand/**`, `fonts/**` (avant, `brand/` n'était pas en ligne). Écarts assumés à la charte : voir D20.
+  3. ✅ (partiel) Lisibilité à 16 px : le favicon ne contient que le signe (sans « yan »), donc pas de risque « Cyan » dans l'onglet. Reste à tester le **logo complet** quand il apparaîtra dans l'app, auprès de personnes qui ne connaissent pas le nom.
   4. Vérifier si le pipeline calcule les % ville/forêt/eau/campagne avant d'afficher la barre de terrain (expert dev).
-  5. Ton des textes de l'app (pitch, boutons) selon `docs/brand.md` §8.
+  5. Ton des textes de l'app (pitch, boutons) selon `docs/brand.md` §8 ; en profiter pour ajouter des libellés en mono capitales dans la fiche boucle (aujourd'hui un seul : « Durée de la boucle »).
+  6. Mise en page de la fiche boucle selon la charte (chiffre principal en Hanken Light 48 px, une information principale par écran) — dev front / UX.
+- [ ] **O-10 — Liste des départs utilisable** (demande de Florent, 25/09/2026) : 889 départs dans le désordre, 104 noms affichés en double (« Près de Terrassa » × 5), quartiers sans leur ville (« Sant Martí », « l'Eixample »). À faire :
+  1. Tri alphabétique (front seul, `localeCompare` en français) — trivial.
+  2. Afficher « Ville · départ » (ex. « Barcelona · Gràcia »). Rapide pour les 403 départs `fill` (« Sabadell · Can Llong (sud-est) », à partir de « Près de X » ; mais X = ville la plus proche, pas forcément la commune). Propre : ajouter un champ `municipality` (commune OSM, admin_level 8, point-dans-polygone sur l'extrait déjà téléchargé) dans `plan_starts.py`, puis régénérer les noms (mode `generate_names`). Expert dev pipeline.
+  3. Avis UX : remplacer la liste déroulante par un champ filtrant (`<input list>` + `<datalist>`, natif) — 889 lignes restent inutilisables sur mobile même triées.
+- [ ] **O-11 — Profil relié à la carte** (demande de Florent, 25/09/2026) : glisser le doigt sur le profil altimétrique affiche le point correspondant sur la carte (+ trait vertical et « km · altitude » sur le profil). Estimé ~40 lignes (`profile.js`, `index.html`). Point délicat : conflit avec le défilement vertical sur mobile (`touch-action: pan-y`) — à tester sur un vrai téléphone.
 
 ### Backlog des idées retenues (après POC, à prioriser)
 Vent/météo pour orienter la boucle · type de séance (endurance, intervalles avec côte 5-6 min, sortie plaisir) · échappatoires (raccourci fatigue/crevaison/orage, points d'eau, boulangeries, gares) · difficulté en langage humain · curseur de fréquentation · carte à dévoiler (zones blanches) · micro-aventure train + vélo (A→B entre deux gares) · guide audio IA des lieux traversés. Détails : `docs/product.md`.
@@ -132,6 +139,7 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 ### Questions ouvertes
 - Modèle économique (pub produits sport vs abonnement) — à traiter avec un expert business.
 - Disponibilité juridique du nom « Oyan » (marque INPI/EUIPO, nom de domaine) — juriste propriété intellectuelle, avant d'investir davantage dans le nom.
+- `mentions.html` dit que la position n'est « jamais envoyée à un serveur » ; or la carte est chargée depuis unpkg.com et OpenFreeMap, qui reçoivent l'IP et les tuiles consultées (≈ zone regardée). À faire relire par un juriste (avec la relecture prévue en O-7) ; option technique : héberger MapLibre dans le dépôt comme les polices (architecte).
 - Conditions d'accès API Strava/Garmin à revérifier avant toute intégration.
 - Quand passer du pré-calcul au routage à la demande (et à quel coût).
 - Stratégie de bascule Barcelone → France.
@@ -153,3 +161,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | 23/09/2026 | Dev / Architecte | Diagnostic pente (`slope_check`, run manuel, 59 boucles) : confirme le choix du lissage 500 m et l'absence de % affiché (D17) ; seuil du badge gardé à 20 %. `reuse` corrigé pour fonctionner par durée (pas encore validé sur un run réel) ; estimateur `plan_starts.py` recalé sur les mesures | Validation terrain du POC (reste bloquée côté Florent) ; identité/nom si besoin |
 | 25/09/2026 | Branding / DA | Nom Oyan (D18) et identité visuelle v1 « Argile » (D19) consignés dans `docs/brand.md` §12-13, à partir de l'export Claude Design ; `.claude/` ajouté au `.gitignore` | O-9 : verser les exports dans `brand/`, puis appliquer la charte à l'app |
 | 25/09/2026 | Branding / DA | O-9 étape 1 : dossier `brand/` créé (logos, icônes, favicons, tokens CSS), sans images du moodboard ; §3.7 complété (accord de Florent) | O-9 étape 2 : appliquer la charte à l'app (rôle dev front / UX) |
+| 25/09/2026 | Dev front / UX | O-9 étape 2 : charte Oyan appliquée à l'app en 5 commits publiés et vérifiés (tracé, couleurs, polices hébergées, titre/favicon, mentions) ; workflow étendu à `mentions.html`/`brand/`/`fonts/` ; D20 ; demandes O-10 (liste des départs) et O-11 (profil ↔ carte) ajoutées ; §3.7 : `fonts/` ajouté (accord de Florent). Serveur local : Python 3.6 bloquait, remplacé par `.claude/serve.py` (local, non versionné) | O-10 (tri + « Ville · départ ») ou O-11 ; test du rendu sur le téléphone de Florent |
