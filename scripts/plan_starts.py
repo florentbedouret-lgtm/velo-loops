@@ -20,8 +20,9 @@ on complète par des départs de remplissage (nom du lieu le plus proche + direc
 
 Sorties :
   --out          JSON de départs [{name, lon, lat, kind, zone, municipality}] pour generate_loops.py --starts-file
-                 (municipality = commune OSM, boundary=administrative + admin_level=8, qui contient le départ ; absente
-                 si le départ n'est dans aucune commune complète de l'extrait, par ex. au bord de l'emprise)
+                 (municipality = commune OSM, boundary=administrative + admin_level=8, qui contient le départ, ou la plus
+                 proche à moins de ~300 m (départs au bord de la mer) ; lue dans --boundaries-pbf, l'extrait NON découpé,
+                 pour que les communes traversées par le bord de l'emprise soient complètes)
   --report       JSON de couverture (par scénario et par zone : nombre de départs, distances médiane / P90 / P95 / max,
                  temps de calcul et taille estimés)
   --demand-out   échantillon de lieux habités avec leur départ le plus proche (pour measure_detour.py)
@@ -108,7 +109,8 @@ def load(seq: Path):
 
 def load_municipalities(pbf: Path, workdir: Path):
     """Communes (boundary=administrative, admin_level=8) de l'extrait : (arbre spatial, polygones, noms).
-    Une commune coupée par le bord de l'emprise peut manquer (polygone incomplet) : ses départs restent sans commune."""
+    Utiliser l'extrait non découpé : dans un extrait découpé, une commune traversée par le bord est incomplète et
+    osmium ne peut pas en faire un polygone (ses départs resteraient sans commune)."""
     filt, out = workdir / "communes.osm.pbf", workdir / "communes.geojsonseq"
     subprocess.run(["osmium", "tags-filter", str(pbf), "r/boundary=administrative", "-o", str(filt), "--overwrite"],
                    check=True, capture_output=True)
@@ -139,6 +141,9 @@ def municipality_of(lon: float, lat: float, communes) -> str | None:
     try:
         for i in tree.query(pt, predicate="intersects"):
             return names[int(i)]
+        near = tree.query_nearest(pt, max_distance=0.003)   # ~250-330 m : départ au bord de la mer, juste hors du contour
+        if len(near):
+            return names[int(near[0])]
     except Exception:  # noqa: BLE001 : polygone OSM invalide, le départ reste sans commune
         pass
     return None
@@ -299,6 +304,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pbf", required=True)
     ap.add_argument("--workdir", default=None, help="dossier de travail (défaut : dossier du .pbf)")
+    ap.add_argument("--boundaries-pbf", default=None, help="extrait NON découpé où lire les communes (défaut : --pbf)")
     ap.add_argument("--out", required=True, help="JSON de départs du scénario choisi")
     ap.add_argument("--report", required=True, help="JSON de couverture (tous les scénarios)")
     ap.add_argument("--demand-out", default=None, help="échantillon de lieux habités pour measure_detour.py")
@@ -491,7 +497,8 @@ def main() -> int:
                 "skipped_demand_distance_to_nearest_start": skipped_stats(st, mask)}
 
     starts, d, zones = results[chosen_key]
-    communes = load_municipalities(pbf, Path(args.workdir) if args.workdir else pbf.parent)
+    communes = load_municipalities(Path(args.boundaries_pbf) if args.boundaries_pbf else pbf,
+                                   Path(args.workdir) if args.workdir else pbf.parent)
     print(f"Communes (admin_level=8) chargées : {len(communes[2])}")
     # --- fichier de départs (noms uniques ; remplissage = nom du lieu le plus proche + direction)
     named = [(*proj.xy(p[0], p[1]), p[3]) for p in places if p[3]]
@@ -528,6 +535,8 @@ def main() -> int:
                               "starts_with_municipality": sum(1 for e in out if e.get("municipality")),
                               "starts_without": [e["name"] for e in out if not e.get("municipality")][:50]}
     print(f"Départs avec commune : {report['municipality']['starts_with_municipality']} / {len(out)}")
+    for e in [e for e in out if not e.get("municipality")][:40]:
+        print(f"  sans commune : {e['name']} ({e['lon']}, {e['lat']})")
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
 
     # --- échantillon de lieux habités et de leur départ le plus proche (pour mesurer le détour)

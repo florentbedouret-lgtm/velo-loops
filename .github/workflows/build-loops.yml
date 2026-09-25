@@ -164,7 +164,7 @@ jobs:
           if [ "$MODE" = "detour" ]; then
             if [ "$PAIRS" = "0" ]; then SAMPLE=0; else SAMPLE=$(( PAIRS / 3 + 30 )); [ "$SAMPLE" -lt 300 ] && SAMPLE=300; fi
           fi
-          python scripts/plan_starts.py --pbf data/region.osm.pbf --workdir data \
+          python scripts/plan_starts.py --pbf data/region.osm.pbf --boundaries-pbf data/source.osm.pbf --workdir data \
             --out data/starts_plan.json --report data/coverage.json --demand-out data/demand_sample.json \
             --scenario "$SCENARIO" --sample-per-zone "$SAMPLE"
 
