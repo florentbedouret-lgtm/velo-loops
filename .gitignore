@@ -12,3 +12,6 @@
 /gh.log
 /gh.pid
 /_site/
+
+# Configuration locale de Claude Code (propre à chaque machine)
+/.claude/

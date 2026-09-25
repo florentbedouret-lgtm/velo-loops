@@ -1,6 +1,6 @@
 # HANDOFF — velo-loops (application de parcours vélo pour cyclistes amateurs)
 
-> Dernière mise à jour : 23 septembre 2026
+> Dernière mise à jour : 25 septembre 2026
 > Porteur du projet : Florent (débutant en code, travaille en « vibe coding » avec Claude)
 > À lire au début de chaque session, avec `rules.md`. Détails produit : `docs/product.md`. Journal des décisions : `docs/decisions.md`.
 
@@ -118,13 +118,19 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
   3. ✅ Doublon `generate_loops.py` (racine) supprimé.
   4. ✅ `.gitignore` ajouté ; `web/data/` retiré du suivi Git (fichiers gardés sur le disque de Florent, juste plus committés). **`web/data/approach_model.json` supprimé aussi** (copie redondante sans usage réel — c'est elle qui a causé la confusion du point 1 ; il n'y a plus qu'un seul exemplaire, `web/approach_model.json`).
   **Leçon retenue** : après toute action affectant le site publié, vérifier le résultat avec un en-tête `Last-Modified`/`X-Cache` (`curl -I`), pas seulement le contenu — un contenu qui semble correct peut venir d'un déploiement antérieur non encore remplacé par la CDN.
+- [ ] **O-9 — Identité Oyan** — nom (D18) et identité visuelle v1 « Argile » (D19) actés et consignés dans `docs/brand.md` §12-13 le 25/09/2026. Reste à faire :
+  1. Verser les exports (SVG, PNG, `oyan-tokens.css`) dans un dossier `brand/` du dépôt — **jamais les images du moodboard** (droits non vérifiés).
+  2. Appliquer la charte à l'app (`index.html`, `mentions.html`) : titre « Oyan », favicon, couleurs, polices hébergées dans le dépôt (pas Google Fonts), tracé argile avec liseré blanc, neutre pour les boucles non sélectionnées. Rôle : dev front / UX. Tester sur le site publié.
+  3. Tester la lisibilité du logo à 16 px (risque de lecture « Cyan »).
+  4. Vérifier si le pipeline calcule les % ville/forêt/eau/campagne avant d'afficher la barre de terrain (expert dev).
+  5. Ton des textes de l'app (pitch, boutons) selon `docs/brand.md` §8.
 
 ### Backlog des idées retenues (après POC, à prioriser)
 Vent/météo pour orienter la boucle · type de séance (endurance, intervalles avec côte 5-6 min, sortie plaisir) · échappatoires (raccourci fatigue/crevaison/orage, points d'eau, boulangeries, gares) · difficulté en langage humain · curseur de fréquentation · carte à dévoiler (zones blanches) · micro-aventure train + vélo (A→B entre deux gares) · guide audio IA des lieux traversés. Détails : `docs/product.md`.
 
 ### Questions ouvertes
 - Modèle économique (pub produits sport vs abonnement) — à traiter avec un expert business.
-- Nom et identité visuelle (outdoor, aventure, découverte, « off the beaten tracks », liberté) — expert branding/graphiste.
+- Disponibilité juridique du nom « Oyan » (marque INPI/EUIPO, nom de domaine) — juriste propriété intellectuelle, avant d'investir davantage dans le nom.
 - Conditions d'accès API Strava/Garmin à revérifier avant toute intégration.
 - Quand passer du pré-calcul au routage à la demande (et à quel coût).
 - Stratégie de bascule Barcelone → France.
@@ -144,3 +150,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | 23/09/2026 | Dev / Architecte | Régression trouvée : le commit O-8 avait écrasé `web/approach_model.json` (v2.2 → v2.0) par erreur d'inversion de fichiers ; `fetch_published.py` propageait le v2.0 périmé à chaque run `site`. Fichier dupliqué supprimé, mécanique revert, commité (08547fa, 4d81851), redéployé (run #43) et vérifié en direct (v2.3, headers frais) | O-3 : volet durées |
 | 23/09/2026 | Dev / Architecte | O-3 terminée : durées 0,75/1/1,5/2/3/4 h générées et publiées (run #44, 889 départs, 219 min/300, reuse inefficace ici) ; vérifié en direct | Choisir la prochaine tâche (O-4 à O-7 restants, ou nouvelle priorité) |
 | 23/09/2026 | Dev / Architecte | Diagnostic pente (`slope_check`, run manuel, 59 boucles) : confirme le choix du lissage 500 m et l'absence de % affiché (D17) ; seuil du badge gardé à 20 %. `reuse` corrigé pour fonctionner par durée (pas encore validé sur un run réel) ; estimateur `plan_starts.py` recalé sur les mesures | Validation terrain du POC (reste bloquée côté Florent) ; identité/nom si besoin |
+| 25/09/2026 | Branding / DA | Nom Oyan (D18) et identité visuelle v1 « Argile » (D19) consignés dans `docs/brand.md` §12-13, à partir de l'export Claude Design ; `.claude/` ajouté au `.gitignore` | O-9 : verser les exports dans `brand/`, puis appliquer la charte à l'app |
