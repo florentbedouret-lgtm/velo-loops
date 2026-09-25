@@ -39,7 +39,7 @@
     .warn { font-weight: 500; }
     .warn::before { content: '⚠️ '; }
     #adv { padding: 0 8px 6px; }
-    #adv select { width: 100%; margin-top: 6px; }
+    #adv select, #adv input { width: 100%; box-sizing: border-box; margin-top: 6px; }
     #map { flex: 0 0 38%; }
     #list { flex: 1; overflow: auto; padding: 8px; }
     .card { background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-md);
@@ -72,7 +72,9 @@
   <div id="durlabel" class="label">Durée de la boucle</div>
   <div id="totalApproach"></div>
   <div id="where">Saisissez une adresse, touchez la carte ou utilisez votre position.</div>
-  <details id="adv"><summary>Choisir un départ dans la liste</summary><select id="start"></select></details>
+  <details id="adv"><summary>Choisir un départ dans la liste</summary>
+    <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off">
+    <select id="start" aria-label="Départ"></select></details>
   <div id="legal">Parcours indicatifs, à vérifier avant de partir · <a href="mentions.html" target="_blank" rel="noopener">Mentions légales &amp; confidentialité</a></div>
   <div id="map"></div>
   <div id="list"></div>
@@ -267,7 +269,25 @@
       chooseStart(s.id);
     }
     let pendingStart = null;
-    function chooseStart(id) { startSel.value = id; loadStart(); }
+    function chooseStart(id) {
+      if (![...startSel.options].some(o => o.value === id)) { startFilter.value = ''; fillStarts(); } // départ masqué par le filtre
+      startSel.value = id; loadStart();
+    }
+
+    // ---------- liste des départs, filtrée par le texte tapé (sans tenir compte des accents ni des majuscules)
+    const startFilter = document.getElementById('startFilter');
+    const fold = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    let startItems = []; // [libellé, id, texte de recherche], triés par libellé
+    function fillStarts() {
+      const words = fold(startFilter.value).split(/\s+/).filter(Boolean);
+      const keep = startItems.filter(it => words.every(w => it[2].includes(w)));
+      const current = startSel.value;
+      startSel.textContent = '';
+      startSel.add(new Option(keep.length ? keep.length + ' départ' + (keep.length > 1 ? 's' : '') + ' : choisir…'
+        : 'Aucun départ ne correspond', ''));
+      keep.forEach(([label, id]) => startSel.add(new Option(label, id)));
+      startSel.value = keep.some(it => it[1] === current) ? current : '';
+    }
 
     async function init() {
       const [index] = await Promise.all([
@@ -284,9 +304,9 @@
           else modelOk = false; // version majeure inconnue : on ignore ce fichier, aucun temps chiffré
         }
       } catch (e) { /* réseau indisponible : on garde le repli */ }
-      index.starts.map(s => [startLabel(s), s.id]).sort((a, b) => byName(a[0], b[0]))
-        .forEach(([label, id]) => startSel.add(new Option(label, id)));
-      startSel.selectedIndex = -1;
+      startItems = index.starts.map(s => [startLabel(s), s.id, fold(startLabel(s))]).sort((a, b) => byName(a[0], b[0]));
+      fillStarts();
+      startFilter.oninput = fillStarts;
       Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
       levelSel.value = 'modere';
       index.durations_h.forEach(h => durSel.add(new Option(hm(h * 60), h)));
@@ -307,6 +327,7 @@
         paint: { 'line-color': ROUTE.color, 'line-width': ROUTE.width } }, beforeId);
 
       startSel.onchange = () => {
+        if (!startSel.value) return; // ligne « N départs : choisir… »
         const entry = indexData.starts.find(x => x.id === startSel.value);
         whereEl.innerHTML = 'Départ choisi dans la liste.' + stationNote(entry && entry.kind);
         approachMin = null; loadStart();
