@@ -1,7 +1,8 @@
 name: Générer les boucles vélo
 
 # Lancement manuel : onglet Actions > "Générer les boucles vélo" > Run workflow.
-# Lancement AUTOMATIQUE : tout push sur main qui touche index.html, gpx.js, profile.js ou feedback.js republie le
+# Lancement AUTOMATIQUE : tout push sur main qui touche index.html, mentions.html, gpx.js, profile.js, feedback.js,
+# brand/ ou fonts/ republie le
 # site tout seul, en mode "site" (sans recalcul, 3 à 5 min) — pas besoin de lancer le workflow à la main après un
 # correctif front. Un commit seul, sans ce déclencheur, ne republie JAMAIS le site (Pages = "GitHub Actions" veut
 # dire que Pages n'affiche que ce que CE workflow a explicitement déployé, pas l'état du dépôt).
@@ -38,7 +39,7 @@ on:
         default: plan
       scenario:
         description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
-        default: "2,3,3"
+        default: "1.75,2.5,2.5"      # scénario en ligne depuis le 23/09/2026 (D16, handoff §3.2)
       max_starts:
         description: "Nombre maximum de points de départ à générer (generate_*)"
         default: "3"
@@ -47,7 +48,7 @@ on:
         default: ""
       durations:
         description: "Durées en heures, séparées par des espaces (ex. 1 1.5 2 3)"
-        default: "1 1.5 2 3"
+        default: "0.75 1 1.5 2 3 4"  # durées en ligne depuis le 23/09/2026 (O-3) : ne pas en perdre au prochain full
       bbox:
         description: "Emprise lon_min,lat_min,lon_max,lat_max, ou province. auto = province pour plan et pilot, centre pour les autres modes"
         default: "auto"
