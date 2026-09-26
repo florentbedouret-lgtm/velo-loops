@@ -12,8 +12,9 @@
   <link href="brand/oyan-tokens.css" rel="stylesheet">
   <link href="fonts/oyan-fonts.css" rel="stylesheet">
   <style>
-    /* couleurs : uniquement les variables de brand/oyan-tokens.css ; l'argile est réservée au tracé et au bouton GPX */
-    html, body { margin: 0; }
+    /* couleurs : uniquement les variables de brand/oyan-tokens.css ; l'argile est réservée au tracé, au bouton GPX et
+       au nom de la boucle choisie (maquette « Oyan App Refonte », étape 5) */
+    html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
     body { font-family: var(--font-sans); background: var(--color-bg); color: var(--color-text); }
     a { color: var(--color-text); }
     b, strong { font-weight: var(--fw-medium); } /* charte : pas de typographie grasse */
@@ -23,33 +24,71 @@
     .btn { font: inherit; font-size: 16px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer;
            background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-text); }
     .btn-accent { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
-    #search { display: flex; gap: 6px; padding: 8px 8px 0; }
-    #addr { flex: 1; min-width: 0; }
-    #results { padding: 0 8px; }
-    #results button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 8px; margin-top: 4px;
-                      color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
-    #geoattr { display: block; color: var(--color-text-2); padding: 4px 8px 0; }
-    #controls { display: flex; gap: 8px; padding: 8px; }
-    #controls select { flex: 1; min-width: 0; }
-    #durlabel { padding: 0 8px; color: var(--color-text-2); }
-    #totalApproach { padding: 0 8px 6px; font-size: 14px; color: var(--color-text-2); }
-    #where { padding: 0 8px 6px; line-height: 1.4; }
-    #where .btn { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; }
     .warn { font-weight: 500; }
     .warn::before { content: '⚠️ '; }
-    #adv { padding: 0 8px 6px; }
+
+    /* ---------- carte plein écran ; les crédits de la carte restent visibles au-dessus du panneau (--sheet-h) */
+    #map { position: fixed; inset: 0; }
+    .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-h, 0px); transition: bottom .25s ease; }
+
+    /* ---------- réglages : carte flottante en haut, repliée en une barre « Gràcia · Modéré · 2 h 00 » */
+    #top { position: fixed; z-index: 3; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px;
+           max-width: 520px; margin: 0 auto; background: var(--color-surface); border-radius: 26px;
+           box-shadow: 0 6px 24px rgba(36, 34, 31, .12); }
+    #top.open { border-radius: var(--radius-sheet); }
+    html[data-sheet=high] #top { display: none; }        /* panneau ouvert : la carte ne garde qu'un bandeau (maquette 5d) */
+    #pill { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 8px 0 14px; cursor: pointer; }
+    #pill .sum { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #pill .sum i { font-style: normal; color: var(--color-text-2); }
+    #pill .word { display: none; font-size: 21px; letter-spacing: -.01em; margin: -2px 0 0 -8px; flex: 1; }
+    #top.open #pill .sum { display: none; }
+    #top.open #pill .word { display: block; }
+    .round { width: 36px; height: 36px; border-radius: 18px; border: 0; padding: 0; background: var(--color-bg);
+             display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+    #top.open #pill .round svg { transform: rotate(180deg); }
+    #settings { display: none; padding: 0 16px 16px; max-height: calc(100dvh - 128px - 90px); overflow-y: auto; }
+    #top.open #settings { display: block; }
+    #search { display: flex; gap: 6px; }
+    #addr { flex: 1; min-width: 0; }
+    #results button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 8px; margin-top: 4px;
+                      color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
+    #geoattr { display: block; color: var(--color-text-2); padding: 4px 0 0; }
+    #controls { display: flex; gap: 8px; padding: 8px 0; }
+    #controls select { flex: 1; min-width: 0; }
+    #durlabel { color: var(--color-text-2); }
+    #totalApproach { padding: 0 0 6px; font-size: 14px; color: var(--color-text-2); }
+    #where { padding: 0 0 6px; line-height: 1.4; }
+    #where .btn { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; }
     #adv select, #adv input { width: 100%; box-sizing: border-box; margin-top: 6px; }
-    #map { position: sticky; top: 0; z-index: 2; height: 38vh; height: 38dvh; }
-    #list { padding: 8px; }
-    .card { background: var(--color-surface); border: 2px solid var(--color-border); border-radius: var(--radius-md);
-            padding: 10px; margin-bottom: 8px; line-height: 1.5; scroll-margin-top: calc(38dvh + 8px); }
-    .card.active { border-color: var(--color-text); }
-    .card small { color: var(--color-text-2); }
-    .card .label { color: var(--color-text-2); }
-    .card .hero { font-weight: var(--fw-light); font-size: var(--fs-hero); line-height: 1.05; margin: 2px 0; }
-    .card .hero .unit { font-size: var(--fs-h2); font-weight: var(--fw-regular); }
-    .card .sub { color: var(--color-text-2); font-size: var(--fs-body); }
-    .card .row { font-size: var(--fs-body); }
+
+    /* ---------- panneau coulissant : peek (réglages ouverts), low (replié), mid (mi-hauteur), high (ouvert) */
+    #sheet { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; height: 250px; max-width: 640px; margin: 0 auto;
+             background: var(--color-surface); border-radius: 24px 24px 0 0; box-shadow: 0 -6px 24px rgba(36, 34, 31, .10);
+             display: flex; flex-direction: column; transition: height .25s ease; }
+    #sheet[hidden] { display: none; }
+    #grip { flex: none; padding: 10px 20px 12px; touch-action: none; cursor: grab; }
+    #sheet[data-state=high] #grip { border-bottom: 1px solid var(--color-border); }
+    .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--color-border); margin: 0 auto 12px; }
+    .head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+    .opt-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--color-accent); }
+    .alts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .alt { font: inherit; font-size: 13px; height: 28px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 14px;
+            background: var(--color-surface); color: var(--color-text); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .alt::before { content: ''; width: 14px; border-top: 2px dashed var(--color-text-2); }
+    .sum-line { font-size: 22px; font-weight: var(--fw-light); margin-top: 10px; }
+    #sheet[data-state=high] .sum-line { font-size: 16px; font-weight: var(--fw-regular); margin-top: 8px; }
+    .figs { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; align-items: end; margin-top: 14px; }
+    .figs .k { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-2); }
+    .figs .big { font-size: 40px; font-weight: var(--fw-light); line-height: 1; }
+    .figs .big span { font-size: 18px; }
+    .figs .v { font-size: 24px; font-weight: var(--fw-light); line-height: 1.2; }
+    #sheet[data-state=peek] .figs, #sheet[data-state=high] .figs { display: none; }
+    #sheet[data-state=low] .sum-line, #sheet[data-state=mid] .sum-line { display: none; }
+    #sheetBody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px 16px; line-height: 1.5; }
+    #sheet[data-state=peek] #sheetBody, #sheet[data-state=peek] #sheetFoot { display: none; }
+    #sheetFoot { flex: none; padding: 12px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); }
+    .gpx { width: 100%; height: 52px; border-radius: 14px; font-size: 17px; }
+    #sheetBody small, #sheetBody .sub { color: var(--color-text-2); }
     /* barre de terrain (charte §13.2 : couleurs terrain réservées à cette barre) */
     .terrain { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 4px; }
     .terrain span { display: block; height: 100%; }
@@ -62,31 +101,50 @@
     .city { font-size: 14px; margin: 6px 0; }
     .city .btn { font-size: 14px; padding: 4px 8px; }
     .other-dur { font-size: 15px; padding: 6px 10px; margin: 6px 6px 0 0; }
-    .gpx { margin: 8px 0; padding: 10px 14px; }
-    #legal { padding: 0 8px 4px; font-size: 12px; color: var(--color-text-2); }
+    #legal { padding: 12px 0 0; font-size: 12px; color: var(--color-text-2); }
     #legal a { color: var(--color-text-2); }
   </style>
 </head>
 <body>
-  <div id="search">
-    <input id="addr" type="search" placeholder="Adresse de départ (rue, ville…)" enterkeyhint="search" autocomplete="off">
-    <button id="go" class="btn" type="button">Chercher</button>
-    <button id="me" class="btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">📍</button>
-  </div>
-  <div id="results"></div>
-  <div id="controls">
-    <select id="level"></select>
-    <select id="duration" aria-label="Durée de la boucle"></select>
-  </div>
-  <div id="durlabel" class="label">Durée de la boucle</div>
-  <div id="totalApproach"></div>
-  <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
-  <details id="adv"><summary>Choisir un départ dans la liste</summary>
-    <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off">
-    <select id="start" aria-label="Départ"></select></details>
-  <div id="legal">Parcours indicatifs, à vérifier avant de partir · <a href="mentions.html" target="_blank" rel="noopener">Mentions légales &amp; confidentialité</a></div>
   <div id="map"></div>
-  <div id="list"></div>
+  <div id="top" class="open">
+    <div id="pill" role="button" tabindex="0" aria-expanded="true" aria-controls="settings">
+      <svg width="26" height="26" viewBox="0 0 48 48" aria-hidden="true"><path d="M37.86 18.26 A15 15 0 1 1 29.74 10.14" fill="none" stroke="#24221F" stroke-width="5.5" stroke-linecap="round"/><circle cx="29.74" cy="10.14" r="4.5" fill="#A8522F"/></svg>
+      <span class="word" aria-label="Oyan">yan</span>
+      <span class="sum" id="pillSum"></span>
+      <button type="button" class="round" aria-label="Afficher ou masquer les réglages" tabindex="-1">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="#24221F" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="settings">
+      <div id="search">
+        <input id="addr" type="search" placeholder="Adresse de départ (rue, ville…)" enterkeyhint="search" autocomplete="off">
+        <button id="go" class="btn" type="button">Chercher</button>
+        <button id="me" class="btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">📍</button>
+      </div>
+      <div id="results"></div>
+      <div id="controls">
+        <select id="level"></select>
+        <select id="duration" aria-label="Durée de la boucle"></select>
+      </div>
+      <div id="durlabel" class="label">Durée de la boucle</div>
+      <div id="totalApproach"></div>
+      <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
+      <details id="adv"><summary>Choisir un départ dans la liste</summary>
+        <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off">
+        <select id="start" aria-label="Départ"></select></details>
+    </div>
+  </div>
+  <div id="sheet" hidden data-state="low">
+    <div id="grip">
+      <div class="handle"></div>
+      <div id="sheetHead"></div>
+    </div>
+    <div id="sheetBody"></div>
+    <div id="sheetFoot">
+      <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button>
+    </div>
+  </div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
   <script src="gpx.js"></script>
   <script src="profile.js"></script>
@@ -106,7 +164,84 @@
     const startSel = document.getElementById('start');
     const levelSel = document.getElementById('level');
     const durSel = document.getElementById('duration');
-    const list = document.getElementById('list');
+    const sheet = document.getElementById('sheet');
+    const sheetHead = document.getElementById('sheetHead');
+    const sheetBody = document.getElementById('sheetBody');
+    const sheetFoot = document.getElementById('sheetFoot');
+    const topCard = document.getElementById('top');
+
+    // ---------- panneau coulissant (maquette « Oyan App Refonte », étape 5) : quatre hauteurs
+    // peek = réglages ouverts (nom et chiffres seulement) ; low = replié (chiffres + GPX) ; mid = mi-hauteur ; high = ouvert
+    function sheetHeights() {
+      const H = window.innerHeight;
+      return { peek: 128, low: Math.min(250, Math.round(H * 0.45)), mid: Math.min(560, Math.round(H * 0.68)), high: H - 120 };
+    }
+    function setSheetHeight(h) {
+      sheet.style.height = h + 'px';
+      document.documentElement.style.setProperty('--sheet-h', (sheet.hidden ? 0 : h) + 'px');
+    }
+    function setSheet(state) {
+      sheet.dataset.state = state;
+      document.documentElement.dataset.sheet = state;
+      setSheetHeight(sheetHeights()[state]);
+      if (state !== 'peek' && topCard.classList.contains('open')) setSettings(false);
+      if (state === 'low' || state === 'mid') sheetBody.scrollTop = 0;
+    }
+    function setSettings(open) {
+      topCard.classList.toggle('open', open);
+      document.getElementById('pill').setAttribute('aria-expanded', String(open));
+      if (open && !sheet.hidden && sheet.dataset.state !== 'peek') setSheet('peek');
+      else if (!open && sheet.dataset.state === 'peek') setSheet('low');
+    }
+    function showSheet() {
+      sheet.hidden = false;
+      setSheet(topCard.classList.contains('open') ? 'peek' : sheet.dataset.state === 'peek' ? 'low' : sheet.dataset.state);
+    }
+    // glisser la poignée (ou l'en-tête) : le panneau suit le doigt puis se cale sur la hauteur la plus proche ;
+    // un simple toucher fait monter d'un cran (replié -> mi-hauteur -> ouvert -> replié)
+    (function bindSheetDrag() {
+      const grip = document.getElementById('grip');
+      let drag = null, justDragged = false;
+      grip.addEventListener('pointerdown', e => {
+        if (e.target.closest('button')) return;                // les pastilles restent de simples boutons
+        drag = { y: e.clientY, h: sheet.getBoundingClientRect().height, moved: false, t: Date.now() };
+        grip.setPointerCapture(e.pointerId);                   // le doigt peut sortir de l'en-tête sans perdre le panneau
+      });
+      grip.addEventListener('pointermove', e => {
+        if (!drag) return;
+        const dy = drag.y - e.clientY;
+        if (!drag.moved && Math.abs(dy) < 6) return;
+        if (!drag.moved) { drag.moved = true; sheet.style.transition = 'none'; }
+        const hs = sheetHeights();
+        setSheetHeight(Math.max(hs.peek, Math.min(hs.high, drag.h + dy)));
+      });
+      const end = e => {
+        if (!drag) return;
+        const d = drag; drag = null;
+        sheet.style.transition = '';
+        if (!d.moved) return;
+        justDragged = true; setTimeout(() => { justDragged = false; }, 0);
+        const hs = sheetHeights(), h = sheet.getBoundingClientRect().height;
+        const v = (d.y - e.clientY) / Math.max(1, Date.now() - d.t);          // px/ms, positif vers le haut
+        const order = ['low', 'mid', 'high'];
+        let best = order.reduce((a, b) => Math.abs(hs[b] - h) < Math.abs(hs[a] - h) ? b : a);
+        if (Math.abs(v) > 0.5) {                                                 // geste rapide : cran suivant dans ce sens
+          best = v > 0 ? (order.find(k => hs[k] > h + 1) || 'high')
+                       : ([...order].reverse().find(k => hs[k] < h - 1) || 'low');
+        }
+        setSheet(best);
+        fitRoute();
+      };
+      grip.addEventListener('pointerup', end);
+      grip.addEventListener('pointercancel', end);
+      grip.addEventListener('click', e => {
+        if (justDragged || e.target.closest('button')) return;
+        const next = { peek: 'low', low: 'mid', mid: 'high', high: 'low' }[sheet.dataset.state];
+        setSheet(next);
+        fitRoute();
+      });
+      window.addEventListener('resize', () => { if (!sheet.hidden) setSheetHeight(sheetHeights()[sheet.dataset.state]); });
+    })();
 
     const map = new maplibregl.Map({
       container: 'map',
@@ -331,6 +466,7 @@
       index.durations_h.forEach(h => durSel.add(new Option(hm(h * 60), h)));
       durSel.value = '2';
       durSel.onchange = showLevel;
+      updatePill();
 
       // tracé Oyan : boucle choisie en argile avec liseré blanc, les autres en galet ; le tout sous les noms de lieux
       map.addSource('routes', { type: 'geojson', data: EMPTY });
@@ -349,6 +485,10 @@
       map.addLayer({ id: 'cursor', type: 'circle', source: 'cursor',
         paint: { 'circle-radius': 6, 'circle-color': ROUTE.user, 'circle-stroke-color': ROUTE.casing, 'circle-stroke-width': 2.5 } });
 
+      document.getElementById('pill').onclick = () => setSettings(!topCard.classList.contains('open'));
+      document.getElementById('pill').onkeydown = e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSettings(!topCard.classList.contains('open')); }
+      };
       startSel.onchange = () => {
         if (!startSel.value) return; // ligne « N départs : choisir… »
         const entry = indexData.starts.find(x => x.id === startSel.value);
@@ -356,9 +496,9 @@
         approachMin = null; loadStart();
       };
       levelSel.onchange = showLevel;
-      list.onclick = e => {
-        const card = e.target.closest('.card');
-        if (card && Number(card.dataset.i) !== current) select(Number(card.dataset.i), true);
+      sheetHead.onclick = e => {                          // pastille d'une autre boucle : elle devient la boucle affichée
+        const b = e.target.closest('.alt');
+        if (b) select(Number(b.dataset.i));
       };
       document.getElementById('go').onclick = searchAddress;
       addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
@@ -375,18 +515,31 @@
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
     }
 
+    // barre repliée des réglages : « Gràcia · Modéré · 2 h 00 »
+    function updatePill() {
+      const s = startData && indexData.starts.find(x => x.id === startData.start.id);
+      const name = s ? (s.kind === 'station' ? startLabel(s) : s.name) : 'Choisir un départ';
+      const lvl = levelSel.options[levelSel.selectedIndex];
+      document.getElementById('pillSum').innerHTML = esc(name) + ' <i>·</i> ' + esc(lvl ? lvl.text : '') +
+        ' <i>·</i> ' + hm(Number(durSel.value) * 60);
+    }
+
     async function loadStart() {
-      list.textContent = 'Chargement…';
+      sheetHead.textContent = '';
+      sheetBody.textContent = 'Chargement…';
+      showSheet();
       const res = await fetch('web/data/starts/' + startSel.value + '.json');
-      if (!res.ok) { list.textContent = 'Erreur de chargement (' + res.status + ')'; return; }
+      if (!res.ok) { sheetBody.textContent = 'Erreur de chargement (' + res.status + ')'; return; }
       startData = await res.json();
       if (marker) marker.remove();
       marker = new maplibregl.Marker({ color: ROUTE.start })
         .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
+      setSettings(false);                                   // départ trouvé : on replie les réglages et on montre la boucle
       showLevel();
     }
 
     function showLevel() {
+      updatePill();
       if (!startData) return;
       shown = startData.options.filter(o => o.level === levelSel.value &&
         (o.duration_target_min == null ||
@@ -394,12 +547,14 @@
       if (!shown.length) {
         const avail = [...new Set(startData.options.filter(o => o.level === levelSel.value)
           .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);
-        list.innerHTML = 'Pas de boucle de ' + hm(Number(durSel.value) * 60) + ' en « ' +
+        sheetHead.innerHTML = '<div class="head-row"><span class="opt-label">Aucune boucle</span></div>';
+        sheetFoot.hidden = true;
+        sheetBody.innerHTML = 'Pas de boucle de ' + hm(Number(durSel.value) * 60) + ' en « ' +
           esc(levelSel.options[levelSel.selectedIndex].text) + ' » depuis ce départ.' +
           (avail.length ? '<br>Autre durée possible : ' + avail.map(m =>
             '<button type="button" class="btn other-dur" data-min="' + m + '">' +
             hm(m) + '</button>').join('') : '<br>Essaie un autre niveau.');
-        list.querySelectorAll('button[data-min]').forEach(b => {
+        sheetBody.querySelectorAll('button[data-min]').forEach(b => {
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
         });
         map.getSource('routes').setData(EMPTY);
@@ -567,49 +722,67 @@
         <ul class="pitch">${pitch}</ul>
         ${steepBadge ? '<p><span class="badge">⚠️ Au moins une rampe très raide</span></p>' : ''}
         ${profileSvg(o)}
-        <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button>
         ${cityLine ? '<p class="city">' + cityLine + '</p>' : ''}
         <details class="facts"><summary>Tous les chiffres</summary>
           <ul class="pitch">${facts}</ul>
           ${climbs ? '<ul class="climbs">' + climbs + '</ul>' : ''}
         </details>
         ${feedbackHtml(o)}
-        <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>`;
+        <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>
+        <div id="legal">Parcours indicatifs, à vérifier avant de partir · <a href="mentions.html" target="_blank" rel="noopener">Mentions légales &amp; confidentialité</a></div>`;
     }
 
-    function select(i, scroll = false) {
+    // en-tête du panneau : nom de la boucle, pastilles des autres boucles, chiffres (colonnes ou ligne selon la hauteur)
+    function headHtml(o) {
+      const alts = shown.map((x, k) => k === current ? '' :
+        '<button type="button" class="alt" data-i="' + k + '">' + esc(LABELS[x.label] || x.label) + '</button>').join('');
+      return `<div class="head-row"><span class="opt-label">${esc(LABELS[o.label] || o.label)}</span><span class="alts">${alts}</span></div>
+        <div class="sum-line">${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)}</div>
+        <div class="figs">
+          <div><div class="k">DISTANCE</div><div class="big">${km(o.distance_km)}<span> km</span></div></div>
+          <div><div class="k">D+</div><div class="v">${Math.round(o.ascend_m)} m</div></div>
+          <div><div class="k">DURÉE</div><div class="v">≈ ${hm(o.time_est_min)}</div></div>
+        </div>`;
+    }
+
+    function select(i) {
       current = i;
+      const o = shown[current];
       const totalEl = document.getElementById('totalApproach');
       totalEl.textContent = approachMin != null
-        ? '+ trajet jusqu\'au départ : ≈ ' + hm(shown[current].time_est_min + approachMin) + ' au total, sans pauses'
+        ? '+ trajet jusqu\'au départ : ≈ ' + hm(o.time_est_min + approachMin) + ' au total, sans pauses'
         : '';
-      list.innerHTML = shown.map((o, k) => `
-        <div class="card ${k === current ? 'active' : ''}" data-i="${k}">
-          <div class="label">${LABELS[o.label] || o.label}</div>
-          ${k === current
-            ? `<div class="hero">${km(o.distance_km)} <span class="unit">km</span></div>
-               <div class="sub">D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)} · en ville ${Math.round(cityShare(o) * 100)} %</div>
-               ${detailHtml(o)}`
-            : `<div class="row">${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)}</div>`}
-        </div>`).join('');
-      if (scroll) list.querySelector('.card.active').scrollIntoView({ block: 'start', behavior: 'smooth' });
+      sheetHead.innerHTML = headHtml(o);
+      sheetFoot.hidden = false;
+      sheetBody.innerHTML = (LANDCOVER_OK && o.scenery && o.scenery.landcover ? ''
+        : '<div class="sub">En ville ' + Math.round(cityShare(o) * 100) + ' %</div>') + detailHtml(o);
+      sheetBody.scrollTop = 0;
       map.getSource('cursor').setData(EMPTY);
-      const pf = list.querySelector('.card.active svg.pf');
+      const pf = sheetBody.querySelector('svg.pf');
       if (pf) bindProfile(pf, pos => map.getSource('cursor').setData(pos
         ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY));
 
       const features = shown
-        .map((o, k) => ({
+        .map((x, k) => ({
           type: 'Feature',
           properties: { selected: k === current },
-          geometry: { type: 'LineString', coordinates: o.coords }
+          geometry: { type: 'LineString', coordinates: x.coords }
         }))
         .sort((a, b) => a.properties.selected - b.properties.selected);
       map.getSource('routes').setData({ type: 'FeatureCollection', features });
+      fitRoute();
+    }
 
+    // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)
+    function fitRoute() {
+      if (!shown.length || !shown[current]) return;
       const bounds = new maplibregl.LngLatBounds();
       shown[current].coords.forEach(c => bounds.extend([c[0], c[1]]));
-      map.fitBounds(bounds, { padding: 40, duration: 500 });
+      const hs = sheetHeights(), H = window.innerHeight;
+      let top = topCard.getBoundingClientRect().bottom + 16;
+      let bottom = (sheet.dataset.state === 'high' ? hs.low : hs[sheet.dataset.state]) + 16;
+      if (top + bottom > H - 80) { const k = (H - 80) / (top + bottom); top *= k; bottom *= k; }  // écran trop petit
+      map.fitBounds(bounds, { padding: { top, bottom, left: 30, right: 30 }, duration: 500 });
     }
 
     init();
