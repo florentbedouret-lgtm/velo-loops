@@ -333,7 +333,7 @@ jobs:
         if: ${{ startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         env:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
-          LANDCOVER_METHOD: "bld75_3"     # définition de « ville » retenue (voir scripts/landcover.py) : à confirmer par landcover_check
+          LANDCOVER_METHOD: "bld75_5"     # « ville » = 5 bâtiments à moins de ~75 m (diagnostic landcover_check n°2, 26/09/2026)
         run: |
           if [ "$MODE" = "landcover_check" ]; then
             python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check \

@@ -61,6 +61,11 @@ MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
 WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}
+# « ville » de la répartition du terrain (O-9.4) : au moins LANDCOVER_BLD_MIN bâtiments OSM à moins de ~75 m du point.
+# Les zones bâties « landuse » ne marchent pas à Barcelone (îlots dessinés sans les rues) ; calage : diagnostic
+# landcover_check n°2 du 26/09/2026 (Gràcia 1 h : 89 % ; Collserola 23-33 %). Partagé avec scripts/landcover.py.
+LANDCOVER_BLD_DEG = 0.0009
+LANDCOVER_BLD_MIN = 5
 FLOW_OVERLAP_FACTOR = 1.0     # pénalité des tronçons répétés (2.0 jusqu'à la v4 ; D21 : diagnostic nature_check v5)
 LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km ou plus, le sous-score "feux" tombe à 0
 SIGNALS = None                  # SignalIndex des feux tricolores, chargé dans main()
@@ -199,15 +204,15 @@ def load_signals(pbf: Path, workdir: Path):
 class LandscapeIndex:
     """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
 
-    def __init__(self, forests, waters, protected, viewpoints, builtup=()):
+    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=()):
         import numpy as np  # noqa: F401
         from shapely.strtree import STRtree
         builtup = list(builtup)
         self.trees = {k: (STRtree(v) if v else None)
                       for k, v in (("forest", forests), ("water", waters), ("protected", protected),
-                                   ("view", viewpoints), ("builtup", builtup))}
+                                   ("view", viewpoints), ("builtup", builtup), ("buildings", list(buildings)))}
         self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
-                       "view": len(viewpoints), "builtup": len(builtup)}
+                       "view": len(viewpoints), "builtup": len(builtup), "buildings": len(buildings)}
 
     def measure(self, coords, cum) -> dict:
         import numpy as np
@@ -233,22 +238,21 @@ class LandscapeIndex:
                 "score": round(100 * index), "landcover": self.landcover(pts)}
 
     def landcover(self, pts) -> dict | None:
-        """Répartition du tracé (points tous les 100 m), UNE catégorie par point, par priorité : ville (dans une zone
-        bâtie OSM : landuse residential/commercial/industrial/retail) > eau (< ~100 m) > forêt (dans ou au bord)
-        > campagne. Les 4 parts font 100 % : barre de terrain de la charte (O-9.4). Sans zones bâties chargées : None."""
+        """Répartition du tracé (points tous les 100 m), UNE catégorie par point, par priorité : ville (au moins
+        LANDCOVER_BLD_MIN bâtiments à moins de ~75 m) > eau (< ~100 m) > forêt (dans ou au bord) > espaces ouverts.
+        Les 4 parts font 100 % : barre de terrain de la charte (O-9.4). Sans bâtiments chargés : None."""
         import numpy as np
-        if self.trees["builtup"] is None:
+        if self.trees["buildings"] is None:
             return None
         n = len(pts)
-        cls = np.full(n, 3)                                   # 3 = campagne
-        for code, key, pred, dist in ((2, "forest", "dwithin", SCENERY_FOREST_DEG),
-                                      (1, "water", "dwithin", SCENERY_WATER_DEG),
-                                      (0, "builtup", "intersects", None)):   # du moins au plus prioritaire
+        cls = np.full(n, 3)                                   # 3 = espaces ouverts
+        for code, key in ((2, "forest"), (1, "water")):       # du moins au plus prioritaire
             tree = self.trees[key]
-            if tree is None:
-                continue
-            hit = (tree.query(pts, predicate=pred, distance=dist) if dist else tree.query(pts, predicate=pred))[0]
-            cls[np.unique(hit)] = code
+            if tree is not None:
+                dist = SCENERY_FOREST_DEG if key == "forest" else SCENERY_WATER_DEG
+                cls[np.unique(tree.query(pts, predicate="dwithin", distance=dist)[0])] = code
+        hit = self.trees["buildings"].query(pts, predicate="dwithin", distance=LANDCOVER_BLD_DEG)[0]
+        cls[np.bincount(hit, minlength=n) >= LANDCOVER_BLD_MIN] = 0
         counts = np.bincount(cls, minlength=4) / max(n, 1)
         return {"city": round(float(counts[0]), 3), "water": round(float(counts[1]), 3),
                 "forest": round(float(counts[2]), 3), "countryside": round(float(counts[3]), 3)}
@@ -309,7 +313,41 @@ def load_landscape(pbf: Path, workdir: Path):
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
-    return LandscapeIndex(forests, waters, protected, views, builtup)
+    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir))
+
+
+def load_building_points(pbf: Path, workdir: Path, bbox: str = "") -> list:
+    """Centres des bâtiments OSM (osmium) : « ville » de la répartition du terrain. bbox vide = tout l'extrait
+    (province : ~1 million de bâtiments, ~60 s sur le runner GitHub)."""
+    import subprocess
+    from shapely.geometry import shape
+    cut, filt, out = workdir / "bld_cut.osm.pbf", workdir / "bld.osm.pbf", workdir / "bld.geojsonseq"
+    src = pbf
+    try:
+        if bbox:
+            subprocess.run(["osmium", "extract", "--bbox", bbox, str(pbf), "-o", str(cut), "--overwrite"], check=True,
+                           capture_output=True)
+            src = cut
+        subprocess.run(["osmium", "tags-filter", str(src), "w/building", "-o", str(filt), "--overwrite"], check=True,
+                       capture_output=True)
+        subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"], check=True,
+                       capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! bâtiments non chargés : {e.stderr.decode()[:200]}", file=sys.stderr)
+        return []
+    pts = []
+    with out.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip("\x1e\n ")
+            if not line:
+                continue
+            try:
+                geom = shape(json.loads(line)["geometry"])
+            except (ValueError, KeyError):
+                continue
+            if not geom.is_empty:
+                pts.append(geom.representative_point())
+    return pts
 
 
 # --------------------------------------------------------------------------- modèle physique

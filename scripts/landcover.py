@@ -35,7 +35,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 import generate_loops as g  # load_landscape, sample_points, haversine, SCENERY_*_DEG
 
 NEAR25_DEG, NEAR50_DEG = 0.0003, 0.0006   # ~25 et ~50 m à cette latitude (en longitude ; un peu plus en latitude)
-BLD = {"bld50_3": (0.0006, 3), "bld75_3": (0.0009, 3), "bld75_5": (0.0009, 5)}   # (rayon en degrés, nb de bâtiments)
+BLD = {"bld50_3": (0.0006, 3), "bld75_3": (0.0009, 3),                           # (rayon en degrés, nb de bâtiments)
+       "bld75_5": (g.LANDCOVER_BLD_DEG, g.LANDCOVER_BLD_MIN)}   # retenue le 26/09/2026 = règle du générateur
 METHODS = ("inside", "near50", *BLD)
 WITNESSES = ("gracia", "l-eixample", "sant-marti", "ciutat-vella", "horta-guinardo", "sarria-sant-gervasi",
              "sant-adria-de-besos", "badalona", "el-tibidabo-est", "can-rectoret-est", "santa-creu-d-olorda-est",
