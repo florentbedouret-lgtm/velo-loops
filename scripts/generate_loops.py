@@ -51,6 +51,10 @@ CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270), (7, 45)
 # Tirages « montée » (niveau sportif) : le calcul ordinaire évite les côtes (bike_elevation ralentit les pentes) ; ces
 # tirages les favorisent pour qu'une option « Plus de relief » existe quand le terrain le permet (Gràcia 2 h sportif :
 # boucle par Collserola, 888 m de D+, perdue au recalcul O-15). Le score choisit toujours la boucle « équilibrée ».
+# O-18 option B : poids du relief dans la note, par niveau (vide = aucun bonus, réglage actuel). Réglé après la sonde
+# « relief » (nature_check --relief) ; partie « relief » = D+ par km rapporté à RELIEF_FULL_M_PER_KM (plafonné à 1).
+RELIEF_WEIGHTS: dict = {}
+RELIEF_FULL_M_PER_KM = 20.0   # 20 m de D+ par km (2 000 m pour 100 km) = relief maximal noté
 CLIMB_LEVELS = ("soutenu",)
 CLIMB_CANDIDATES = [(11, None), (12, None), (13, 0), (14, 90), (15, 180), (16, 270)]
 CLIMB_MODEL = {
@@ -788,7 +792,16 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
 
 
 def score(l: Loop) -> float:
+    return score_from(l, RELIEF_WEIGHTS.get(l.level))
+
+
+def score_from(l: Loop, relief_weight: float | None = None) -> float:
+    """Note de la boucle ; relief_weight : poids de la partie « relief » (None ou 0 = pas de bonus). Séparée de score()
+    pour que la sonde « relief » compare plusieurs poids sans modifier le réglage global."""
     parts, weights = score_parts(l)
+    if relief_weight:
+        parts["relief"] = min(1.0, l.dplus_per_km / RELIEF_FULL_M_PER_KM)
+        weights["relief"] = relief_weight
     total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
     total -= min(0.3, max(0.0, l.shares["unpaved"] - 0.03) * 2.0)
     return round(100 * max(0.0, total), 1)
@@ -1179,7 +1192,8 @@ def params_hash(config_dir: str = "config") -> str:
               "tol": TIME_TOLERANCE, "overlap": MAX_OVERLAP, "unpaved": MAX_UNPAVED, "uturns": MAX_UTURNS,
               "signal": [SIGNAL_DELAY_S, SIGNAL_RADIUS_M, SIGNAL_CLUSTER_M, LIGHTS_PER_KM_ZERO_SCORE],
               "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
-              "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M]}
+              "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M],
+              **({"relief": [RELIEF_WEIGHTS, RELIEF_FULL_M_PER_KM]} if RELIEF_WEIGHTS else {})}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     cfg = Path(config_dir)
     if cfg.exists():

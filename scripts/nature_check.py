@@ -375,6 +375,88 @@ def run_probe(sid, site, gh_url, durations, levels):
     return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
 
 
+# ----------------------------------------------------------------------------- sonde « relief » (O-18, option B)
+RELIEF_VARIANTS = (0.0, 0.10, 0.20, 0.30)     # poids du relief dans la note du niveau sportif (0 = réglage actuel)
+
+
+def relief_row(l, label, sid, modere_cells):
+    o = g.to_json(l, label, sid, 1)
+    r = option_row(o)
+    r["dplus_per_km"] = round(l.dplus_per_km, 1)
+    r["main_roads_pct"] = round(100 * o["shares"]["main_roads"])
+    r["same_as_modere"] = max((len(l.cells & c) / max(1, min(len(l.cells), len(c))) for c in modere_cells), default=0) >= 0.8
+    return r
+
+
+def run_relief(sid, site, gh_url, durations):
+    """Pour chaque durée : candidats du niveau sportif calculés UNE fois, puis options choisies avec chaque poids du relief
+    (RELIEF_VARIANTS) ; comparées aux options du niveau modéré (réglage actuel) pour mesurer les doublons d'allure."""
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next((e for e in idx["starts"] if e["id"] == sid), None)
+    if entry is None:
+        return {"id": sid, "skipped": "départ absent de l'index publié"}
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1]}
+    rows = []
+    for d in durations:
+        mod = [l for _, l in g.pick_options(g.level_pool(gh, st_, "modere", d, g.CANDIDATES, lambda *_: None))]
+        pool = g.level_pool(gh, st_, "soutenu", d, g.CANDIDATES, lambda *_: None)
+        row = {"duration_h": d, "valid": len(pool), "modere_main": None, "variants": {}}
+        if mod:
+            m = g.to_json(mod[0], "equilibre", sid, 1)
+            row["modere_main"] = {"km": m["distance_km"], "dplus_m": m["ascend_m"]}
+        for w in RELIEF_VARIANTS:
+            for l in pool:
+                l.score = g.score_from(l, w)
+            picks = g.pick_options(pool)
+            row["variants"][f"{w:g}"] = [relief_row(l, lab, sid, [x.cells for x in mod]) for lab, l in picks]
+        for l in pool:                                     # remise au réglage actuel
+            l.score = g.score(l)
+        rows.append(row)
+    return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "zone": entry.get("zone"), "rows": rows}
+
+
+def report_relief(results, out_json, out_md, note, t0):
+    import statistics as stt
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    ok = [r for r in results if not r.get("skipped")]
+    L = [f"# Sonde « relief » en niveau sportif (O-18, option B) — {round((time.time() - t0) / 60)} min",
+         (f"\n**{note}**" if note else ""),
+         "\nMêmes candidats, options choisies avec plusieurs poids du relief dans la note (0 = réglage actuel). "
+         "« Doublon » = option qui recouvre à 80 % ou plus une option du niveau modéré.",
+         "\n| Poids relief | D+ médian de l'équilibrée | D+/km médian | forêt médiane | ville médiane | routes principales médiane "
+         "| note (réglage actuel) médiane | équilibrée = modéré | options en doublon |", "|---|---|---|---|---|---|---|---|---|"]
+    for w in RELIEF_VARIANTS:
+        k = f"{w:g}"
+        mains = [row["variants"][k][0] for r in ok for row in r["rows"] if row["variants"].get(k)]
+        allo = [o for r in ok for row in r["rows"] for o in row["variants"].get(k, [])]
+        if not mains:
+            continue
+        med = lambda key: stt.median([o[key] for o in mains if o.get(key) is not None])  # noqa: E731
+        L.append(f"| {k} | {med('dplus_m'):.0f} m | {med('dplus_per_km'):.1f} | {med('forest_pct'):.0f} % | {med('city_pct'):.0f} % | "
+                 f"{med('main_roads_pct'):.0f} % | {med('score'):.1f} | {sum(o['same_as_modere'] for o in mains)}/{len(mains)} | "
+                 f"{sum(o['same_as_modere'] for o in allo)}/{len(allo)} |")
+    L.append("\n## Détail : boucle « équilibrée » sportive selon le poids du relief")
+    for r in results:
+        if r.get("skipped"):
+            L.append(f"\n- {r['id']} : ignoré ({r['skipped']})")
+            continue
+        L.append(f"\n**{r['name']}** ({r.get('zone')})")
+        for row in r["rows"]:
+            mm = row["modere_main"]
+            parts = []
+            for w in RELIEF_VARIANTS:
+                v = row["variants"].get(f"{w:g}")
+                if v:
+                    o = v[0]
+                    parts.append(f"{w:g} → {o['km']} km, {o['dplus_m']} m, forêt {o['forest_pct']} %, routes pr. {o['main_roads_pct']} %"
+                                 + (" (= modéré)" if o["same_as_modere"] else ""))
+            L.append(f"- {row['duration_h']:g} h" + (f" (modéré : {mm['km']} km, {mm['dplus_m']} m)" if mm else "") + " : " + " ; ".join(parts))
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L[:30]), flush=True)
+
+
 def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
     f = lambda o: (f"{o['label']} : {o['km']} km, D+ {o['dplus_m']}, forêt {o['forest_pct']} %, ville {o['city_pct']} %, "  # noqa: E731
@@ -414,6 +496,7 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
@@ -426,6 +509,13 @@ def main() -> int:
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
+    if args.relief:
+        ids = [x.strip() for x in args.relief.split(";") if x.strip()]
+        durations = [float(x) for x in args.durations.split()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_relief(sid, args.site, args.gh, durations), ids))
+        report_relief(results, args.out, args.out_md, args.note, t0)
+        return 0
     if args.probe:
         ids = [x.strip() for x in args.probe.split(";") if x.strip()]
         durations = [float(x) for x in args.durations.split()]
