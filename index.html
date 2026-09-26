@@ -31,6 +31,21 @@
     #map { position: fixed; inset: 0; }
     .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-h, 0px); transition: bottom .25s ease; }
 
+    /* marqueurs : départ = point argile du logo ; position = point basalte à halo ; étiquette de l'autre boucle */
+    .mk-start { width: 16px; height: 16px; box-sizing: border-box; border-radius: 50%; background: var(--color-accent);
+                border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(36, 34, 31, .35); }
+    .mk-user { width: 30px; height: 30px; border-radius: 50%; background: rgba(36, 34, 31, .14); display: flex; align-items: center; justify-content: center; }
+    .mk-user::after { content: ''; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; background: var(--color-text); border: 2px solid #fff; }
+    .mk-alt { font: 12px var(--font-sans); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; cursor: pointer;
+              background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 3px 9px; color: var(--color-text);
+              box-shadow: 0 1px 4px rgba(36, 34, 31, .15); }
+    .mk-alt::before { content: ''; width: 14px; border-top: 2px dashed var(--color-text-2); }
+    #locate { position: fixed; z-index: 3; right: 12px; bottom: calc(var(--sheet-h, 0px) + 12px); width: 44px; height: 44px; border-radius: 22px;
+              border: 0; padding: 0; background: var(--color-surface); box-shadow: 0 2px 10px rgba(36, 34, 31, .15); cursor: pointer;
+              display: flex; align-items: center; justify-content: center; transition: bottom .25s ease; }
+    html:not([data-sheet]) #locate, html[data-sheet=high] #locate, html[data-sheet=mid] #locate, html[data-sheet=peek] #locate { display: none; }
+    .maplibregl-ctrl-bottom-right { right: 64px; }         /* crédits de la carte à côté du bouton de position */
+
     /* ---------- réglages : carte flottante en haut, repliée en une barre « Gràcia · Modéré · 2 h 00 » */
     #top { position: fixed; z-index: 3; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px;
            max-width: 520px; margin: 0 auto; background: var(--color-surface); border-radius: 26px;
@@ -205,6 +220,9 @@
       </div>
     </div>
   </div>
+  <button type="button" id="locate" aria-label="Utiliser ma position" title="Utiliser ma position">
+    <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5.5" fill="none" stroke="#24221F" stroke-width="1.5"/><circle cx="10" cy="10" r="2" fill="#24221F"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </button>
   <div id="sheet" hidden data-state="low">
     <div id="grip">
       <div class="handle"></div>
@@ -227,9 +245,46 @@
       variante: 'Variante'
     };
     const EMPTY = { type: 'FeatureCollection', features: [] };
-    // couleurs de la carte, reprises de brand/oyan-tokens.css (MapLibre ne lit pas les variables CSS)
+    // couleurs de la carte, reprises de brand/oyan-tokens.css (MapLibre ne lit pas les variables CSS) ;
+    // autre boucle = pointillé galet sur liseré blanc, sous la boucle choisie (maquette 5b)
     const ROUTE = { color: '#A8522F', width: 4.5, casing: '#FFFFFF', casingWidth: 8.5,
                     other: '#625D55', otherWidth: 3, start: '#A8522F', user: '#24221F' };
+
+    const BASEMAP_SAT = 0.3;          // part de saturation gardée
+    const toGrey = (() => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      const cache = new Map();
+      return str => {
+        if (cache.has(str)) return cache.get(str);
+        let out = str;
+        ctx.fillStyle = '#010203';
+        ctx.fillStyle = str;
+        const norm = ctx.fillStyle;                      // « #rrggbb » ou « rgba(r, g, b, a) », inchangé si str n'est pas une couleur
+        if (norm !== '#010203' || /^#010203$/i.test(str)) {
+          let r, g, b, a = 1;
+          if (norm[0] === '#') [r, g, b] = [1, 3, 5].map(i => parseInt(norm.slice(i, i + 2), 16));
+          else [r, g, b, a] = norm.match(/[\d.]+/g).map(Number);
+          const y = 0.299 * r + 0.587 * g + 0.114 * b;      // luminance : on garde la clarté, on retire la couleur
+          const m = v => Math.round(y + (v - y) * BASEMAP_SAT);
+          out = 'rgba(' + m(r) + ',' + m(g) + ',' + m(b) + ',' + a + ')';
+        }
+        cache.set(str, out);
+        return out;
+      };
+    })();
+    const greyValue = v => typeof v === 'string' ? toGrey(v) : Array.isArray(v) ? v.map(greyValue)
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, greyValue(x)])) : v;
+    function soberBasemap() {
+      const PROPS = { background: ['background-color'], fill: ['fill-color', 'fill-outline-color'], line: ['line-color'],
+                      'fill-extrusion': ['fill-extrusion-color'], symbol: ['text-color', 'text-halo-color'], circle: ['circle-color'] };
+      for (const l of map.getStyle().layers) {
+        for (const prop of PROPS[l.type] || []) {           // une propriété étrangère au type de calque ferait échouer MapLibre
+          const v = map.getPaintProperty(l.id, prop);
+          if (v != null) map.setPaintProperty(l.id, prop, greyValue(v));
+        }
+        if (l.type === 'symbol' && l.layout && l.layout['icon-image']) map.setPaintProperty(l.id, 'icon-opacity', 0.55);
+      }
+    }
 
     const startSel = document.getElementById('start');
     const levelSel = document.getElementById('level');
@@ -425,6 +480,7 @@
     const resultsEl = document.getElementById('results');
     const whereEl = document.getElementById('where');
     let userMarker = null;
+    const dotEl = cls => { const d = document.createElement('div'); d.className = cls; return d; };
 
     async function searchAddress() {
       const q = addr.value.trim();
@@ -453,7 +509,7 @@
     let approachMin = null; // temps d'approche connu pour le départ actuellement choisi (null si choisi dans la liste)
     function setPosition(lon, lat) {
       if (userMarker) userMarker.remove();
-      userMarker = new maplibregl.Marker({ color: ROUTE.user }).setLngLat([lon, lat]).addTo(map);
+      userMarker = new maplibregl.Marker({ element: dotEl('mk-user') }).setLngLat([lon, lat]).addTo(map);
       const { s, km } = nearestStart(lon, lat);
       const name = esc(startLabel(s)) + stationNote(s.kind);
       pendingStart = s.id;
@@ -559,12 +615,29 @@
       const beforeId = labels ? labels.id : undefined;
       const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
       const isSel = ['get', 'selected'];
-      map.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['!', isSel], layout: lineLayout,
-        paint: { 'line-color': ROUTE.other, 'line-width': ROUTE.otherWidth, 'line-opacity': 0.7 } }, beforeId);
+      soberBasemap();
+      map.addLayer({ id: 'routes-other-casing', type: 'line', source: 'routes', filter: ['!', isSel], layout: lineLayout,
+        paint: { 'line-color': ROUTE.casing, 'line-width': 6 } }, beforeId);
+      map.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['!', isSel], layout: { 'line-join': 'round' },
+        paint: { 'line-color': ROUTE.other, 'line-width': ROUTE.otherWidth, 'line-dasharray': [2, 1.7] } }, beforeId);
       map.addLayer({ id: 'routes-casing', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
         paint: { 'line-color': ROUTE.casing, 'line-width': ROUTE.casingWidth } }, beforeId);
       map.addLayer({ id: 'routes', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
         paint: { 'line-color': ROUTE.color, 'line-width': ROUTE.width } }, beforeId);
+      // flèches de sens sur la boucle choisie : chevron argile sur pastille blanche, orienté selon le tracé
+      const arrow = document.createElement('canvas');
+      arrow.width = arrow.height = 28;
+      const ac = arrow.getContext('2d');
+      ac.fillStyle = '#FFFFFF'; ac.beginPath(); ac.arc(14, 14, 14, 0, 2 * Math.PI); ac.fill();
+      ac.strokeStyle = ROUTE.color; ac.lineWidth = 3.6; ac.lineCap = 'round'; ac.lineJoin = 'round';
+      ac.beginPath(); ac.moveTo(11, 8); ac.lineTo(18, 14); ac.lineTo(11, 20); ac.stroke();
+      map.addImage('oyan-arrow', ac.getImageData(0, 0, 28, 28), { pixelRatio: 2 });
+      map.addLayer({ id: 'routes-arrows', type: 'symbol', source: 'routes', filter: isSel,
+        layout: { 'symbol-placement': 'line', 'symbol-spacing': 160, 'icon-image': 'oyan-arrow',
+                  'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
+      // zone de toucher invisible et large sur l'autre boucle : la toucher l'échange avec la boucle affichée
+      map.addLayer({ id: 'routes-hit', type: 'line', source: 'routes', filter: ['!', isSel],
+        paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 22 } });
       // point de la carte qui suit le doigt sur le profil altimétrique
       map.addSource('cursor', { type: 'geojson', data: EMPTY });
       map.addLayer({ id: 'cursor', type: 'circle', source: 'cursor',
@@ -592,15 +665,23 @@
       });
       document.getElementById('go').onclick = searchAddress;
       addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
-      document.getElementById('me').onclick = () => {
-        if (!navigator.geolocation) { whereEl.textContent = 'La localisation n\'est pas disponible sur cet appareil.'; return; }
+      const locate = () => {
+        if (!navigator.geolocation) { setSettings(true); whereEl.textContent = 'La localisation n\'est pas disponible sur cet appareil.'; return; }
         whereEl.textContent = 'Localisation…';
         navigator.geolocation.getCurrentPosition(
           p => { addr.value = ''; setPosition(p.coords.longitude, p.coords.latitude); },
-          () => { whereEl.textContent = 'Localisation refusée. Tape une adresse ou touche la carte.'; },
+          () => { setSettings(true); whereEl.textContent = 'Localisation refusée. Tape une adresse ou touche la carte.'; },
           { enableHighAccuracy: true, timeout: 15000 });
       };
-      map.on('click', e => { addr.value = ''; setPosition(e.lngLat.lng, e.lngLat.lat); });
+      document.getElementById('me').onclick = locate;
+      document.getElementById('locate').onclick = locate;
+      map.on('click', e => {
+        const p = e.point, hit = map.queryRenderedFeatures([[p.x - 6, p.y - 6], [p.x + 6, p.y + 6]], { layers: ['routes-hit'] });
+        if (hit.length) { select(hit[0].properties.k); return; }   // toucher l'autre boucle : échange
+        addr.value = ''; setPosition(e.lngLat.lng, e.lngLat.lat);
+      });
+      map.on('mouseenter', 'routes-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', 'routes-hit', () => { map.getCanvas().style.cursor = ''; });
       const b = coverageBox(0.02);
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
     }
@@ -636,11 +717,12 @@
         sheetBody.textContent = 'Erreur de chargement (' + res.status + ')';
         startData = null; shown = []; sheetFoot.hidden = true; updatePill();
         map.getSource('routes').setData(EMPTY);
+        altMarkers.forEach(m => m.remove()); altMarkers = [];
         return;
       }
       startData = await res.json();
       if (marker) marker.remove();
-      marker = new maplibregl.Marker({ color: ROUTE.start })
+      marker = new maplibregl.Marker({ element: dotEl('mk-start') })
         .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
       setSettings(false);                                   // départ trouvé : on replie les réglages et on montre la boucle
       showLevel();
@@ -667,6 +749,7 @@
         });
         map.getSource('routes').setData(EMPTY);
         map.getSource('cursor').setData(EMPTY);
+        altMarkers.forEach(m => m.remove()); altMarkers = [];
         return;
       }
       const i = shown.findIndex(o => o.label === 'equilibre');
@@ -897,24 +980,55 @@
       const features = shown
         .map((x, k) => ({
           type: 'Feature',
-          properties: { selected: k === current },
+          properties: { selected: k === current, k },
           geometry: { type: 'LineString', coordinates: x.coords }
         }))
         .sort((a, b) => a.properties.selected - b.properties.selected);
       map.getSource('routes').setData({ type: 'FeatureCollection', features });
+      altLabels();
       fitRoute();
+    }
+
+    // étiquette « Variante · 41,6 km » posée sur chaque autre boucle, au point le plus éloigné de la boucle affichée
+    // (là où on la distingue le mieux) ; la toucher échange les deux boucles
+    let altMarkers = [];
+    function altLabels() {
+      altMarkers.forEach(m => m.remove());
+      altMarkers = [];
+      const main = shown[current].coords.filter((_, j) => j % 5 === 0);
+      // cadre commun des boucles : l'étiquette évite le bas (crédits, panneau) et la droite (elle s'étend vers la droite)
+      const all = shown.flatMap(x => x.coords);
+      const [x0, x1] = [Math.min(...all.map(c => c[0])), Math.max(...all.map(c => c[0]))];
+      const [y0, y1] = [Math.min(...all.map(c => c[1])), Math.max(...all.map(c => c[1]))];
+      const ok = c => c[1] > y0 + 0.2 * (y1 - y0) && c[0] < x1 - 0.35 * (x1 - x0);
+      shown.forEach((x, k) => {
+        if (k === current) return;
+        let best = x.coords[Math.floor(x.coords.length / 2)], bestD = -1;
+        for (let j = 0; j < x.coords.length; j += 3) {
+          const c = x.coords[j];
+          if (!ok(c)) continue;
+          let d = Infinity;
+          for (const m of main) d = Math.min(d, (m[0] - c[0]) ** 2 + (m[1] - c[1]) ** 2);
+          if (d > bestD) { bestD = d; best = c; }
+        }
+        const el = document.createElement('div');
+        el.className = 'mk-alt';
+        el.textContent = (LABELS[x.label] || x.label) + ' · ' + km(x.distance_km) + ' km';
+        el.onclick = e => { e.stopPropagation(); select(k); };
+        altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] }).setLngLat([best[0], best[1]]).addTo(map));
+      });
     }
 
     // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)
     function fitRoute() {
       if (!shown.length || !shown[current]) return;
       const bounds = new maplibregl.LngLatBounds();
-      shown[current].coords.forEach(c => bounds.extend([c[0], c[1]]));
+      shown.forEach(x => x.coords.forEach(c => bounds.extend([c[0], c[1]])));   // la boucle et ses variantes (maquette 5b)
       const hs = sheetHeights(), H = window.innerHeight;
       let top = topCard.getBoundingClientRect().bottom + 16;
       let bottom = (sheet.dataset.state === 'high' ? hs.low : hs[sheet.dataset.state]) + 16;
       if (top + bottom > H - 80) { const k = (H - 80) / (top + bottom); top *= k; bottom *= k; }  // écran trop petit
-      map.fitBounds(bounds, { padding: { top, bottom, left: 30, right: 30 }, duration: 500 });
+      map.fitBounds(bounds, { padding: { top, bottom, left: 30, right: shown.length > 1 ? 70 : 30 }, duration: 500 });
     }
 
     init();
