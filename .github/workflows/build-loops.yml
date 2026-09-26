@@ -29,6 +29,10 @@ name: Générer les boucles vélo
 #  - nature_check     : diagnostic O-12 v5 (rien n'est publié) : compare des boucles de référence populaires
 #                       (scripts/reference_loops.json) à la boucle qu'Oyan propose depuis le même départ, pour plusieurs
 #                       pondérations du score. Province entière. Artefact `diagnostic-nature` à envoyer pour analyse.
+#  - landcover_check  : diagnostic (rien n'est publié) : part « ville » de la barre de terrain selon plusieurs définitions,
+#                       sur des départs témoins, à partir des boucles publiées (sans GraphHopper). Artefact `diagnostic-terrain`.
+#  - landcover        : recalcule la barre de terrain (scenery.landcover) de TOUTES les boucles publiées avec la définition
+#                       LANDCOVER_METHOD (ci-dessous), sans GraphHopper ni recalcul des boucles, puis republie (~10 min).
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
 #  - generate_planned : génère les boucles pour les départs du plan (scénario choisi), puis publie.
 on:
@@ -40,7 +44,7 @@ on:
       mode:
         description: "Mode : plan, detour, pilot (pilote), full (génération complète), site (republier la page web, sans calcul), slope_check (diagnostic pente/lissage), generate_names ou generate_planned"
         type: choice
-        options: [plan, detour, pilot, full, full_replan, site, slope_check, nature_check, generate_names, generate_planned]
+        options: [plan, detour, pilot, full, full_replan, site, slope_check, nature_check, landcover_check, landcover, generate_names, generate_planned]
         default: plan
       scenario:
         description: "Scénario(s) de départs : A (2/3/4 km), B (3/3/4 km) ou dense,peri,rural en km ; plusieurs séparés par ; (ex. 2,3,3;2,3.5,4). Le premier produit le plan"
@@ -149,7 +153,7 @@ jobs:
           curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
           BBOX="$BBOX_INPUT"
           if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
-            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "${MODE#full}" != "$MODE" ] || [ "$MODE" = "slope_check" ] || [ "$MODE" = "nature_check" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
+            if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "${MODE#full}" != "$MODE" ] || [ "$MODE" = "slope_check" ] || [ "$MODE" = "nature_check" ] || [ "${MODE#landcover}" != "$MODE" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
           fi
           if [ "$BBOX" = "province" ]; then BBOX="$(jq -r '.bbox | map(tostring) | join(",")' "$REGION_FILE")"; fi
           echo "Emprise utilisée : $BBOX"
@@ -159,7 +163,7 @@ jobs:
           ls -lh data
 
       - name: Plan de couverture des départs (par zone)
-        if: ${{ steps.resolve_mode.outputs.mode != 'generate_names' && steps.resolve_mode.outputs.mode != 'site' }}
+        if: ${{ steps.resolve_mode.outputs.mode != 'generate_names' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         env:
           SCENARIO: ${{ inputs.scenario }}
           MODE: ${{ steps.resolve_mode.outputs.mode }}
@@ -174,7 +178,7 @@ jobs:
             --scenario "$SCENARIO" --sample-per-zone "$SAMPLE"
 
       - name: Publier le plan (départs, couverture, échantillon)
-        if: ${{ steps.resolve_mode.outputs.mode != 'generate_names' && steps.resolve_mode.outputs.mode != 'site' }}
+        if: ${{ steps.resolve_mode.outputs.mode != 'generate_names' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         uses: actions/upload-artifact@v4
         with:
           name: plan-departs
@@ -185,7 +189,7 @@ jobs:
           retention-days: 30
 
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
-        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' }}
+        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         env:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
         run: |
@@ -319,14 +323,39 @@ jobs:
           retention-days: 14
 
       - name: Récupérer les données déjà publiées (mode site)
-        if: ${{ steps.resolve_mode.outputs.mode == 'site' }}
+        if: ${{ steps.resolve_mode.outputs.mode == 'site' || startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         env:
           OWNER: ${{ github.repository_owner }}
         run: |
           python scripts/fetch_published.py --site "https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}" --out web/data
 
+      - name: Barre de terrain (diagnostic ou recalcul sur les boucles publiées)
+        if: ${{ startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
+        env:
+          MODE: ${{ steps.resolve_mode.outputs.mode }}
+          LANDCOVER_METHOD: "near50"      # définition de « ville » retenue (voir scripts/landcover.py) : à confirmer par landcover_check
+        run: |
+          if [ "$MODE" = "landcover_check" ]; then
+            python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check \
+              --out data/landcover_check.json --out-md data/landcover_check.md
+            cat data/landcover_check.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --apply "$LANDCOVER_METHOD"
+          fi
+
+      - name: Publier le diagnostic terrain
+        if: ${{ always() && steps.resolve_mode.outputs.mode == 'landcover_check' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-terrain
+          path: |
+            data/landcover_check.json
+            data/landcover_check.md
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Assembler le site (web app + données fraîches)
-        if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site') }}
+        if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site' || steps.resolve_mode.outputs.mode == 'landcover') }}
         run: |
           mkdir -p _site
           rsync -a \
@@ -358,17 +387,17 @@ jobs:
           retention-days: 90
 
       - name: Préparer GitHub Pages
-        if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site') }}
+        if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site' || steps.resolve_mode.outputs.mode == 'landcover') }}
         uses: actions/configure-pages@v5
 
       - name: Envoyer le site
-        if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site') }}
+        if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site' || steps.resolve_mode.outputs.mode == 'landcover') }}
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
   deploy:
-    if: ${{ (startsWith(needs.build.outputs.mode, 'generate') || needs.build.outputs.mode == 'pilot' || startsWith(needs.build.outputs.mode, 'full') || needs.build.outputs.mode == 'site') }}
+    if: ${{ (startsWith(needs.build.outputs.mode, 'generate') || needs.build.outputs.mode == 'pilot' || startsWith(needs.build.outputs.mode, 'full') || needs.build.outputs.mode == 'site' || needs.build.outputs.mode == 'landcover') }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
