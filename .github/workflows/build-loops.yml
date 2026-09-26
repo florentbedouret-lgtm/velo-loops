@@ -16,7 +16,7 @@ name: Générer les boucles vélo
 #                       (dont 5 ruraux, 2 au nord-ouest, 2 gares, des paires dense/voisin), toutes durées, puis publication.
 #  - full             : génération COMPLÈTE des départs DÉJÀ PUBLIÉS (même liste, mêmes clés : pas de nouveau plan, O-13),
 #                       toutes durées, puis publication. À ne lancer qu'après accord ; `reuse` coché reprend les départs identiques du site publié.
-#                       Budget de calcul : 300 min ; au-delà, plus aucun nouveau départ n'est démarré, le site est publié INCOMPLET et
+#                       Budget de calcul : 320 min (300 jusqu'au 26/09/2026) ; au-delà, plus aucun nouveau départ n'est démarré, le site est publié INCOMPLET et
 #                       signalé, et un nouveau lancement avec `reuse` coché termine le travail sans rien recalculer.
 #                       Rapport de fin de génération : résumé de l'exécution + artefact `rapport-generation` (à envoyer).
 #  - full_replan      : comme full, mais REFAIT le plan des départs sur les données OSM du jour (densification voulue).
@@ -294,7 +294,7 @@ jobs:
             python scripts/published_starts.py --site "https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}" --out data/published_starts.json
             EXTRA="--starts-file data/published_starts.json"
           fi
-          if [ "${MODE#full}" != "$MODE" ]; then MAX_STARTS=1000; PER_ZONE=""; EXTRA="$EXTRA --time-budget-min 300"; fi
+          if [ "${MODE#full}" != "$MODE" ]; then MAX_STARTS=1000; PER_ZONE=""; EXTRA="$EXTRA --time-budget-min 320"; fi
           if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
           if [ "$REUSE" = "true" ]; then
