@@ -350,7 +350,7 @@ def option_row(o) -> dict:
     sc = o.get("scenery") or {}
     lc = sc.get("landcover") or {}
     return {"cells": sorted({(round(c[0] / 0.006), round(c[1] / 0.005)) for c in o["coords"]}),   # doublons (O-18)
-            "main_roads_pct": round(100 * o["shares"]["main_roads"]),
+            "main_roads_pct": round(100 * o["shares"]["main_roads"]), "extended": bool(o.get("extended")),
             "label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"]}
@@ -371,7 +371,7 @@ def run_probe(sid, site, gh_url, durations, levels):
         prior = []                                         # comme la génération réelle (O-18 A)
         for level in sorted(levels, key=list(g.LEVELS).index):
             pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
-            picks = g.pick_options(pool, prior)
+            picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
             prior += [l for _, l in picks]
             new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(picks, start=1)]
             old = [option_row(o) for o in pub["options"]
@@ -491,15 +491,17 @@ def probe_summary(results) -> list:
             stat[k] = (stt.median([m["dplus_m"] for m in mains]) if mains else 0,
                        stt.median([m["main_roads_pct"] for m in mains]) if mains else 0, dups, tot)
         p, n = stat["published"], stat["new"]
+        n_ext = sum(1 for _, r in rows for o in r["new"] if o.get("extended"))
         L.append(f"| {lvl} | {p[0]:.0f} -> {n[0]:.0f} m | {p[1]:.0f} -> {n[1]:.0f} % | "
-                 + (f"{p[2]}/{p[3]} -> {n[2]}/{n[3]}" if lvl != order[0] else "—") + " |")
+                 + (f"{p[2]}/{p[3]} -> {n[2]}/{n[3]}" if lvl != order[0] else "—")
+                 + (f" ; {n_ext} boucle(s) prolongée(s)" if n_ext else "") + " |")
     return L
 
 
 def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
-    f = lambda o: (f"{o['label']} : {o['km']} km, D+ {o['dplus_m']}, forêt {o['forest_pct']} %, ville {o['city_pct']} %, "  # noqa: E731
-                   f"pistes {o['cycleway_pct']} %, note {o['score']}")
+    f = lambda o: (f"{o['label']}{' (prolongée)' if o.get('extended') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
+                   f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}")
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
          "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",

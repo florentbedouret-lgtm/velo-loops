@@ -58,6 +58,11 @@ RELIEF_WEIGHTS: dict = {"soutenu": 0.10}   # sonde relief (run #92) : D+ médian
 # (même durée) est remplacée ; « répète » = chacune recouvre l'autre à au moins 80 % (une boucle courte contenue dans
 # une plus longue et plus vallonnée n'est PAS un doublon). La boucle principale (équilibrée) n'est jamais écartée.
 LEVEL_DUP_SIM = 0.8
+# Si TOUTES les boucles d'une option secondaire répètent l'allure inférieure, on prolonge la boucle de l'allure
+# inférieure (demande de Florent, 26/09/2026) : mêmes points de passage + un détour au-delà de son point le plus
+# éloigné, dosé pour remplir la durée ; mêmes contrôles que les autres boucles (durée, tronçons répétés, demi-tours).
+EXTEND_VIA = 10               # points de passage repris de la boucle à prolonger
+EXTEND_BEARINGS = (0, 45, -45)   # directions essayées pour le détour (degrés, par rapport à l'axe départ -> point éloigné)
 RELIEF_FULL_M_PER_KM = 20.0   # 20 m de D+ par km (2 000 m pour 100 km) = relief maximal noté
 CLIMB_LEVELS = ("soutenu",)
 CLIMB_CANDIDATES = [(11, None), (12, None), (13, 0), (14, 90), (15, 180), (16, 270)]
@@ -620,6 +625,22 @@ class GraphHopper:
         paths = r.json().get("paths") or []
         return paths[0] if paths else None
 
+    def route_via(self, points, profile):
+        """Itinéraire passant par points ([[lon, lat], …], le dernier = le premier pour une boucle)."""
+        body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
+                "elevation": True, "instructions": False, "details": DETAILS}
+        try:
+            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
+        except requests.RequestException as e:
+            self.last_error = f"requête échouée : {e}"
+            return None
+        if r.status_code != 200:
+            self.last_error = f"HTTP {r.status_code} : {r.text[:200]}"
+            return None
+        self.last_error = ""
+        paths = r.json().get("paths") or []
+        return paths[0] if paths else None
+
 
 # --------------------------------------------------------------------------- analyse d'une boucle
 @dataclass
@@ -947,6 +968,86 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
     return chosen
 
 
+def loop_problem(cand, target_s: float) -> str | None:
+    """Mêmes contrôles que fit_and_sample : None si la boucle est acceptable, sinon la raison."""
+    if abs(cand.time_s / target_s - 1.0) > TIME_TOLERANCE:
+        return "durée"
+    if cand.overlap > MAX_OVERLAP:
+        return "tronçons répétés"
+    if cand.u_turns > MAX_UTURNS:
+        return "demi-tours"
+    if cand.shares["unpaved"] > MAX_UNPAVED:
+        return "non goudronné"
+    return None
+
+
+def extend_loop(gh, st: dict, base: Loop, level: str, duration_h: float, log):
+    """Boucle de l'allure inférieure prolongée pour remplir la durée à ce niveau, ou None."""
+    import math
+    profile = base.profile if base.profile in LEVELS[level]["profiles"] else LEVELS[level]["profiles"][0]
+    target_s = duration_h * 3600.0
+    c = base.coords
+    n = len(c)
+    via = [[c[round(i * (n - 1) / EXTEND_VIA)][0], c[round(i * (n - 1) / EXTEND_VIA)][1]] for i in range(EXTEND_VIA + 1)]
+    lon0, lat0 = st["lon"], st["lat"]
+    kx = 111320.0 * math.cos(math.radians(lat0))
+    dist = lambda p: math.hypot((p[0] - lon0) * kx, (p[1] - lat0) * 111320.0)  # noqa: E731
+    far = max(range(1, EXTEND_VIA), key=lambda i: dist(via[i]))
+    axis = math.atan2((via[far][0] - lon0) * kx, (via[far][1] - lat0) * 111320.0)   # cap départ -> point éloigné
+    path = gh.route_via([[lon0, lat0]] + via[1:-1] + [[lon0, lat0]], profile)
+    same = analyse(path, level, profile, duration_h, 0, None) if path else None
+    if same is None or same.time_s >= target_s * (1.0 - TIME_TOLERANCE):
+        return None                                   # déjà assez longue à ce niveau : ce serait la même boucle
+    missing_m = same.distance_m * (target_s / same.time_s - 1.0)
+    for bearing in EXTEND_BEARINGS:
+        b = axis + math.radians(bearing)
+        d = missing_m / 2.0                           # aller vers le détour puis retour : ~2 × d en plus
+        for _ in range(2):                            # une retouche de la distance du détour
+            det = [via[far][0] + d * math.sin(b) / kx, via[far][1] + d * math.cos(b) / 111320.0]
+            pts = [[lon0, lat0]] + via[1:far + 1] + [det] + via[far + 1:-1] + [[lon0, lat0]]
+            path = gh.route_via(pts, profile)
+            cand = analyse(path, level, profile, duration_h, 0, None) if path else None
+            if cand is None:
+                break
+            why = loop_problem(cand, target_s)
+            if why is None:
+                cand.extended = True
+                log(f"    boucle de l'allure inférieure prolongée ({base.distance_m / 1000:.1f} -> "
+                    f"{cand.distance_m / 1000:.1f} km, détour à {bearing:+d}°)")
+                return cand
+            if why != "durée":
+                break                                 # un détour en aller-retour ne s'arrangera pas en l'allongeant
+            d *= target_s / cand.time_s
+    log("    prolongation impossible (aller-retour, durée ou demi-tours)")
+    return None
+
+
+def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prior: list, log) -> list:
+    """Options d'un niveau (O-18) : pick_options sans doublon d'allure ; si une option secondaire a disparu faute de
+    boucle différente, la boucle de l'allure inférieure qu'elle répétait est prolongée."""
+    picks = pick_options(pool, prior)
+    full = pick_options(pool)
+    if not prior or not picks or len(picks) >= len(full):
+        return picks
+    best = picks[0][1]
+    used = {lab for lab, _ in picks}
+    for lab, lost in full[1:]:
+        if lab in used:
+            continue
+        base = next((a for a in prior if same_route(lost, a)), None)
+        ext = extend_loop(gh, st, base, level, duration_h, log) if base is not None else None
+        if ext is None or any(same_route(ext, a) for a in prior) or similarity(ext, best) >= 0.6:
+            continue
+        ext.score = score(ext)
+        name = ("moins_de_relief" if ext.dplus_per_km <= best.dplus_per_km - 3.0 else
+                "plus_de_relief" if ext.dplus_per_km >= best.dplus_per_km + 3.0 else "variante")
+        if name in used:
+            continue
+        picks.append((name, ext))
+        used.add(name)
+    return picks
+
+
 def relief_category(dplus_per_100km: float) -> str:
     if dplus_per_100km < 500:
         return "plat"
@@ -1100,6 +1201,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"exit_city_km": exit_city_km(l.scenery["landcover"]["cls"], round(l.distance_m / 1000.0, 1))}
            if l.scenery and l.scenery.get("landcover") else {}),
         "score": l.score,
+        **({"extended": True} if getattr(l, "extended", False) else {}),   # boucle de l'allure inférieure prolongée
         "pitch": pitch(l, label),
         "wind_bins_km": l.wind_bins,
         "coords": [[round(c[0], 5), round(c[1], 5), round(c[2]) if len(c) > 2 else 0] for c in simplified],
@@ -1207,7 +1309,7 @@ def params_hash(config_dir: str = "config") -> str:
               "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
               "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M],
               **({"relief": [RELIEF_WEIGHTS, RELIEF_FULL_M_PER_KM]} if RELIEF_WEIGHTS else {}),
-              "level_dup": LEVEL_DUP_SIM}
+              "level_dup": LEVEL_DUP_SIM, "extend": [EXTEND_VIA, EXTEND_BEARINGS]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     cfg = Path(config_dir)
     if cfg.exists():
@@ -1354,7 +1456,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         prior: list = []                                  # options des allures inférieures (O-18 A)
         for level in sorted(levels, key=list(LEVELS).index):
             pool = level_pool(gh, st, level, duration, candidates, log)
-            picks = pick_options(pool, prior)
+            picks = choose_options(gh, st, level, duration, pool, prior, log)
             prior += [l for _, l in picks]
             for i, (label, loop) in enumerate(picks, start=1):
                 options.append(to_json(loop, label, sid, i))
