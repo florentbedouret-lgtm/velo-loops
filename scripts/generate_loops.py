@@ -48,6 +48,15 @@ LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTE
 # Candidats testés pour chaque combinaison : (seed, cap souhaité ou None). Les 8 caps permettent de trouver
 # des boucles qui sortent plus vite de la zone urbaine dense.
 CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270), (7, 45), (8, 135), (9, 225), (10, 315)]
+# Tirages « montée » (niveau sportif) : le calcul ordinaire évite les côtes (bike_elevation ralentit les pentes) ; ces
+# tirages les favorisent pour qu'une option « Plus de relief » existe quand le terrain le permet (Gràcia 2 h sportif :
+# boucle par Collserola, 888 m de D+, perdue au recalcul O-15). Le score choisit toujours la boucle « équilibrée ».
+CLIMB_LEVELS = ("soutenu",)
+CLIMB_CANDIDATES = [(11, None), (12, None), (13, 0), (14, 90), (15, 180), (16, 270)]
+CLIMB_MODEL = {
+    "priority": [{"if": "average_slope >= 3", "multiply_by": "1.5"}],            # préférer les tronçons qui montent
+    "speed": [{"if": "average_slope >= 4 && average_slope < 12", "multiply_by": "1.2"}],  # compense bike_elevation
+}
 
 SIGNAL_DELAY_S = 10.0         # attente moyenne attendue par feu tricolore franchi (arrêt 1 fois sur 2 + relance) : à calibrer
 SIGNAL_RADIUS_M = 15.0        # un feu OSM à moins de 15 m du tracé est considéré comme franchi
@@ -550,7 +559,7 @@ class GraphHopper:
         d = r.json()
         return d["coordinates"][0], d["coordinates"][1], d.get("distance", 0.0)
 
-    def round_trip(self, lon, lat, profile, dist_m, seed, heading=None):
+    def round_trip(self, lon, lat, profile, dist_m, seed, heading=None, custom_model=None):
         body = {
             "points": [[lon, lat]],
             "profile": profile,
@@ -565,6 +574,8 @@ class GraphHopper:
         }
         if heading is not None:
             body["heading"] = [heading]
+        if custom_model:
+            body["custom_model"] = custom_model
         try:
             r = self.http.post(f"{self.base}/route", json=body, timeout=120)
         except requests.RequestException as e:
@@ -827,6 +838,36 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
     return pool, rejects
 
 
+class _ClimbGH:
+    """GraphHopper vu par fit_and_sample, avec le modèle « montée » ajouté à chaque requête."""
+
+    def __init__(self, gh):
+        self.gh = gh
+
+    @property
+    def last_error(self):
+        return self.gh.last_error
+
+    def round_trip(self, lon, lat, profile, dist_m, seed, heading=None):
+        return self.gh.round_trip(lon, lat, profile, dist_m, seed, heading, custom_model=CLIMB_MODEL)
+
+
+def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
+    """Tous les candidats valides d'un départ pour une durée et un niveau : tirages ordinaires de chaque profil, plus
+    les tirages « montée » en niveau sportif. Utilisé par la génération ET par le diagnostic (nature_check --probe)."""
+    pool: list = []
+    runs = [(profile, gh, candidates, profile) for profile in LEVELS[level]["profiles"]]
+    if level in CLIMB_LEVELS:
+        runs.append(("sport", _ClimbGH(gh), CLIMB_CANDIDATES, "sport + montée"))
+    for profile, client, cands, label in runs:
+        log(f"  {duration:g} h / {level} / {label}")
+        found, rejects = fit_and_sample(client, st, level, profile, duration, cands, log)
+        why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
+        log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
+        pool.extend(found)
+    return pool
+
+
 def similarity(a: Loop, b: Loop) -> float:
     inter = len(a.cells & b.cells)
     return inter / max(1, min(len(a.cells), len(b.cells)))
@@ -1052,7 +1093,7 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "5"   # 5 : O-15 (landcover, tronçons répétés facteur 1), 25/09/2026
+GENERATOR_VERSION = "6"   # 6 : tirages « montée » en sportif, profil sportif sans bonus pistes (26/09/2026)
 
 
 def compare_block(options: list) -> dict:
@@ -1103,7 +1144,7 @@ def params_hash(config_dir: str = "config") -> str:
     Deux générations avec la même empreinte produisent les mêmes boucles pour un même départ (aux données OSM près)."""
     import hashlib
     consts = {"version": GENERATOR_VERSION, "levels": LEVELS, "candidates": CANDIDATES, "weights": WEIGHTS,
-              "flow_overlap": FLOW_OVERLAP_FACTOR,
+              "flow_overlap": FLOW_OVERLAP_FACTOR, "climb": [CLIMB_LEVELS, CLIMB_CANDIDATES, CLIMB_MODEL],
               "tol": TIME_TOLERANCE, "overlap": MAX_OVERLAP, "unpaved": MAX_UNPAVED, "uturns": MAX_UTURNS,
               "signal": [SIGNAL_DELAY_S, SIGNAL_RADIUS_M, SIGNAL_CLUSTER_M, LIGHTS_PER_KM_ZERO_SCORE],
               "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
@@ -1221,13 +1262,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     for duration in missing_durations:
         t_dur = time.time()
         for level in levels:
-            pool: list[Loop] = []
-            for profile in LEVELS[level]["profiles"]:
-                log(f"  {duration:g} h / {level} / {profile}")
-                found, rejects = fit_and_sample(gh, st, level, profile, duration, candidates, log)
-                why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
-                log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
-                pool.extend(found)
+            pool = level_pool(gh, st, level, duration, candidates, log)
             for i, (label, loop) in enumerate(pick_options(pool), start=1):
                 options.append(to_json(loop, label, sid, i))
         dur_seconds[f"{duration:g}"] = round(time.time() - t_dur, 1)

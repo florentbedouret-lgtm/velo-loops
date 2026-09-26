@@ -236,7 +236,7 @@ jobs:
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "1.5 2 3" \
               --out data/nature_check.json --out-md data/nature_check.md \
-              --note "sonde : profil sportif sans bonus pistes (vitesse corrigée gardée)"
+              --note "sonde : profil sportif sans bonus pistes + tirages « montée » en sportif (générateur v6)"
           else
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \

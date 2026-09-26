@@ -367,10 +367,7 @@ def run_probe(sid, site, gh_url, durations, levels):
     rows = []
     for d in durations:
         for level in levels:
-            pool = []
-            for profile in g.LEVELS[level]["profiles"]:
-                a, _ = g.fit_and_sample(gh, st_, level, profile, d, g.CANDIDATES, lambda *_: None)
-                pool += a
+            pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)   # comme la génération réelle
             new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(g.pick_options(pool), start=1)]
             old = [option_row(o) for o in pub["options"]
                    if o["level"] == level and round(o["duration_target_min"]) == round(d * 60)]
