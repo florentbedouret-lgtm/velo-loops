@@ -769,22 +769,31 @@
       const flat = crowKm(a.lon, a.lat, b.lon, b.lat) * z.detour_ratio_median / z.speed_kmh_110W_median * 60;
       return Math.max(flat, Math.max(0, b.alt_m - a.alt_m) / CLIMB_M_PER_H * 60);
     }
+    // sortie de ville d'une boucle, en km (null = reste en ville) : mesurée par le bâti comme la barre de terrain
+    // (exit_city_km, premier tronçon d'au moins 1 km sans bâti dense) ; données plus anciennes : densité GraphHopper
+    function exitKm(o) {
+      if ('exit_city_km' in o) return o.exit_city_km;
+      const ex = o.exit_dense_km;
+      return ex == null || ex >= o.distance_km - 0.05 ? null : ex;
+    }
+    const compareExit = c => 'exit_city_km' in c ? c.exit_city_km : c.exit_dense_km;   // bloc compare : null = reste en ville
     function natureNeighbour(o) {
       if (!modelOk || o.duration_target_min == null) return '';
       const cur = indexData.starts.find(s => s.id === startSel.value);
       if (!cur) return '';
-      const stays = o.exit_dense_km == null || o.exit_dense_km >= o.distance_km - 0.05;
-      if (!stays && o.exit_dense_km <= 5) return '';
-      const curExit = stays ? Infinity : o.exit_dense_km;
+      const ex = exitKm(o), stays = ex == null;
+      if (!stays && ex <= 5) return '';
+      const curExit = stays ? Infinity : ex;
       const dur = String(Math.round(o.duration_target_min) / 60);   // clés du bloc compare : "0.75", "1", "1.5"…
       let best = null;
       for (const s of indexData.starts) {
         const c = s.compare && s.compare[dur] && s.compare[dur][o.level];
-        if (s.id === cur.id || !c || c.exit_dense_km == null || c.exit_dense_km > curExit - NEIGHBOUR_GAIN_KM) continue;
+        const cx = c ? compareExit(c) : null;
+        if (s.id === cur.id || cx == null || cx > curExit - NEIGHBOUR_GAIN_KM) continue;
         const min = approachBetween(cur, s);
         if (min > NEIGHBOUR_MAX_MIN) continue;
-        if (!best || c.exit_dense_km < best.exit || (c.exit_dense_km === best.exit && min < best.min)) {
-          best = { s, min: Math.round(min), exit: c.exit_dense_km };
+        if (!best || cx < best.exit || (cx === best.exit && min < best.min)) {
+          best = { s, min: Math.round(min), exit: cx };
         }
       }
       if (!best) return '';
@@ -819,9 +828,9 @@
     // (même mesure), pour que la barre et les phrases ne se contredisent pas (maquette 5c)
     function keyPoints(o) {
       const out = [];
-      const ex = o.exit_dense_km;
+      const ex = exitKm(o);
       if (ex === 0) out.push(['0 km', 'Tu pars directement hors de la ville.']);
-      else if (ex == null || ex >= o.distance_km - 0.05) out.push(['', 'Tu restes en ville tout du long.']);
+      else if (ex == null) out.push(['', 'Tu restes en ville tout du long.']);
       else out.push([km1(ex) + ' km', 'Tu sors de la ville.']);
       const sc = o.scenery;
       if (sc) {                                             // la nature la plus présente, si elle compte vraiment
@@ -922,8 +931,7 @@
           '</li>').join('');
       // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
       let longer = '';
-      if (o.exit_dense_km != null && o.exit_dense_km !== 0 && o.exit_dense_km >= o.distance_km - 0.05 ||
-          o.exit_dense_km == null) {
+      if (exitKm(o) == null) {
         const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
         if (hasLonger) longer = '<div class="tip"><div class="sec-label">ALLER PLUS LOIN</div><p>Une sortie plus longue sort de la ville.</p>' +
           '<button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button></div>';

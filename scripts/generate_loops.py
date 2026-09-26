@@ -264,7 +264,31 @@ class LandscapeIndex:
         cls[np.bincount(hit, minlength=n) >= LANDCOVER_BLD_MIN] = 0
         counts = np.bincount(cls, minlength=4) / max(n, 1)
         return {"city": round(float(counts[0]), 3), "water": round(float(counts[1]), 3),
-                "forest": round(float(counts[2]), 3), "countryside": round(float(counts[3]), 3)}
+                "forest": round(float(counts[2]), 3), "countryside": round(float(counts[3]), 3),
+                "cls": cls.tolist()}                  # catégorie par point : retirée à l'export (to_json)
+
+
+LANDCOVER_CODES = "vefo"     # une lettre par point tous les 100 m : ville, eau (bord d'eau), forêt, espaces ouverts
+EXIT_CITY_RUN = 10            # sortie de ville : début du premier tronçon d'au moins 1 km (10 points) sans bâti dense
+
+
+def landcover_seq(cls) -> str:
+    """Catégorie de terrain de chaque point (0 ville, 1 eau, 2 forêt, 3 espaces ouverts) -> « vvvvooeeff… » (bande de
+    terrain sous le profil, O-17)."""
+    return "".join(LANDCOVER_CODES[int(c)] for c in cls)
+
+
+def exit_city_km(cls, dist_km: float):
+    """Km où l'on sort de la ville, mesuré par le bâti comme la barre de terrain : début du premier tronçon d'au moins
+    1 km sans « ville » (un parc de 200 m n'est pas une sortie). 0 = départ hors de la ville ; None = reste en ville.
+    Les points sont recalés sur la distance officielle (comme le profil)."""
+    step = dist_km / max(len(cls), 1)
+    run = 0
+    for i, c in enumerate(cls):
+        run = run + 1 if int(c) != 0 else 0
+        if run >= EXIT_CITY_RUN:
+            return round((i - run + 1) * step, 1)
+    return None
 
 
 def load_landscape(pbf: Path, workdir: Path):
@@ -1042,8 +1066,13 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "scenery": (None if l.scenery is None else {
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
-            "score": l.scenery["score"], "landcover": l.scenery.get("landcover")}),
+            "score": l.scenery["score"],
+            "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k != "cls"}
+                          if l.scenery.get("landcover") else None),
+            **({"landcover_seq": landcover_seq(l.scenery["landcover"]["cls"])} if l.scenery.get("landcover") else {})}),
         "exit_dense_km": None if l.exit_dense_m is None else round(l.exit_dense_m / 1000.0, 1),
+        **({"exit_city_km": exit_city_km(l.scenery["landcover"]["cls"], round(l.distance_m / 1000.0, 1))}
+           if l.scenery and l.scenery.get("landcover") else {}),
         "score": l.score,
         "pitch": pitch(l, label),
         "wind_bins_km": l.wind_bins,
@@ -1112,7 +1141,8 @@ def compare_block(options: list) -> dict:
             ex = None                              # null = la boucle ne sort jamais de la zone dense
         out.setdefault(dur, {})[lvl] = {
             "score": o["score"], "lights_per_km": o["traffic_lights_per_km"], "exit_dense_km": ex,
-            "urban_share": round(u["city"] + u["residential"], 2)}
+            "urban_share": round(u["city"] + u["residential"], 2),
+            **({"exit_city_km": o["exit_city_km"]} if "exit_city_km" in o else {})}   # sortie mesurée par le bâti
     return out
 
 

@@ -48,10 +48,14 @@ function profilePoint(coords, dist, d) {
 
 let pfLast = null; // géométrie du dernier profil dessiné, utilisée par bindProfile
 
+// couleurs de terrain de brand/oyan-tokens.css (réservées à la barre de terrain et à cette bande)
+const PF_TERRAIN = { v: '#3A3F3B', e: '#8FA3AB', f: '#6E7A5A', o: '#D4C3A3' };
+
 function profileSvg(o) {
   if (!o.coords[0] || o.coords[0].length < 3) return '';
   const p = profileData(o.coords, o.distance_km);
-  const W = 320, H = 120, mL = 34, mR = 8, mT = 8, mB = 20;
+  const seq = (o.scenery && o.scenery.landcover_seq) || '';
+  const W = 320, H = seq ? 128 : 120, mL = 34, mR = 8, mT = 8, mB = seq ? 28 : 20;
   let lo = Math.min(...p.alt), hi = Math.max(...p.alt);
   if (hi - lo < 20) { const mid = (hi + lo) / 2; lo = mid - 10; hi = mid + 10; } // profil presque plat : échelle minimale de 20 m
   lo = Math.floor(lo / 10) * 10;
@@ -65,12 +69,22 @@ function profileSvg(o) {
   // couleurs de brand/oyan-tokens.css : argile (comme le tracé), galet (texte), filet (axe)
   const txt = 'font-size="10" fill="#625D55" font-family="Hanken Grotesk, system-ui, sans-serif"';
   pfLast = { coords: o.coords, p, W, mL, mR, x, y };
+  // bande de terrain : points tous les 100 m recalés sur la distance officielle, segments de même milieu regroupés
+  let band = '';
+  for (let i = 0; i < seq.length;) {
+    let j = i;
+    while (j < seq.length && seq[j] === seq[i]) j++;
+    const x0 = x(i / seq.length * p.total), x1 = x(j / seq.length * p.total);
+    band += `<rect x="${x0.toFixed(1)}" y="${H - mB + 3}" width="${(x1 - x0).toFixed(1)}" height="5" fill="${PF_TERRAIN[seq[i]] || PF_TERRAIN.o}"/>`;
+    i = j;
+  }
   // touch-action pan-y : un glissement vertical fait défiler la page, un glissement horizontal déplace le curseur
   return `<svg class="pf" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique"
     style="touch-action: pan-y; cursor: crosshair">
     <path d="${area}" fill="#A8522F" fill-opacity="0.15"/>
     <path d="${line}" fill="none" stroke="#A8522F" stroke-width="1.5" stroke-linejoin="round"/>
     <line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" stroke="#E6E2DB"/>
+    ${band ? '<g aria-label="Milieu traversé">' + band + '</g>' : ''}
     <text x="${mL - 4}" y="${mT + 8}" text-anchor="end" ${txt}>${hi} m</text>
     <text x="${mL - 4}" y="${H - mB}" text-anchor="end" ${txt}>${lo} m</text>
     <text x="${mL}" y="${H - 6}" ${txt}>0</text>

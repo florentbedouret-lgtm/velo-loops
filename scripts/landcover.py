@@ -4,7 +4,9 @@ Répartition du terrain (ville / eau / forêt / espaces ouverts) des boucles DÉ
 elle ne dépend que du tracé (coords publiés) et des cartes OSM. Deux usages :
 
   --check          diagnostic (rien n'est publié) : part « ville » selon plusieurs définitions, sur des départs témoins
-  --apply METHODE  recalcule scenery.landcover de toutes les boucles de --data avec la définition METHODE
+  --apply METHODE  recalcule scenery.landcover de toutes les boucles de --data avec la définition METHODE, ainsi que
+                   scenery.landcover_seq (catégorie tous les 100 m : bande sous le profil), exit_city_km (sortie de ville
+                   mesurée par le bâti) et le bloc « compare » de l'index (suggestion de départ voisin)
 
 Pourquoi (26/09/2026) : la v1 comptait « ville » un point À L'INTÉRIEUR d'une zone bâtie OSM (landuse residential/
 commercial/industrial/retail). À Barcelone ces zones sont dessinées îlot par îlot, rues exclues : un vélo roule dans la
@@ -101,7 +103,7 @@ def city_mask(pts, land, method, bld_tree):
     return mask
 
 
-def partition(pts, land, mask) -> dict:
+def partition(pts, land, mask, with_cls: bool = False):
     n = len(pts)
     cls = np.full(n, 3)
     for code, key, dist in ((2, "forest", g.SCENERY_FOREST_DEG), (1, "water", g.SCENERY_WATER_DEG)):
@@ -110,8 +112,9 @@ def partition(pts, land, mask) -> dict:
             cls[np.unique(tree.query(pts, predicate="dwithin", distance=dist)[0])] = code
     cls[mask] = 0
     c = np.bincount(cls, minlength=4) / max(n, 1)
-    return {"city": round(float(c[0]), 3), "water": round(float(c[1]), 3), "forest": round(float(c[2]), 3),
-            "countryside": round(float(c[3]), 3)}
+    shares = {"city": round(float(c[0]), 3), "water": round(float(c[1]), 3), "forest": round(float(c[2]), 3),
+              "countryside": round(float(c[3]), 3)}
+    return (shares, cls) if with_cls else shares
 
 
 def check(data: Path, land, bld_tree, out_md: Path, out_json: Path):
@@ -153,17 +156,28 @@ def check(data: Path, land, bld_tree, out_md: Path, out_json: Path):
 def apply(data: Path, land, bld_tree, method: str):
     files = sorted((data / "starts").glob("*.json"))
     n = 0
+    compares = {}
     for f in files:
         d = json.loads(f.read_text(encoding="utf-8"))
         for o in d["options"]:
             if o.get("scenery") is None:
                 continue
             pts = sample(o["coords"])
-            o["scenery"]["landcover"] = partition(pts, land, city_mask(pts, land, method, bld_tree))
+            shares, cls = partition(pts, land, city_mask(pts, land, method, bld_tree), with_cls=True)
+            o["scenery"]["landcover"] = shares
             o["scenery"]["landcover_method"] = method
+            o["scenery"]["landcover_seq"] = g.landcover_seq(cls)
+            o["exit_city_km"] = g.exit_city_km(cls, o["distance_km"])
             n += 1
         f.write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"Répartition recalculée ({method}) : {n} boucles dans {len(files)} départs", flush=True)
+        compares[f.stem] = g.compare_block(d["options"])
+    idx_path = data / "index.json"                         # bloc « compare » de l'index : sortie de ville par le bâti
+    idx = json.loads(idx_path.read_text(encoding="utf-8"))
+    for e in idx["starts"]:
+        if e["id"] in compares:
+            e["compare"] = compares[e["id"]]
+    idx_path.write_text(json.dumps(idx, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"Répartition recalculée ({method}) : {n} boucles dans {len(files)} départs ; index mis à jour", flush=True)
 
 
 def main() -> int:
