@@ -48,17 +48,40 @@
     #top.open #pill .round svg { transform: rotate(180deg); }
     #settings { display: none; padding: 0 16px 16px; max-height: calc(100dvh - 128px - 90px); overflow-y: auto; }
     #top.open #settings { display: block; }
-    #search { display: flex; gap: 6px; }
-    #addr { flex: 1; min-width: 0; }
+    .k-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--color-text-2); margin: 16px 0 8px; }
+    #search { display: flex; gap: 8px; }
+    .field { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 6px;
+             padding: 0 4px 0 2px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg); }
+    .field:focus-within { border-color: var(--color-text-2); }
+    #addr { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 4px; outline: none; }
+    .icon-btn { width: 40px; height: 40px; flex: none; border: 0; background: transparent; padding: 0; cursor: pointer;
+                display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+    #me { width: 48px; height: 48px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
+    /* allure : 3 segments */
+    .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: var(--color-bg); border-radius: 12px; }
+    .seg button { font: inherit; font-size: 15px; height: 40px; border: 0; border-radius: 10px; background: transparent;
+                  color: var(--color-text-2); cursor: pointer; padding: 0; }
+    .seg button[aria-pressed=true] { background: var(--color-surface); color: var(--color-text); box-shadow: 0 1px 3px rgba(36, 34, 31, .12); }
+    /* durée : − 2 h 00 + */
+    .stepper { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .stepper button { width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--color-border); background: var(--color-surface);
+                      color: var(--color-text); font: inherit; font-size: 20px; font-weight: var(--fw-light); cursor: pointer; padding: 0; }
+    .stepper button:disabled { opacity: .35; cursor: default; }
+    #durVal { font-size: 28px; font-weight: var(--fw-light); }
+    /* ligne du départ */
+    #startRow { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--color-border); margin-top: 16px; padding-top: 14px; }
+    #startRow > svg { flex: none; }
+    #change { font: inherit; font-size: 14px; color: var(--color-accent); background: none; border: 0; padding: 4px 0; cursor: pointer;
+              text-decoration: underline; text-underline-offset: 3px; flex: none; }
+    #where .w2 { font-size: 13px; color: var(--color-text-2); }
     #results button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 8px; margin-top: 4px;
                       color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
     #geoattr { display: block; color: var(--color-text-2); padding: 4px 0 0; }
-    #controls { display: flex; gap: 8px; padding: 8px 0; }
-    #controls select { flex: 1; min-width: 0; }
-    #durlabel { color: var(--color-text-2); }
-    #totalApproach { padding: 0 0 6px; font-size: 14px; color: var(--color-text-2); }
-    #where { padding: 0 0 6px; line-height: 1.4; }
+    #totalApproach { padding: 6px 0 0; font-size: 13px; color: var(--color-text-2); text-align: center; }
+    #totalApproach:empty { display: none; }
+    #where { flex: 1; min-width: 0; font-size: 16px; line-height: 1.4; }
     #where .btn { font-size: 15px; padding: 6px 10px; margin: 4px 6px 0 0; }
+    #adv { padding-top: 6px; }
     #adv select, #adv input { width: 100%; box-sizing: border-box; margin-top: 6px; }
 
     /* ---------- panneau coulissant : peek (réglages ouverts), low (replié), mid (mi-hauteur), high (ouvert) */
@@ -118,21 +141,38 @@
     </div>
     <div id="settings">
       <div id="search">
-        <input id="addr" type="search" placeholder="Adresse de départ (rue, ville…)" enterkeyhint="search" autocomplete="off">
-        <button id="go" class="btn" type="button">Chercher</button>
-        <button id="me" class="btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">📍</button>
+        <div class="field">
+          <button id="go" type="button" class="icon-btn" aria-label="Chercher l'adresse">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="#625D55" stroke-width="1.5"/><path d="M11 11l3.5 3.5" stroke="#625D55" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <input id="addr" type="search" placeholder="Adresse de départ" enterkeyhint="search" autocomplete="off" aria-label="Adresse de départ">
+        </div>
+        <button id="me" class="icon-btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5.5" fill="none" stroke="#24221F" stroke-width="1.5"/><circle cx="10" cy="10" r="2" fill="#24221F"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
       </div>
       <div id="results"></div>
-      <div id="controls">
-        <select id="level"></select>
-        <select id="duration" aria-label="Durée de la boucle"></select>
+      <div class="k-label" id="levelLabel">ALLURE</div>
+      <div class="seg" id="levelSeg" role="group" aria-labelledby="levelLabel"></div>
+      <div class="k-label" id="durLabel">DURÉE DE LA BOUCLE</div>
+      <div class="stepper" role="group" aria-labelledby="durLabel">
+        <button type="button" id="durMinus" aria-label="Durée plus courte">−</button>
+        <div id="durVal" aria-live="polite"></div>
+        <button type="button" id="durPlus" aria-label="Durée plus longue">+</button>
       </div>
-      <div id="durlabel" class="label">Durée de la boucle</div>
       <div id="totalApproach"></div>
-      <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
-      <details id="adv"><summary>Choisir un départ dans la liste</summary>
+      <!-- sélecteurs d'origine, masqués : ils gardent l'état (allure, durée) lu par le reste du code -->
+      <select id="level" hidden></select>
+      <select id="duration" hidden></select>
+      <div id="startRow">
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="#A8522F" stroke="#FFFFFF" stroke-width="2"/></svg>
+        <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
+        <button type="button" id="change" aria-expanded="false" aria-controls="adv">Changer</button>
+      </div>
+      <div id="adv" hidden>
         <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off">
-        <select id="start" aria-label="Départ"></select></details>
+        <select id="start" aria-label="Départ"></select>
+      </div>
     </div>
   </div>
   <div id="sheet" hidden data-state="low">
@@ -390,7 +430,7 @@
 
       if (!modelOk) {
         approachMin = null;
-        whereEl.innerHTML = 'Départ : <b>' + name + '</b><br>Temps d\'approche indisponible pour le moment.';
+        whereEl.innerHTML = 'Départ : <b>' + name + '</b><div class="w2">Temps d\'approche indisponible pour le moment.</div>';
         chooseStart(s.id);
         return;
       }
@@ -414,9 +454,9 @@
         map.fitBounds(new maplibregl.LngLatBounds([lon, lat], [s.lon, s.lat]), { padding: 60, duration: 500 });
         return;
       }
-      whereEl.innerHTML = 'Départ : <b>' + name + '</b><br>' +
+      whereEl.innerHTML = 'Départ : <b>' + name + '</b><div class="w2">' +
         (med > portee ? '<span class="warn">Un peu loin : </span>' : '') + '≈ ' + med + ' min à vélo pour le rejoindre' + range +
-        (med > portee ? ' · <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>' : '');
+        (med > portee ? ' · <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>' : '') + '</div>';
       chooseStart(s.id);
     }
     let pendingStart = null;
@@ -461,11 +501,26 @@
       }).sort((a, b) => byName(a[3], b[3]) || byName(a[0], b[0]));
       fillStarts();
       startFilter.oninput = fillStarts;
-      Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(v.label, k)));
+      const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+      Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(cap(v.label), k)));
       levelSel.value = 'modere';
       index.durations_h.forEach(h => durSel.add(new Option(hm(h * 60), h)));
       durSel.value = '2';
-      durSel.onchange = showLevel;
+      // allure en 3 segments et durée en − / + : ils pilotent les sélecteurs masqués
+      const seg = document.getElementById('levelSeg');
+      seg.innerHTML = [...levelSel.options].map(o =>
+        '<button type="button" data-v="' + o.value + '">' + esc(o.text) + '</button>').join('');
+      seg.onclick = e => {
+        const b = e.target.closest('button');
+        if (b && b.dataset.v !== levelSel.value) { levelSel.value = b.dataset.v; showLevel(); }
+      };
+      const stepDur = dir => {
+        const i = durSel.selectedIndex + dir;
+        if (i >= 0 && i < durSel.options.length) { durSel.selectedIndex = i; showLevel(); }
+      };
+      document.getElementById('durMinus').onclick = () => stepDur(-1);
+      document.getElementById('durPlus').onclick = () => stepDur(1);
+      document.getElementById('change').onclick = () => setAdv(document.getElementById('adv').hidden);
       updatePill();
 
       // tracé Oyan : boucle choisie en argile avec liseré blanc, les autres en galet ; le tout sous les noms de lieux
@@ -492,10 +547,11 @@
       startSel.onchange = () => {
         if (!startSel.value) return; // ligne « N départs : choisir… »
         const entry = indexData.starts.find(x => x.id === startSel.value);
-        whereEl.innerHTML = 'Départ choisi dans la liste.' + stationNote(entry && entry.kind);
+        whereEl.innerHTML = 'Départ : <b>' + esc(startLabel(entry)) + '</b>' + stationNote(entry.kind) +
+          '<div class="w2">Choisi dans la liste</div>';
+        setAdv(false);
         approachMin = null; loadStart();
       };
-      levelSel.onchange = showLevel;
       sheetHead.onclick = e => {                          // pastille d'une autre boucle : elle devient la boucle affichée
         const b = e.target.closest('.alt');
         if (b) select(Number(b.dataset.i));
@@ -515,8 +571,21 @@
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
     }
 
-    // barre repliée des réglages : « Gràcia · Modéré · 2 h 00 »
+    // liste des départs, dépliée par « Changer »
+    function setAdv(open) {
+      document.getElementById('adv').hidden = !open;
+      document.getElementById('change').setAttribute('aria-expanded', String(open));
+      document.getElementById('change').textContent = open ? 'Fermer' : 'Changer';
+      if (open) startFilter.focus();
+    }
+
+    // barre repliée des réglages : « Gràcia · Modéré · 2 h 00 » ; met aussi à jour les segments et la durée affichée
     function updatePill() {
+      document.querySelectorAll('#levelSeg button').forEach(b =>
+        b.setAttribute('aria-pressed', String(b.dataset.v === levelSel.value)));
+      document.getElementById('durVal').textContent = hm(Number(durSel.value) * 60);
+      document.getElementById('durMinus').disabled = durSel.selectedIndex <= 0;
+      document.getElementById('durPlus').disabled = durSel.selectedIndex >= durSel.options.length - 1;
       const s = startData && indexData.starts.find(x => x.id === startData.start.id);
       const name = s ? (s.kind === 'station' ? startLabel(s) : s.name) : 'Choisir un départ';
       const lvl = levelSel.options[levelSel.selectedIndex];
@@ -529,7 +598,12 @@
       sheetBody.textContent = 'Chargement…';
       showSheet();
       const res = await fetch('web/data/starts/' + startSel.value + '.json');
-      if (!res.ok) { sheetBody.textContent = 'Erreur de chargement (' + res.status + ')'; return; }
+      if (!res.ok) {                                        // on n'affiche pas la boucle du départ précédent
+        sheetBody.textContent = 'Erreur de chargement (' + res.status + ')';
+        startData = null; shown = []; sheetFoot.hidden = true; updatePill();
+        map.getSource('routes').setData(EMPTY);
+        return;
+      }
       startData = await res.json();
       if (marker) marker.remove();
       marker = new maplibregl.Marker({ color: ROUTE.start })
@@ -603,8 +677,8 @@
     }
     function goNeighbour(id, min) {
       const s = indexData.starts.find(x => x.id === id);
-      whereEl.innerHTML = 'Départ voisin : <b>' + esc(startLabel(s)) + '</b>' + stationNote(s.kind) +
-        '<br>≈ ' + min + ' min à vélo depuis le départ précédent';
+      whereEl.innerHTML = 'Départ : <b>' + esc(startLabel(s)) + '</b>' + stationNote(s.kind) +
+        '<div class="w2">Départ voisin, ≈ ' + min + ' min à vélo depuis le précédent</div>';
       approachMin = null;                               // la position de l'utilisateur n'est pas connue ici : pas de total chiffré
       chooseStart(id);
     }
