@@ -83,8 +83,9 @@ function profileSvg(o) {
   </svg>`;
 }
 
-// relie le profil à la carte : onMove([lon, lat]) quand le doigt ou la souris bouge, onMove(null) quand elle sort
-function bindProfile(svg, onMove) {
+// relie le profil à la carte : onMove([lon, lat]) quand le doigt ou la souris bouge, onMove(null) quand elle sort ;
+// readout (facultatif) : élément où écrire « km 6,9 · 30 m » à la place de l'étiquette dessinée dans le profil
+function bindProfile(svg, onMove, readout) {
   const g = pfLast;
   const cur = svg.querySelector('.pf-cursor');
   const [line, dot, label] = [cur.querySelector('line'), cur.querySelector('circle'), cur.querySelector('text')];
@@ -96,14 +97,15 @@ function bindProfile(svg, onMove) {
     const cx = g.x(d);
     line.setAttribute('x1', cx); line.setAttribute('x2', cx);
     dot.setAttribute('cx', cx); dot.setAttribute('cy', g.y(a));
-    label.textContent = 'km ' + pfKm(d) + ' · ' + Math.round(a) + ' m';
+    const txt = 'km ' + pfKm(d) + ' · ' + Math.round(a) + ' m';
+    if (readout) readout.textContent = txt; else label.textContent = txt;
     const right = cx > g.W / 2;                                     // étiquette du côté où il reste de la place
     label.setAttribute('x', right ? cx - 5 : cx + 5);
     label.setAttribute('text-anchor', right ? 'end' : 'start');
     cur.setAttribute('visibility', 'visible');
     onMove(profilePoint(g.coords, g.p.dist, d));
   };
-  const hide = () => { cur.setAttribute('visibility', 'hidden'); onMove(null); };
+  const hide = () => { cur.setAttribute('visibility', 'hidden'); if (readout) readout.textContent = ''; onMove(null); };
   svg.addEventListener('pointerdown', show);
   svg.addEventListener('pointermove', show);
   // au doigt, le point reste affiché après avoir levé le doigt ; à la souris, il disparaît en sortant du profil

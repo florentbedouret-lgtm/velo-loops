@@ -35,7 +35,7 @@ const fbChips = (name, items) => items.map(([k, label]) =>
   '<label class="chip"><input type="checkbox" name="' + name + '" value="' + k + '"> ' + label + '</label>').join('');
 
 function feedbackHtml(o) {
-  return '<details style="margin:10px 0"><summary style="font-size:16px;padding:6px 0"><b>J\'ai roulé cette boucle : mon retour</b></summary>' +
+  return '<details><summary>J\'ai roulé cette boucle : mon retour</summary>' +
     '<div class="fb">' +
     '<label>Note<select id="fb-rating"><option value="">Choisir</option>' +
     [1, 2, 3, 4, 5].map(n => '<option value="' + n + '">' + '★'.repeat(n) + '</option>').join('') + '</select></label>' +

@@ -112,19 +112,49 @@
     #sheetFoot { flex: none; padding: 12px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); }
     .gpx { width: 100%; height: 52px; border-radius: 14px; font-size: 17px; }
     #sheetBody small, #sheetBody .sub { color: var(--color-text-2); }
-    /* barre de terrain (charte §13.2 : couleurs terrain réservées à cette barre) */
-    .terrain { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 10px 0 4px; }
-    .terrain span { display: block; height: 100%; }
-    .terrain-legend { color: var(--color-text-2); margin-bottom: 6px; }
-    .terrain-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 4px 0 0; }
-    .pitch { margin: 8px 0; padding-left: 18px; }
-    .facts, .climbs { font-size: 14px; }
-    .climbs { margin: 6px 0; padding-left: 18px; }
     .badge { display: inline-block; font-size: 13px; background: var(--color-border); color: var(--color-text); padding: 2px 6px; border-radius: 6px; }
-    .city { font-size: 14px; margin: 6px 0; }
-    .city .btn { font-size: 14px; padding: 4px 8px; }
+    .sec-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--color-text-2); }
+    /* barre de terrain (charte §13.2 : couleurs terrain réservées à cette barre) et légende en grille 2 × 2 */
+    .terrain { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 10px; }
+    .terrain span { display: block; height: 100%; min-width: 2px; }
+    .terrain-legend { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; row-gap: 6px; font-size: 14px; }
+    .terrain-legend div { display: flex; align-items: center; gap: 8px; }
+    .terrain-legend i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+    .terrain-legend span { flex: 1; }
+    .terrain-legend b { font-family: var(--font-mono); font-size: 13px; font-weight: var(--fw-regular); }
+    /* points clés : repère chiffré à gauche, alerte discrète (triangle argile) pour ce qui demande de la vigilance */
+    .keys { border-top: 1px solid var(--color-border); margin-top: 16px; }
+    .keys div { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--color-border); font-size: 15px; line-height: 1.35; }
+    .keys div:last-child { border-bottom: 0; }
+    .keys .fig { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); width: 56px; flex: none; }
+    .keys .warn-row .fig { color: var(--color-accent); }
+    .keys .txt { flex: 1; }
+    .keys svg { flex: none; }
+    .pf-block { margin-top: 18px; }
+    .pf-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
+    #pfRead { font-family: var(--font-mono); font-size: 12px; color: var(--color-text); }
+    /* cartes : suggestion (fond chaux) et autres boucles (filet) */
+    .tip { background: var(--color-bg); border-radius: 16px; padding: 14px 16px; margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .tip p { margin: 0; font-size: 15px; line-height: 1.45; }
+    .tip .btn { align-self: flex-start; font-size: 15px; height: 36px; padding: 0 14px; border-radius: 12px; }
+    .vcard { font: inherit; text-align: left; width: 100%; margin-top: 12px; border: 1px solid var(--color-border); border-radius: 16px;
+             padding: 14px 16px; display: flex; align-items: center; gap: 12px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+    .vcard .vc { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .vcard .vs { font-size: 17px; }
+    .vcard .vd { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); }
+    /* dépliants en lignes à chevron */
+    .rows { border-top: 1px solid var(--color-border); margin-top: 16px; }
+    .rows details { border-bottom: 1px solid var(--color-border); }
+    .rows summary { list-style: none; min-height: 48px; display: flex; align-items: center; gap: 12px; font-size: 16px; cursor: pointer; }
+    .rows summary::-webkit-details-marker { display: none; }
+    .rows summary::after { content: ''; margin-left: auto; margin-right: 4px; width: 7px; height: 7px; flex: none;
+                           border-right: 1.6px solid var(--color-text-2); border-bottom: 1.6px solid var(--color-text-2); transform: rotate(-45deg); transition: transform .2s; }
+    .rows details[open] summary::after { transform: rotate(45deg); }
+    .rows details > :not(summary) { margin-bottom: 12px; }
+    .facts, .climbs { font-size: 14px; margin: 0 0 8px; padding-left: 18px; }
     .other-dur { font-size: 15px; padding: 6px 10px; margin: 6px 6px 0 0; }
-    #legal { padding: 12px 0 0; font-size: 12px; color: var(--color-text-2); }
+    .notes { display: block; margin-top: 16px; }
+    #legal { padding: 8px 0 0; font-size: 12px; color: var(--color-text-2); }
     #legal a { color: var(--color-text-2); }
   </style>
 </head>
@@ -556,6 +586,10 @@
         const b = e.target.closest('.alt');
         if (b) select(Number(b.dataset.i));
       };
+      sheetBody.addEventListener('click', e => {          // carte d'une autre boucle (bas du panneau) : idem
+        const b = e.target.closest('.vcard');
+        if (b) select(Number(b.dataset.i));
+      });
       document.getElementById('go').onclick = searchAddress;
       addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
       document.getElementById('me').onclick = () => {
@@ -670,10 +704,10 @@
         }
       }
       if (!best) return '';
-      return '<br>Plus vite dans la nature : depuis <b>' + esc(startLabel(best.s)) + '</b>, à ≈ ' + best.min +
-        ' min à vélo, la boucle de ' + hm(o.duration_target_min) + (best.exit === 0 ? ' part directement hors de la ville.'
-        : ' sort de la ville après ' + km(best.exit) + ' km.') +
-        ' <button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">Voir ce départ</button>';
+      return '<div class="tip"><div class="sec-label">PLUS VITE DANS LA NATURE</div><p>Depuis <b>' + esc(startLabel(best.s)) +
+        '</b>, à ≈ ' + best.min + ' min à vélo, la boucle de ' + hm(o.duration_target_min) +
+        (best.exit === 0 ? ' part directement hors de la ville.' : ' sort de la ville après ' + km(best.exit) + ' km.') +
+        '</p><button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">Voir ce départ</button></div>';
     }
     function goNeighbour(id, min) {
       const s = indexData.starts.find(x => x.id === id);
@@ -697,29 +731,40 @@
     function reliefCategory(per100) {                       // mêmes seuils que relief_category() du pipeline
       return per100 < 500 ? 'plat' : per100 < 1000 ? 'peu vallonné' : per100 < 1600 ? 'vallonné' : 'très vallonné';
     }
-    function pitchLines(o) {
+    // points clés : [repère chiffré, phrase, alerte ?] ; forêt et eau reprennent les pourcentages de la barre de terrain
+    // (même mesure), pour que la barre et les phrases ne se contredisent pas (maquette 5c)
+    function keyPoints(o) {
       const out = [];
       const ex = o.exit_dense_km;
-      if (ex === 0) out.push('Tu pars directement hors de la ville.');
-      else if (ex == null || ex >= o.distance_km - 0.05) out.push('Tu restes en ville tout du long.');
-      else out.push('Tu sors de la ville après ' + km1(ex) + ' km.');
+      if (ex === 0) out.push(['0 km', 'Tu pars directement hors de la ville.']);
+      else if (ex == null || ex >= o.distance_km - 0.05) out.push(['', 'Tu restes en ville tout du long.']);
+      else out.push([km1(ex) + ' km', 'Tu sors de la ville.']);
       const sc = o.scenery;
       if (sc) {                                             // la nature la plus présente, si elle compte vraiment
-        const nature = [['protected', 0.15, ' du parcours traverse un parc ou un espace protégé.'],
-                        ['forest', 0.15, ' du parcours longe la forêt.'],
-                        ['water', 0.05, ' du parcours au bord de l\'eau.']]
-          .filter(([k, min]) => sc[k] >= min).sort((a, b) => sc[b[0]] - sc[a[0]]);
-        if (nature.length) out.push(pc(sc[nature[0][0]]) + nature[0][2]);
+        const lc = LANDCOVER_OK && sc.landcover;
+        const nature = [['protected', sc.protected, 0.15, 'du parcours traverse un parc ou un espace protégé.'],
+                        ['forest', lc ? lc.forest : sc.forest, 0.15, lc ? 'du parcours en forêt.' : 'du parcours longe la forêt.'],
+                        ['water', lc ? lc.water : sc.water, 0.05, 'du parcours au bord de l\'eau.']]
+          .filter(([, v, min]) => v >= min).sort((a, b) => b[1] - a[1]);
+        if (nature.length) out.push([pc(nature[0][1]), nature[0][3]]);
       }
       const sh = o.shares;
-      if (sh.main_roads > 0.10) out.push(pc(sh.main_roads) + ' sur des routes principales : reste vigilant.');
-      else if (sh.dedicated_cycleway >= 0.20) out.push(pc(sh.dedicated_cycleway) + ' sur pistes cyclables.');
-      else if (o.traffic_lights === 0) out.push('Aucun feu tricolore sur le parcours.');
+      if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), 'sur des routes principales : reste vigilant.', true]);
+      else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), 'sur pistes cyclables ou voies vertes.']);
+      else if (o.traffic_lights === 0) out.push(['0 feu', 'Aucun feu tricolore sur le parcours.']);
       else if (o.terrain.climbs && o.terrain.climbs.length) {
         const c = o.terrain.climbs[0];
-        out.push('Plus longue montée : ' + km1(c.length_km) + ' km (+' + Math.round(c.gain_m) + ' m).');
+        out.push([km1(c.length_km) + ' km', 'Plus longue montée (+' + Math.round(c.gain_m) + ' m).']);
       }
+      // pente : badge à seuil unique, jamais de chiffre (D17)
+      if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', 'Au moins une rampe très raide.', true]);
       return out;
+    }
+    const WARN_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-label="Attention"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="#A8522F" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2" stroke="#A8522F" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="#A8522F"/></svg>';
+    function keysHtml(o) {
+      return '<div class="keys">' + keyPoints(o).map(([fig, txt, warn]) =>
+        '<div' + (warn ? ' class="warn-row"' : '') + '><span class="fig">' + esc(fig) + '</span><span class="txt">' + esc(txt) +
+        '</span>' + (warn ? WARN_ICON : '') + '</div>').join('') + '</div>';
     }
     function allFacts(o) {                                  // tous les chiffres mesurés, sans pourcentage de pente (D17)
       const L = [];
@@ -768,41 +813,54 @@
       return '<div class="terrain" role="img" aria-label="Répartition du terrain : ' +
         parts.map(([k, lab]) => lab + ' ' + pc(lc[k])).join(', ') + '">' +
         parts.map(([k, , v]) => '<span style="width:' + (lc[k] * 100).toFixed(1) + '%;background:var(' + v + ')"></span>').join('') +
-        '</div><div class="terrain-legend label">' +
-        parts.map(([k, lab, v]) => '<i style="background:var(' + v + ')"></i>' + lab + ' ' + pc(lc[k])).join(' · ') + '</div>';
+        '</div><div class="terrain-legend">' +
+        parts.map(([k, lab, v]) => '<div><i style="background:var(' + v + ')"></i><span>' + lab.charAt(0).toUpperCase() + lab.slice(1) +
+          '</span><b>' + pc(lc[k]) + '</b></div>').join('') + '</div>';
     }
 
-    // détail affiché sous la carte sélectionnée
-    function detailHtml(o) {
-      const pitch = pitchLines(o).map(p => '<li>' + esc(p) + '</li>').join('');
-      const facts = allFacts(o).map(p => '<li>' + esc(p) + '</li>').join('');
-            const climbs = (o.terrain.climbs || []).map(c =>
-        '<li>Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
-            // ville : uniquement à partir de exit_dense_km, comparé à la distance réelle (pas de null en pratique)
-      let cityLine = '';
-      if (o.exit_dense_km === 0) {
-        // rien à afficher
-      } else if (o.exit_dense_km == null || o.exit_dense_km >= o.distance_km - 0.05) {
-        const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
-        cityLine = hasLonger ? 'Une sortie plus longue va plus loin. <button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button>' : '';
-      }
-      cityLine = (cityLine + natureNeighbour(o)).replace(/^<br>/, '');
+    // écarts d'une autre boucle par rapport à la boucle affichée : « +3,4 km · −85 m · +11 min »
+    function deltas(x, o) {
+      const sg = (v, t) => (v > 0 ? '+' : v < 0 ? '−' : '±') + t;
+      const dk = Math.round((x.distance_km - o.distance_km) * 10) / 10, dm = Math.round(x.ascend_m - o.ascend_m);
+      const dt = Math.round(x.time_est_min - o.time_est_min);
+      return sg(dk, km1(Math.abs(dk)) + ' km') + ' · ' + sg(dm, Math.abs(dm) + ' m') + ' · ' + sg(dt, Math.abs(dt) + ' min');
+    }
 
-      // pente : catégorie qualitative + badge à seuil unique, jamais de chiffre
-      const steepBadge = o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20;
+    // contenu du panneau (maquette 5c / 5d) : terrain, points clés, profil, suggestion, dépliants, autres boucles, notes
+    function detailHtml(o) {
+      const facts = allFacts(o).map(p => '<li>' + esc(p) + '</li>').join('');
+      const climbs = (o.terrain.climbs || []).map(c =>
+        '<li>Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
+      // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
+      let longer = '';
+      if (o.exit_dense_km != null && o.exit_dense_km !== 0 && o.exit_dense_km >= o.distance_km - 0.05 ||
+          o.exit_dense_km == null) {
+        const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
+        if (hasLonger) longer = '<div class="tip"><div class="sec-label">ALLER PLUS LOIN</div><p>Une sortie plus longue sort de la ville.</p>' +
+          '<button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button></div>';
+      }
+      const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
+      const others = shown.map((x, k) => k === current ? '' :
+        '<button type="button" class="vcard" data-i="' + k + '"><span class="vc"><span class="sec-label">' +
+        esc((LABELS[x.label] || x.label).toUpperCase()) + '</span><span class="vs">' + km(x.distance_km) + ' km · D+ ' +
+        Math.round(x.ascend_m) + ' m · ≈ ' + hm(x.time_est_min) + '</span><span class="vd">' + deltas(x, o) + '</span></span>' +
+        '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" fill="none" stroke="#625D55" stroke-width="1.6" stroke-linecap="round"/></svg></button>').join('');
+      const pf = profileSvg(o);
 
       return `
-        ${terrainBar(o)}
-        <ul class="pitch">${pitch}</ul>
-        ${steepBadge ? '<p><span class="badge">⚠️ Au moins une rampe très raide</span></p>' : ''}
-        ${profileSvg(o)}
-        ${cityLine ? '<p class="city">' + cityLine + '</p>' : ''}
-        <details class="facts"><summary>Tous les chiffres</summary>
-          <ul class="pitch">${facts}</ul>
-          ${climbs ? '<ul class="climbs">' + climbs + '</ul>' : ''}
-        </details>
-        ${feedbackHtml(o)}
-        <small>Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>
+        ${lc ? terrainBar(o) : '<div class="sub">En ville ' + Math.round(cityShare(o) * 100) + ' %</div>'}
+        ${keysHtml(o)}
+        ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">PROFIL</span><span id="pfRead"></span></div>' + pf + '</div>' : ''}
+        ${longer}${natureNeighbour(o)}
+        <div class="rows">
+          <details><summary>Tous les chiffres</summary>
+            <ul class="facts">${facts}</ul>
+            ${climbs ? '<ul class="climbs">' + climbs + '</ul>' : ''}
+          </details>
+          ${feedbackHtml(o)}
+        </div>
+        ${others}
+        <small class="notes">Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>
         <div id="legal">Parcours indicatifs, à vérifier avant de partir · <a href="mentions.html" target="_blank" rel="noopener">Mentions légales &amp; confidentialité</a></div>`;
     }
 
@@ -828,13 +886,13 @@
         : '';
       sheetHead.innerHTML = headHtml(o);
       sheetFoot.hidden = false;
-      sheetBody.innerHTML = (LANDCOVER_OK && o.scenery && o.scenery.landcover ? ''
-        : '<div class="sub">En ville ' + Math.round(cityShare(o) * 100) + ' %</div>') + detailHtml(o);
+      sheetBody.innerHTML = detailHtml(o);
       sheetBody.scrollTop = 0;
       map.getSource('cursor').setData(EMPTY);
       const pf = sheetBody.querySelector('svg.pf');
       if (pf) bindProfile(pf, pos => map.getSource('cursor').setData(pos
-        ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY));
+        ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY),
+        document.getElementById('pfRead'));
 
       const features = shown
         .map((x, k) => ({
