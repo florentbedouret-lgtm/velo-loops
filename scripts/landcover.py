@@ -14,7 +14,11 @@ Définitions de « ville » comparées (point du tracé tous les 100 m ; priorit
   inside   dans une zone bâtie (v1)
   near25   à moins de ~25 m d'une zone bâtie (couvre une rue entre deux îlots)
   near50   à moins de ~50 m d'une zone bâtie (couvre aussi les avenues larges)
-  bld50    au moins BLD_MIN bâtiments à moins de ~50 m (bâti réel autour du cycliste ; bâtiments chargés sur --bld-bbox)
+  bldR_N   au moins N bâtiments à moins de ~R m (bâti réel autour du cycliste) : bld50_3, bld75_3, bld75_5
+
+Diagnostic n°1 (26/09/2026) : les zones bâties OSM sont inutilisables (Gràcia 1 h : inside 8 %, near50 51 % ; Collserola
+near50 46-64 %) ; le comptage de bâtiments sépare ville et nature (Gràcia 1 h 83 %, Collserola 15-27 %) mais sous-estime
+les grandes avenues à 50 m -> calage 50 / 75 m et 3 / 5 bâtiments, bâtiments chargés sur toute la province.
 """
 from __future__ import annotations
 
@@ -31,21 +35,24 @@ sys.path.insert(0, str(Path(__file__).parent))
 import generate_loops as g  # load_landscape, sample_points, haversine, SCENERY_*_DEG
 
 NEAR25_DEG, NEAR50_DEG = 0.0003, 0.0006   # ~25 et ~50 m à cette latitude (en longitude ; un peu plus en latitude)
-BLD_MIN = 3
-METHODS = ("inside", "near25", "near50", "bld50")
+BLD = {"bld50_3": (0.0006, 3), "bld75_3": (0.0009, 3), "bld75_5": (0.0009, 5)}   # (rayon en degrés, nb de bâtiments)
+METHODS = ("inside", "near50", *BLD)
 WITNESSES = ("gracia", "l-eixample", "sant-marti", "ciutat-vella", "horta-guinardo", "sarria-sant-gervasi",
              "sant-adria-de-besos", "badalona", "el-tibidabo-est", "can-rectoret-est", "santa-creu-d-olorda-est",
              "sabadell", "terrassa", "molins-de-rei", "castelldefels")
 
 
 def load_buildings(pbf: Path, workdir: Path, bbox: str):
-    """Centres des bâtiments OSM dans bbox (osmium), en arbre spatial de points."""
+    """Centres des bâtiments OSM (osmium), en arbre spatial de points ; bbox vide = tout l'extrait (province)."""
     import shapely
     from shapely.geometry import shape
     cut, filt, out = workdir / "bld_cut.osm.pbf", workdir / "bld.osm.pbf", workdir / "bld.geojsonseq"
-    subprocess.run(["osmium", "extract", "--bbox", bbox, str(pbf), "-o", str(cut), "--overwrite"], check=True,
-                   capture_output=True)
-    subprocess.run(["osmium", "tags-filter", str(cut), "w/building", "-o", str(filt), "--overwrite"], check=True,
+    src = pbf
+    if bbox:
+        subprocess.run(["osmium", "extract", "--bbox", bbox, str(pbf), "-o", str(cut), "--overwrite"], check=True,
+                       capture_output=True)
+        src = cut
+    subprocess.run(["osmium", "tags-filter", str(src), "w/building", "-o", str(filt), "--overwrite"], check=True,
                    capture_output=True)
     subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"], check=True,
                    capture_output=True)
@@ -76,12 +83,13 @@ def city_mask(pts, land, method, bld_tree):
     n = len(pts)
     mask = np.zeros(n, dtype=bool)
     tree = land.trees.get("builtup")
-    if method == "bld50":
+    if method in BLD:
         if bld_tree is None:
             return None
-        hit = bld_tree.query(pts, predicate="dwithin", distance=NEAR50_DEG)[0]
+        radius, nmin = BLD[method]
+        hit = bld_tree.query(pts, predicate="dwithin", distance=radius)[0]
         counts = np.bincount(hit, minlength=n)
-        return counts >= BLD_MIN
+        return counts >= nmin
     if tree is None:
         return mask
     if method == "inside":
@@ -164,7 +172,7 @@ def main() -> int:
     ap.add_argument("--workdir", required=True)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--apply", choices=METHODS)
-    ap.add_argument("--bld-bbox", default="2.00,41.30,2.35,41.52", help="emprise des bâtiments chargés (méthode bld50)")
+    ap.add_argument("--bld-bbox", default="", help="emprise des bâtiments chargés (vide = tout l'extrait, la province)")
     ap.add_argument("--out", default="data/landcover_check.json")
     ap.add_argument("--out-md", default="data/landcover_check.md")
     args = ap.parse_args()
@@ -174,11 +182,15 @@ def main() -> int:
         sys.exit("paysage OSM non chargé")
     print("Paysage : " + ", ".join(f"{k} {v}" for k, v in land.counts.items()), flush=True)
     bld_tree = None
-    if args.check or args.apply == "bld50":
+    if args.check or args.apply in BLD:
+        import time
+        t0 = time.time()
         bld_tree, nb = load_buildings(pbf, wd, args.bld_bbox)
-        print(f"Bâtiments chargés ({args.bld_bbox}) : {nb}", flush=True)
+        print(f"Bâtiments chargés ({args.bld_bbox or 'province'}) : {nb} en {time.time() - t0:.0f} s", flush=True)
     if args.check:
         check(data, land, bld_tree, Path(args.out_md), Path(args.out))
+        with open(args.out_md, "a", encoding="utf-8") as fh:
+            fh.write(f"\nBâtiments chargés : {nb} ({args.bld_bbox or 'province'}), en {time.time() - t0:.0f} s.\n")
     if args.apply:
         apply(data, land, bld_tree, args.apply)
     return 0
