@@ -344,6 +344,62 @@ def report_references(results, path_json, path_md, note, t0):
     print("\n".join(L[:20]), flush=True)
 
 
+# ----------------------------------------------------------------------------- sonde : boucles de production avant/après
+def option_row(o) -> dict:
+    """Résumé d'une option publiée (fichier starts/<id>.json) ou fraîchement générée (to_json)."""
+    sc = o.get("scenery") or {}
+    lc = sc.get("landcover") or {}
+    return {"label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
+            "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
+            "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"]}
+
+
+def run_probe(sid, site, gh_url, durations, levels):
+    """Options que produirait la génération réelle (réglages du dépôt) pour ce départ, face aux options publiées."""
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next((e for e in idx["starts"] if e["id"] == sid), None)
+    if entry is None:
+        return {"id": sid, "skipped": "départ absent de l'index publié"}
+    pub = requests.get(f"{site}/web/data/starts/{sid}.json", timeout=60).json()
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1]}
+    rows = []
+    for d in durations:
+        for level in levels:
+            pool = []
+            for profile in g.LEVELS[level]["profiles"]:
+                a, _ = g.fit_and_sample(gh, st_, level, profile, d, g.CANDIDATES, lambda *_: None)
+                pool += a
+            new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(g.pick_options(pool), start=1)]
+            old = [option_row(o) for o in pub["options"]
+                   if o["level"] == level and round(o["duration_target_min"]) == round(d * 60)]
+            rows.append({"duration_h": d, "level": level, "published": old, "new": new, "valid": len(pool)})
+    return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
+
+
+def report_probe(results, out_json, out_md, note, t0):
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    f = lambda o: (f"{o['label']} : {o['km']} km, D+ {o['dplus_m']}, forêt {o['forest_pct']} %, ville {o['city_pct']} %, "  # noqa: E731
+                   f"pistes {o['cycleway_pct']} %, note {o['score']}")
+    L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
+         (f"\n**Réglage de ce run : {note}**" if note else ""),
+         "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt."]
+    for res in results:
+        L.append(f"\n## {res.get('name', res['id'])}")
+        if res.get("skipped"):
+            L.append(f"- ignoré : {res['skipped']}")
+            continue
+        for r in res["rows"]:
+            maxd = lambda os_: max((o["dplus_m"] for o in os_), default=0)  # noqa: E731
+            L.append(f"\n**{r['duration_h']:g} h / {r['level']}** — D+ max publié {maxd(r['published'])} m -> nouveau "
+                     f"{maxd(r['new'])} m ({r['valid']} candidats valides)")
+            L += ["- Publié : " + f(o) for o in r["published"]]
+            L += ["- Nouveau : " + f(o) for o in r["new"]]
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L[:40]), flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gh", required=True)
@@ -360,6 +416,8 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
+    ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
@@ -371,6 +429,13 @@ def main() -> int:
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
+    if args.probe:
+        ids = [x.strip() for x in args.probe.split(";") if x.strip()]
+        durations = [float(x) for x in args.durations.split()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_probe(sid, args.site, args.gh, durations, args.levels.split()), ids))
+        report_probe(results, args.out, args.out_md, args.note, t0)
+        return 0
     if args.references:
         refs = json.loads(Path(args.references).read_text(encoding="utf-8"))["loops"]
         print(f"Boucles de référence : {len(refs)}", flush=True)

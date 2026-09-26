@@ -230,10 +230,19 @@ jobs:
       - name: Diagnostic sortie vers la nature (O-12)
         if: ${{ steps.resolve_mode.outputs.mode == 'nature_check' }}
         run: |
-          python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-            --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \
-            --out data/nature_check.json --out-md data/nature_check.md \
-            --note "calibrage v5, réglages de production (rayon « ville » 1 500 m)"
+          # NATURE_PROBE non vide : sonde sur ces départs (boucles de production avant / après) ; vide : calibrage v5
+          NATURE_PROBE="gracia;sarria-sant-gervasi;horta-guinardo;sant-adria-de-besos;badalona"
+          if [ -n "$NATURE_PROBE" ]; then
+            python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "1.5 2 3" \
+              --out data/nature_check.json --out-md data/nature_check.md \
+              --note "sonde : profil sportif sans bonus pistes (vitesse corrigée gardée)"
+          else
+            python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+              --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \
+              --out data/nature_check.json --out-md data/nature_check.md \
+              --note "calibrage v5, réglages de production (rayon « ville » 1 500 m)"
+          fi
           cat data/nature_check.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publier le diagnostic nature
