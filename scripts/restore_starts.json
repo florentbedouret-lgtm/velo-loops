@@ -1,0 +1,1723 @@
+[
+ {
+  "name": "les Mines d'Osor (est)",
+  "lon": 2.59131,
+  "lat": 41.94985,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Osor",
+  "municipality": "Osor",
+  "key": "fbb7763c5b"
+ },
+ {
+  "name": "Vallespinosa (est)",
+  "lon": 1.34914,
+  "lat": 41.44477,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Querol",
+  "municipality": "Pontils",
+  "key": "581ce7d7be"
+ },
+ {
+  "name": "Sant Aniol de Finestres (est)",
+  "lon": 2.58679,
+  "lat": 42.09029,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Esteve de Llémena",
+  "municipality": "Sant Aniol de Finestres",
+  "key": "a01c98d5a8"
+ },
+ {
+  "name": "Salo (est)",
+  "lon": 1.64373,
+  "lat": 41.84397,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Cardona",
+  "municipality": "Sant Mateu de Bages",
+  "key": "400319eab4"
+ },
+ {
+  "name": "Talteüll (est)",
+  "lon": 1.32867,
+  "lat": 41.81891,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Massoteres",
+  "municipality": "Massoteres",
+  "key": "592d795273"
+ },
+ {
+  "name": "Can Servitge (est)",
+  "lon": 1.76371,
+  "lat": 41.71478,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Salvador de Guardiola",
+  "municipality": "Rajadell",
+  "key": "e0cd277fad"
+ },
+ {
+  "name": "el Pla de Rubió (est)",
+  "lon": 1.5524,
+  "lat": 41.62575,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Rubió",
+  "municipality": "Rubió",
+  "key": "257ea8f233"
+ },
+ {
+  "name": "Bassegoda (est)",
+  "lon": 2.64581,
+  "lat": 42.31161,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Albanyà",
+  "municipality": "Albanyà",
+  "key": "6deba86d44"
+ },
+ {
+  "name": "Llindars (est)",
+  "lon": 1.30007,
+  "lat": 41.60354,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Talavera",
+  "municipality": "Ribera d'Ondara",
+  "key": "64d246d52e"
+ },
+ {
+  "name": "Santa Fe de Montseny (est)",
+  "lon": 2.46399,
+  "lat": 41.77313,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Riells",
+  "municipality": "Fogars de Montclús",
+  "key": "a185a71960"
+ },
+ {
+  "name": "Peracamps (est)",
+  "lon": 1.43608,
+  "lat": 41.917,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Climenç",
+  "municipality": "Llobera",
+  "key": "343d3895e0"
+ },
+ {
+  "name": "Madrona (est)",
+  "lon": 1.33753,
+  "lat": 41.96755,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Climenç",
+  "municipality": "Pinell de Solsonès",
+  "key": "4d78dccf02"
+ },
+ {
+  "name": "Canelles (est)",
+  "lon": 1.35486,
+  "lat": 42.17705,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Fígols",
+  "municipality": "Fígols i Alinyà",
+  "key": "6a34d7de76"
+ },
+ {
+  "name": "Sant Martí Sescorts (est)",
+  "lon": 2.32603,
+  "lat": 42.01318,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de les Masies de Roda",
+  "municipality": "l'Esquirol",
+  "key": "dd2dc50aca"
+ },
+ {
+  "name": "Pinell de Solsonès (est)",
+  "lon": 1.39973,
+  "lat": 41.97102,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Climenç",
+  "municipality": "Pinell de Solsonès",
+  "key": "0b1d619568"
+ },
+ {
+  "name": "Bogadella (est)",
+  "lon": 1.76931,
+  "lat": 41.80507,
+  "kind": "fill",
+  "zone": "peri",
+  "display_name": "Près de Callús",
+  "municipality": "Callús",
+  "key": "3a7c4750cd"
+ },
+ {
+  "name": "Sant Sadurní de Sovelles (est)",
+  "lon": 2.16081,
+  "lat": 42.1421,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sora",
+  "municipality": "les Llosses",
+  "key": "d36d147e7c"
+ },
+ {
+  "name": "Bernades (est)",
+  "lon": 1.83625,
+  "lat": 42.04347,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Casserres",
+  "municipality": "Casserres",
+  "key": "e4fe3c52e6"
+ },
+ {
+  "name": "Armadans (est)",
+  "lon": 2.50661,
+  "lat": 42.04989,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de les Planes d'Hostoles",
+  "municipality": "Susqueda",
+  "key": "8a9e832ba2"
+ },
+ {
+  "name": "Ciuret (est)",
+  "lon": 2.33198,
+  "lat": 42.14424,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Vidrà",
+  "municipality": "Vidrà",
+  "key": "39eb49042d"
+ },
+ {
+  "name": "Sant Gil (est)",
+  "lon": 2.10442,
+  "lat": 42.01138,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Olost",
+  "municipality": "Olost",
+  "key": "e03e535b4e"
+ },
+ {
+  "name": "la Farga de Bebié (est)",
+  "lon": 2.20669,
+  "lat": 42.1315,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Montesquiu",
+  "municipality": "les Llosses",
+  "key": "8a922c24dd"
+ },
+ {
+  "name": "Faia (est)",
+  "lon": 1.82295,
+  "lat": 42.265,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Gisclareny",
+  "municipality": "Gisclareny",
+  "key": "ff4a3a8750"
+ },
+ {
+  "name": "Terricabres (est)",
+  "lon": 2.11213,
+  "lat": 41.94842,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Olost",
+  "municipality": "Oristà",
+  "key": "f7d3e5d9ba"
+ },
+ {
+  "name": "Pere-riera (est)",
+  "lon": 2.13971,
+  "lat": 41.92346,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Eulàlia de Riuprimer",
+  "municipality": "Sant Bartomeu del Grau",
+  "key": "55016df148"
+ },
+ {
+  "name": "les Cases de la Serra (est)",
+  "lon": 1.30484,
+  "lat": 41.90043,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sanaüja",
+  "municipality": "Torrefeta i Florejacs",
+  "key": "ecd4c351c2"
+ },
+ {
+  "name": "Sant Andreu de la Vola (est)",
+  "lon": 2.35892,
+  "lat": 42.08123,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de l'Esquirol",
+  "municipality": "Sant Pere de Torelló",
+  "key": "5b0be1b090"
+ },
+ {
+  "name": "la Roqueta (est)",
+  "lon": 1.6293,
+  "lat": 41.90878,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Clariana de Cardener",
+  "municipality": "Cardona",
+  "key": "b9890355e2"
+ },
+ {
+  "name": "Bosquerós (est)",
+  "lon": 2.68036,
+  "lat": 42.04206,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Martí de Llémena",
+  "municipality": "Sant Martí de Llémena",
+  "key": "0a9e711055"
+ },
+ {
+  "name": "Bonner (est)",
+  "lon": 1.70413,
+  "lat": 42.17744,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Llinars",
+  "municipality": "Gósol",
+  "key": "f97dd36f7f"
+ },
+ {
+  "name": "Castelltort (est)",
+  "lon": 1.63527,
+  "lat": 42.13098,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Casa Nova de Valls",
+  "municipality": "Guixers",
+  "key": "bf2c90c1c7"
+ },
+ {
+  "name": "la Barceloneta (est)",
+  "lon": 1.44563,
+  "lat": 42.23862,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sorribes de la Vansa",
+  "municipality": "la Vansa i Fórnols",
+  "key": "85692626aa"
+ },
+ {
+  "name": "Sant Feliu de Lluelles (est)",
+  "lon": 1.67593,
+  "lat": 42.00763,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Navès",
+  "municipality": "Montmajor",
+  "key": "f8b8d5198c"
+ },
+ {
+  "name": "Valldeperes (est)",
+  "lon": 1.7319,
+  "lat": 41.90788,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Cardona",
+  "municipality": "Navàs",
+  "key": "fe186b76c6"
+ },
+ {
+  "name": "Bellmunt de Segarra (est)",
+  "lon": 1.39817,
+  "lat": 41.5931,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Argençola",
+  "municipality": "Talavera",
+  "key": "109c595d0e"
+ },
+ {
+  "name": "Conill (est)",
+  "lon": 1.46067,
+  "lat": 41.72551,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Dusfort",
+  "municipality": "Pujalt",
+  "key": "5cf23981c8"
+ },
+ {
+  "name": "Merlant (est)",
+  "lon": 2.70624,
+  "lat": 42.14923,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Miquel de Campmajor",
+  "municipality": "Porqueres",
+  "key": "42faac1294"
+ },
+ {
+  "name": "la Vall de Sant Marc (est)",
+  "lon": 1.47526,
+  "lat": 41.34512,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Joncosa del Montmell",
+  "municipality": "el Montmell",
+  "key": "6567d6c1e6"
+ },
+ {
+  "name": "Lliurona (est)",
+  "lon": 2.68747,
+  "lat": 42.29399,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Albanyà",
+  "municipality": "Albanyà",
+  "key": "736a298536"
+ },
+ {
+  "name": "Gallecs (est)",
+  "lon": 2.19485,
+  "lat": 41.56428,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Palau-solità i Plegamans",
+  "municipality": "Mollet del Vallès",
+  "key": "1fe8965966"
+ },
+ {
+  "name": "Sant Cristòfol (est)",
+  "lon": 2.25215,
+  "lat": 41.63387,
+  "kind": "fill",
+  "zone": "peri",
+  "display_name": "Près de Santa Eulàlia de Ronçana",
+  "municipality": "Santa Eulàlia de Ronçana",
+  "key": "bb9d824081"
+ },
+ {
+  "name": "Santiga (est)",
+  "lon": 2.15323,
+  "lat": 41.53456,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Perpètua de Mogoda",
+  "municipality": "Santa Perpètua de Mogoda",
+  "key": "74d1a3220b"
+ },
+ {
+  "name": "Pera (est)",
+  "lon": 2.49409,
+  "lat": 42.2837,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Joan les Fonts",
+  "municipality": "Montagut i Oix",
+  "key": "2e2fb0d150"
+ },
+ {
+  "name": "el Montnou (est)",
+  "lon": 1.4855,
+  "lat": 42.14899,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Cambrils",
+  "municipality": "Odèn",
+  "key": "da1982d0e4"
+ },
+ {
+  "name": "Vallcarca (est)",
+  "lon": 1.85719,
+  "lat": 41.24245,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sitges",
+  "municipality": "Sitges",
+  "key": "3f61d491e7"
+ },
+ {
+  "name": "Pampa (est)",
+  "lon": 1.37052,
+  "lat": 42.06449,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Oliana",
+  "municipality": "Castellar de la Ribera",
+  "key": "d9478c4ccd"
+ },
+ {
+  "name": "Rocacrespa (est)",
+  "lon": 1.66177,
+  "lat": 41.23706,
+  "kind": "fill",
+  "zone": "peri",
+  "display_name": "Près de Cubelles",
+  "municipality": "Cubelles",
+  "key": "a94034f072"
+ },
+ {
+  "name": "Ca l'Albet (est)",
+  "lon": 1.53274,
+  "lat": 41.52318,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Maria de Miralles",
+  "municipality": "Santa Maria de Miralles",
+  "key": "682948e00d"
+ },
+ {
+  "name": "el Coll (est) 2",
+  "lon": 2.52188,
+  "lat": 41.95692,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Osor",
+  "municipality": "Susqueda",
+  "key": "9f04ebcc9e"
+ },
+ {
+  "name": "els Refugis del Montseny (est)",
+  "lon": 2.39402,
+  "lat": 41.71518,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Pere de Vilamajor",
+  "municipality": "Sant Pere de Vilamajor",
+  "key": "ae25a6070e"
+ },
+ {
+  "name": "Fuirosos (est)",
+  "lon": 2.57464,
+  "lat": 41.69068,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Batllòria",
+  "municipality": "Sant Celoni",
+  "key": "0f04e879eb"
+ },
+ {
+  "name": "Viladonja (est)",
+  "lon": 2.06716,
+  "lat": 42.1654,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Jaume de Frontanyà",
+  "municipality": "les Llosses",
+  "key": "e08170a886"
+ },
+ {
+  "name": "Gallifa (est)",
+  "lon": 2.1816,
+  "lat": 42.0743,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Boi de Lluçanès",
+  "municipality": "Sant Boi de Lluçanès",
+  "key": "8181e60d7d"
+ },
+ {
+  "name": "Fornils (est)",
+  "lon": 2.51801,
+  "lat": 42.0232,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Martí Sacalm",
+  "municipality": "Susqueda",
+  "key": "5c77d81bca"
+ },
+ {
+  "name": "Fillol (est)",
+  "lon": 1.46945,
+  "lat": 41.54861,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Bellprat",
+  "municipality": "Sant Martí de Tous",
+  "key": "818e729c34"
+ },
+ {
+  "name": "Espinalbet (est)",
+  "lon": 1.8044,
+  "lat": 42.11686,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Berga",
+  "municipality": "Castellar del Riu",
+  "key": "aab19d47dd"
+ },
+ {
+  "name": "les Heures (est)",
+  "lon": 2.00495,
+  "lat": 42.07667,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Quar",
+  "municipality": "la Quar",
+  "key": "4c0fe17fc3"
+ },
+ {
+  "name": "Rossinyol i Coforb (est)",
+  "lon": 1.79234,
+  "lat": 42.09072,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Avià",
+  "municipality": "Capolat",
+  "key": "c1706a2552"
+ },
+ {
+  "name": "Espronceda (est)",
+  "lon": 2.11211,
+  "lat": 41.52898,
+  "kind": "fill",
+  "zone": "dense",
+  "display_name": "Près de Barberà del Vallès",
+  "municipality": "Sabadell",
+  "key": "0e78a9f02c"
+ },
+ {
+  "name": "Vallferosa (est)",
+  "lon": 1.44568,
+  "lat": 41.86162,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Torà",
+  "municipality": "Torà",
+  "key": "97e92d5e7b"
+ },
+ {
+  "name": "els Masos (est)",
+  "lon": 1.64453,
+  "lat": 41.668,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Castellfollit del Boix",
+  "municipality": "Castellfollit del Boix",
+  "key": "d657d9e00d"
+ },
+ {
+  "name": "les Barraques (est)",
+  "lon": 1.57546,
+  "lat": 41.49327,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Orpí",
+  "municipality": "la Llacuna",
+  "key": "df1d45855e"
+ },
+ {
+  "name": "Selmella (est)",
+  "lon": 1.33809,
+  "lat": 41.42113,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de el Pont d'Armentera",
+  "municipality": "el Pont d'Armentera",
+  "key": "d7e8467873"
+ },
+ {
+  "name": "Cortals del Mig (est)",
+  "lon": 2.46709,
+  "lat": 41.8687,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Hilari Sacalm",
+  "municipality": "Sant Hilari Sacalm",
+  "key": "60421a2cd1"
+ },
+ {
+  "name": "Vall d'Urbisol (est)",
+  "lon": 2.01797,
+  "lat": 41.8082,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Calders",
+  "municipality": "Avinyó",
+  "key": "286f429e01"
+ },
+ {
+  "name": "Sant Pere Cercada (est)",
+  "lon": 2.60763,
+  "lat": 41.83531,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Feliu de Buixalleu",
+  "municipality": "Santa Coloma de Farners",
+  "key": "b45f3c4c16"
+ },
+ {
+  "name": "Sant Quintí de Montclar (est)",
+  "lon": 1.80094,
+  "lat": 42.03664,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de l'Espunyola",
+  "municipality": "Montclar",
+  "key": "0e1475debd"
+ },
+ {
+  "name": "Sant Miquel de Terradelles (est)",
+  "lon": 1.97548,
+  "lat": 41.92739,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Feliu Sasserra",
+  "municipality": "Santa Maria de Merlès",
+  "key": "1961c30d8e"
+ },
+ {
+  "name": "Sant Sadurní de Fonollet (est)",
+  "lon": 1.83314,
+  "lat": 41.99065,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Casserres",
+  "municipality": "Puig-reig",
+  "key": "39ea18a274"
+ },
+ {
+  "name": "les Medes (est)",
+  "lon": 2.55812,
+  "lat": 42.09869,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Feliu de Pallerols",
+  "municipality": "Sant Aniol de Finestres",
+  "key": "86fbb6fcec"
+ },
+ {
+  "name": "Anglerill de Sant Grau (est)",
+  "lon": 1.64122,
+  "lat": 41.95648,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Clariana de Cardener",
+  "municipality": "Navès",
+  "key": "4ca05dbb0f"
+ },
+ {
+  "name": "la Freita (est)",
+  "lon": 1.42936,
+  "lat": 42.31489,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Montferrer",
+  "municipality": "Ribera d'Urgellet",
+  "key": "3a18bfdb46"
+ },
+ {
+  "name": "Can Bou (est) 2",
+  "lon": 1.97743,
+  "lat": 41.27068,
+  "kind": "fill",
+  "zone": "dense",
+  "display_name": "Près de Castelldefels",
+  "municipality": "Castelldefels",
+  "key": "ccdfd8cc7f"
+ },
+ {
+  "name": "Can Brugueràs (est)",
+  "lon": 2.48242,
+  "lat": 41.6089,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Andreu de Llavaneres",
+  "municipality": "Dosrius",
+  "key": "59bb1a0a84"
+ },
+ {
+  "name": "Besora (est)",
+  "lon": 1.59961,
+  "lat": 42.03003,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Navès",
+  "municipality": "Navès",
+  "key": "47997193a4"
+ },
+ {
+  "name": "el Pla de Grassetes (est)",
+  "lon": 2.06277,
+  "lat": 41.88632,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Maria d'Oló",
+  "municipality": "Santa Maria d'Oló",
+  "key": "c13068081c"
+ },
+ {
+  "name": "Quintà del Blanquer (est)",
+  "lon": 2.0177,
+  "lat": 41.97075,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Feliu Sasserra",
+  "municipality": "Oristà",
+  "key": "0cff81883d"
+ },
+ {
+  "name": "Salselles (est)",
+  "lon": 2.0288,
+  "lat": 42.09599,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Quar",
+  "municipality": "Borredà",
+  "key": "e3cf05436e"
+ },
+ {
+  "name": "Quintà de la Baga (est)",
+  "lon": 1.96157,
+  "lat": 42.20556,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Castell de l'Areny",
+  "municipality": "la Pobla de Lillet",
+  "key": "aa241bde12"
+ },
+ {
+  "name": "El Claper (est)",
+  "lon": 1.87647,
+  "lat": 42.30552,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Bagà",
+  "municipality": "Bagà",
+  "key": "f1bca7ef9c"
+ },
+ {
+  "name": "Sant Ponç (est)",
+  "lon": 1.88064,
+  "lat": 41.78448,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Fruitós de Bages",
+  "municipality": "Sallent",
+  "key": "ae8c2b8bb0"
+ },
+ {
+  "name": "la Planeta (est)",
+  "lon": 1.49486,
+  "lat": 41.37618,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Pontons",
+  "municipality": "Aiguamúrcia",
+  "key": "9e2b841095"
+ },
+ {
+  "name": "Montfalcó el Gros (est)",
+  "lon": 1.45437,
+  "lat": 41.65696,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Guim de Freixenet",
+  "municipality": "Veciana",
+  "key": "e5c35787cc"
+ },
+ {
+  "name": "Sant Martí de Maçana (est)",
+  "lon": 1.60375,
+  "lat": 41.68696,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Rubió",
+  "municipality": "Rubió",
+  "key": "3105b310eb"
+ },
+ {
+  "name": "Sorreig (est)",
+  "lon": 2.17725,
+  "lat": 42.00632,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Bartomeu del Grau",
+  "municipality": "Sobremunt",
+  "key": "f0c47f6c89"
+ },
+ {
+  "name": "la Castanya (est)",
+  "lon": 2.35101,
+  "lat": 41.78342,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Montseny",
+  "municipality": "el Brull",
+  "key": "37f9ed9438"
+ },
+ {
+  "name": "les Comes (est)",
+  "lon": 2.20619,
+  "lat": 41.76746,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Centelles",
+  "municipality": "Sant Martí de Centelles",
+  "key": "072139f2c0"
+ },
+ {
+  "name": "la Frau (est)",
+  "lon": 2.03141,
+  "lat": 41.89974,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Maria d'Oló",
+  "municipality": "Santa Maria d'Oló",
+  "key": "08bd32af6b"
+ },
+ {
+  "name": "els Casots (est)",
+  "lon": 1.80927,
+  "lat": 41.40953,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Sadurní d'Anoia",
+  "municipality": "Subirats",
+  "key": "af78f779dd"
+ },
+ {
+  "name": "Cal Rossell de la Serra (est)",
+  "lon": 1.74455,
+  "lat": 41.42611,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Lavit",
+  "municipality": "Torrelavit",
+  "key": "337e6cd080"
+ },
+ {
+  "name": "Espiells (est)",
+  "lon": 1.81303,
+  "lat": 41.43713,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Sadurní d'Anoia",
+  "municipality": "Sant Sadurní d'Anoia",
+  "key": "d05a120842"
+ },
+ {
+  "name": "Masia Bac (est)",
+  "lon": 1.84441,
+  "lat": 41.49515,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Esteve Sesrovires",
+  "municipality": "Sant Esteve Sesrovires",
+  "key": "7d8393e939"
+ },
+ {
+  "name": "el Vidal (est)",
+  "lon": 2.47046,
+  "lat": 41.80731,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Arbúcies",
+  "municipality": "Arbúcies",
+  "key": "0443685cb6"
+ },
+ {
+  "name": "Veïnat de Pujol (est)",
+  "lon": 2.74355,
+  "lat": 41.75696,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Maçanet de la Selva",
+  "municipality": "Maçanet de la Selva",
+  "key": "bd25528927"
+ },
+ {
+  "name": "Cladells (est)",
+  "lon": 2.56356,
+  "lat": 41.85745,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Hilari Sacalm",
+  "municipality": "Santa Coloma de Farners",
+  "key": "a2aa802e3b"
+ },
+ {
+  "name": "Palmerola (est)",
+  "lon": 2.03431,
+  "lat": 42.15628,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Jaume de Frontanyà",
+  "municipality": "les Llosses",
+  "key": "3c635b6382"
+ },
+ {
+  "name": "Sant Esteve de Vallespirans (est)",
+  "lon": 2.14231,
+  "lat": 42.17678,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de les Llosses",
+  "municipality": "les Llosses",
+  "key": "1228bebcf7"
+ },
+ {
+  "name": "la Colònia de Santa Maria (est)",
+  "lon": 2.19306,
+  "lat": 42.17447,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Ripoll",
+  "municipality": "Ripoll",
+  "key": "411482a264"
+ },
+ {
+  "name": "Sant Bernabé de les Tenes (est)",
+  "lon": 2.24803,
+  "lat": 42.19348,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Ripoll",
+  "municipality": "Ripoll",
+  "key": "8322c72f72"
+ },
+ {
+  "name": "Baga Amunt (est)",
+  "lon": 2.32594,
+  "lat": 42.17722,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Vallfogona de Ripollès",
+  "municipality": "Vallfogona de Ripollès",
+  "key": "d629f4bc4f"
+ },
+ {
+  "name": "Sant Salvador de Bianya (est)",
+  "lon": 2.40138,
+  "lat": 42.24699,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Pau de Segúries",
+  "municipality": "la Vall de Bianya",
+  "key": "26153e6805"
+ },
+ {
+  "name": "Santa Bàrbara de Pruneres (est)",
+  "lon": 2.55866,
+  "lat": 42.27527,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Montagut",
+  "municipality": "Montagut i Oix",
+  "key": "2f6a3ccb5e"
+ },
+ {
+  "name": "Gitarriu (est)",
+  "lon": 2.6205,
+  "lat": 42.28714,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Tortellà",
+  "municipality": "Sales de Llierca",
+  "key": "f0eed5dcce"
+ },
+ {
+  "name": "Can Blanc (est)",
+  "lon": 2.5122,
+  "lat": 42.16019,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Olot",
+  "municipality": "Santa Pau",
+  "key": "e77fae4846"
+ },
+ {
+  "name": "el Sallent (est)",
+  "lon": 2.61458,
+  "lat": 42.1544,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Pau",
+  "municipality": "Santa Pau",
+  "key": "38f5a0efe0"
+ },
+ {
+  "name": "les Encies (est)",
+  "lon": 2.57616,
+  "lat": 42.06563,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de les Planes d'Hostoles",
+  "municipality": "les Planes d'Hostoles",
+  "key": "2fc1a77f7f"
+ },
+ {
+  "name": "Santa Creu d'Horta (est)",
+  "lon": 2.58458,
+  "lat": 41.91653,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Osor",
+  "municipality": "Osor",
+  "key": "36af03a18d"
+ },
+ {
+  "name": "Lloret Salvatge (est)",
+  "lon": 2.58323,
+  "lat": 41.98741,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Amer",
+  "municipality": "Amer",
+  "key": "8a10a68e3f"
+ },
+ {
+  "name": "Ruïtlles (est)",
+  "lon": 2.6431,
+  "lat": 42.10119,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Mieres",
+  "municipality": "Mieres",
+  "key": "77d603b4c6"
+ },
+ {
+  "name": "Mouly de la Mougue (est)",
+  "lon": 2.60432,
+  "lat": 42.3497,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Albanyà",
+  "municipality": "Coustouges",
+  "key": "f83ae486a3"
+ },
+ {
+  "name": "el Rodal de la Serra de Sant Iscle (est)",
+  "lon": 2.12311,
+  "lat": 41.5619,
+  "kind": "fill",
+  "zone": "dense",
+  "display_name": "Près de Sabadell",
+  "municipality": "Sabadell",
+  "key": "403d7d809a"
+ },
+ {
+  "name": "Vilacireres (est)",
+  "lon": 1.66455,
+  "lat": 42.17155,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Casa Nova de Valls",
+  "municipality": "Gósol",
+  "key": "cbc8da011b"
+ },
+ {
+  "name": "Pallisa de la Coma (nord)",
+  "lon": 1.46301,
+  "lat": 41.3666,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de la Joncosa del Montmell",
+  "municipality": "Aiguamúrcia",
+  "key": "651bd706e6"
+ },
+ {
+  "name": "Can Roure (nord-est)",
+  "lon": 2.68054,
+  "lat": 42.25238,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Beuda",
+  "municipality": "Beuda",
+  "key": "56667dcfbd"
+ },
+ {
+  "name": "Cal Castellà (nord)",
+  "lon": 1.82401,
+  "lat": 41.86602,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Castellnou de Bages",
+  "municipality": "Balsareny",
+  "key": "3fc0c5629e"
+ },
+ {
+  "name": "els Torrents (sud-est)",
+  "lon": 1.72887,
+  "lat": 42.04245,
+  "kind": "fill",
+  "zone": "peri",
+  "display_name": "Près de Montmajor",
+  "municipality": "l'Espunyola",
+  "key": "9855d75e4c"
+ },
+ {
+  "name": "Can Sant Sebastià (sud-est)",
+  "lon": 1.67297,
+  "lat": 41.58352,
+  "kind": "fill",
+  "zone": "peri",
+  "display_name": "Près de Castellolí",
+  "municipality": "la Pobla de Claramunt",
+  "key": "8d51319bfc"
+ },
+ {
+  "name": "Parc d'Activitats Viladecans (sud-est)",
+  "lon": 2.04781,
+  "lat": 41.29542,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Viladecans",
+  "municipality": "Viladecans",
+  "key": "ad42c6a560"
+ },
+ {
+  "name": "Mas Sauró (sud-est)",
+  "lon": 2.10003,
+  "lat": 41.41213,
+  "kind": "fill",
+  "zone": "dense",
+  "display_name": "Près de Sant Just Desvern",
+  "municipality": "Barcelona",
+  "key": "9bc2cc5380"
+ },
+ {
+  "name": "Mas Mestre (sud-ouest)",
+  "lon": 1.7594,
+  "lat": 41.28405,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Pere de Ribes",
+  "municipality": "Olivella",
+  "key": "1276b0fa54"
+ },
+ {
+  "name": "Vilalta (sud-ouest)",
+  "lon": 1.98852,
+  "lat": 42.02678,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Santa Maria de Merlès",
+  "municipality": "Santa Maria de Merlès",
+  "key": "a278937e55"
+ },
+ {
+  "name": "Riuclar (ouest)",
+  "lon": 2.61887,
+  "lat": 41.7874,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Feliu de Buixalleu",
+  "municipality": "Massanes",
+  "key": "aa021d214f"
+ },
+ {
+  "name": "la Conreria (ouest)",
+  "lon": 2.24472,
+  "lat": 41.49683,
+  "kind": "fill",
+  "zone": "peri",
+  "display_name": "Près de Tiana",
+  "municipality": "Sant Fost de Campsentelles",
+  "key": "6cee36a79d"
+ },
+ {
+  "name": "Cal Bepis (nord)",
+  "lon": 1.52035,
+  "lat": 42.01342,
+  "kind": "fill",
+  "zone": "dense",
+  "display_name": "Près de Solsona",
+  "municipality": "Solsona",
+  "key": "bece2d7004"
+ },
+ {
+  "name": "Urbanització Talaia Mediterrània (sud)",
+  "lon": 1.54297,
+  "lat": 41.338,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Castellví",
+  "municipality": "el Montmell",
+  "key": "84cbd6630c"
+ },
+ {
+  "name": "les Serres (est)",
+  "lon": 2.55817,
+  "lat": 41.88374,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Sant Hilari Sacalm",
+  "municipality": "Sant Hilari Sacalm",
+  "key": "022c365f5e"
+ },
+ {
+  "name": "Montmal de Baix (nord-est)",
+  "lon": 2.68914,
+  "lat": 41.81101,
+  "kind": "fill",
+  "zone": "rural",
+  "display_name": "Près de Riudarenes",
+  "municipality": "Riudarenes",
+  "key": "9a20049037"
+ },
+ {
+  "name": "Can Roca (sud-ouest)",
+  "lon": 2.00791,
+  "lat": 41.5804,
+  "kind": "fill",
+  "zone": "dense",
+  "display_name": "Près de Terrassa",
+  "municipality": "Terrassa",
+  "key": "a1a7ebbaae"
+ },
+ {
+  "name": "el Masnou",
+  "lon": 2.3119,
+  "lat": 41.47956,
+  "kind": "place",
+  "zone": "peri",
+  "municipality": "el Masnou",
+  "key": "0009f578c6"
+ },
+ {
+  "name": "Premià de Mar",
+  "lon": 2.36069,
+  "lat": 41.49253,
+  "kind": "place",
+  "zone": "peri",
+  "municipality": "Premià de Mar",
+  "key": "0d2093d5fe"
+ },
+ {
+  "name": "Sant Just Desvern",
+  "lon": 2.07572,
+  "lat": 41.38591,
+  "kind": "place",
+  "zone": "peri",
+  "municipality": "Sant Just Desvern",
+  "key": "77423f80d4"
+ },
+ {
+  "name": "Ripollet",
+  "lon": 2.15738,
+  "lat": 41.49936,
+  "kind": "place",
+  "zone": "peri",
+  "municipality": "Ripollet",
+  "key": "4252783f54"
+ },
+ {
+  "name": "Gare la Pobla de Lillet",
+  "lon": 1.96495,
+  "lat": 42.24129,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "la Pobla de Lillet",
+  "key": "d59f4e7fea"
+ },
+ {
+  "name": "Gare Jardins Artigas",
+  "lon": 1.97598,
+  "lat": 42.2533,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "la Pobla de Lillet",
+  "key": "b35fa0d397"
+ },
+ {
+  "name": "Gare Can Ros",
+  "lon": 2.00496,
+  "lat": 41.39931,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Sant Vicenç dels Horts",
+  "key": "cfffc0b984"
+ },
+ {
+  "name": "Gare Universitat Autònoma",
+  "lon": 2.10242,
+  "lat": 41.503,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Cerdanyola del Vallès",
+  "key": "278fd23ff8"
+ },
+ {
+  "name": "Gare el Papiol",
+  "lon": 2.00254,
+  "lat": 41.43553,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "el Papiol",
+  "key": "c3aa3b48a8"
+ },
+ {
+  "name": "Gare Salomó",
+  "lon": 1.37658,
+  "lat": 41.22339,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Salomó",
+  "key": "f1bf79a62a"
+ },
+ {
+  "name": "Gare Castellbisbal",
+  "lon": 1.9678,
+  "lat": 41.47324,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Castellbisbal",
+  "key": "6f8cfcd5f6"
+ },
+ {
+  "name": "Gare la Beguda",
+  "lon": 1.83875,
+  "lat": 41.50168,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Masquefa",
+  "key": "63a9b754c8"
+ },
+ {
+  "name": "Gare Ribes de Freser",
+  "lon": 2.16542,
+  "lat": 42.2992,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Ribes de Freser",
+  "key": "342672073d"
+ },
+ {
+  "name": "Gare Sant Quirze de Besora",
+  "lon": 2.21765,
+  "lat": 42.10483,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Sant Quirze de Besora",
+  "key": "772eeca036"
+ },
+ {
+  "name": "Gare Montserrat",
+  "lon": 1.83668,
+  "lat": 41.59243,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Monistrol de Montserrat",
+  "key": "551861529a"
+ },
+ {
+  "name": "Gare Aeroport",
+  "lon": 2.07347,
+  "lat": 41.30427,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "el Prat de Llobregat",
+  "key": "4b562931e2"
+ },
+ {
+  "name": "Gare Martorell Enllaç",
+  "lon": 1.91867,
+  "lat": 41.48398,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Martorell",
+  "key": "f4f4dce52c"
+ },
+ {
+  "name": "Gare Sant Sadurní d'Anoia",
+  "lon": 1.79469,
+  "lat": 41.42032,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Sant Sadurní d'Anoia",
+  "key": "6fe9b78a3f"
+ },
+ {
+  "name": "Gare els Monjos",
+  "lon": 1.66011,
+  "lat": 41.31457,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Santa Margarida i els Monjos",
+  "key": "0228634625"
+ },
+ {
+  "name": "Gare l'Arboç",
+  "lon": 1.60043,
+  "lat": 41.27366,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "l'Arboç",
+  "key": "747c5188bb"
+ },
+ {
+  "name": "Gare Montgat",
+  "lon": 2.27223,
+  "lat": 41.46288,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Montgat",
+  "key": "fcf72367a3"
+ },
+ {
+  "name": "Gare Sant Joan",
+  "lon": 2.07646,
+  "lat": 41.49022,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Sant Cugat del Vallès",
+  "key": "b9ae4eabea"
+ },
+ {
+  "name": "Gare Montcada i Reixac - Santa Maria",
+  "lon": 2.16714,
+  "lat": 41.48123,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Montcada i Reixac",
+  "key": "f14195251d"
+ },
+ {
+  "name": "Gare Cerdanyola-Universitat",
+  "lon": 2.1151,
+  "lat": 41.4971,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Cerdanyola del Vallès",
+  "key": "269c841f36"
+ },
+ {
+  "name": "Gare Sant Cugat Coll Favà",
+  "lon": 2.07969,
+  "lat": 41.48119,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Sant Cugat del Vallès",
+  "key": "1024687a0f"
+ },
+ {
+  "name": "Gare Montmeló",
+  "lon": 2.24532,
+  "lat": 41.54982,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Montmeló",
+  "key": "31b2f934ef"
+ },
+ {
+  "name": "Gare Granollers Centre",
+  "lon": 2.29165,
+  "lat": 41.59965,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Granollers",
+  "key": "6920e1eb84"
+ },
+ {
+  "name": "Gare Calella",
+  "lon": 2.66656,
+  "lat": 41.61473,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Calella",
+  "key": "0aaf7f95fe"
+ },
+ {
+  "name": "Gare Maçanet Massanes",
+  "lon": 2.67332,
+  "lat": 41.77218,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Maçanet de la Selva",
+  "key": "ac1ab0734c"
+ },
+ {
+  "name": "Gare Riells i Viabrea - Breda",
+  "lon": 2.56868,
+  "lat": 41.72652,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Riells i Viabrea",
+  "key": "f93cc1710d"
+ },
+ {
+  "name": "Gare Montcada Bifurcació",
+  "lon": 2.17999,
+  "lat": 41.46987,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Montcada i Reixac",
+  "key": "40274bbd72"
+ },
+ {
+  "name": "Gare el Palau",
+  "lon": 1.96257,
+  "lat": 41.45565,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Sant Andreu de la Barca",
+  "key": "a8783cd4f1"
+ },
+ {
+  "name": "Gare Martorell - Vila | Castellbisbal",
+  "lon": 1.93913,
+  "lat": 41.47646,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Castellbisbal",
+  "key": "415646cf66"
+ },
+ {
+  "name": "Gare Abrera",
+  "lon": 1.90679,
+  "lat": 41.52259,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Abrera",
+  "key": "cee3354e89"
+ },
+ {
+  "name": "Gare Castellbell i el Vilar",
+  "lon": 1.85481,
+  "lat": 41.64051,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Castellbell i el Vilar",
+  "key": "ed224780b9"
+ },
+ {
+  "name": "Gare Balenyà - Tona - Seva",
+  "lon": 2.24723,
+  "lat": 41.84191,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Seva",
+  "key": "dfae32a81d"
+ },
+ {
+  "name": "Gare Sant Martí de Centelles",
+  "lon": 2.24923,
+  "lat": 41.76071,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Sant Martí de Centelles",
+  "key": "6ae281b388"
+ },
+ {
+  "name": "Gare Parets del Vallès",
+  "lon": 2.22588,
+  "lat": 41.55607,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Parets del Vallès",
+  "key": "6b0452a292"
+ },
+ {
+  "name": "Gare Santa Perpètua de Mogoda La Florida",
+  "lon": 2.19427,
+  "lat": 41.52171,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Santa Perpètua de Mogoda",
+  "key": "b2788af57c"
+ },
+ {
+  "name": "Gare Montcada-Ripollet",
+  "lon": 2.18206,
+  "lat": 41.49675,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Montcada i Reixac",
+  "key": "f4195ecb99"
+ },
+ {
+  "name": "Gare Manlleu",
+  "lon": 2.26908,
+  "lat": 41.99985,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Manlleu",
+  "key": "de650c2b5f"
+ },
+ {
+  "name": "Gare Mollet-Sant Fost",
+  "lon": 2.21764,
+  "lat": 41.53336,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Mollet del Vallès",
+  "key": "d3cf7683e3"
+ },
+ {
+  "name": "Gare Les Fonts",
+  "lon": 2.0335,
+  "lat": 41.52872,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Terrassa",
+  "key": "628454d7a8"
+ },
+ {
+  "name": "Gare Sant Quirze",
+  "lon": 2.08872,
+  "lat": 41.53,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Sant Quirze del Vallès",
+  "key": "65b96f2b6d"
+ },
+ {
+  "name": "Gare Capellades",
+  "lon": 1.69535,
+  "lat": 41.52158,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Vallbona d'Anoia",
+  "key": "68a205c222"
+ },
+ {
+  "name": "Gare Barcelona-Torre Baró | Vallbona",
+  "lon": 2.18041,
+  "lat": 41.46164,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "Barcelona",
+  "key": "af1ed89a98"
+ },
+ {
+  "name": "Gare Aeroport T1",
+  "lon": 2.07108,
+  "lat": 41.28809,
+  "kind": "station",
+  "zone": "rural",
+  "municipality": "el Prat de Llobregat",
+  "key": "72c3298711"
+ },
+ {
+  "name": "Gare Igualada",
+  "lon": 1.62974,
+  "lat": 41.57796,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Igualada",
+  "key": "392fd1356a"
+ },
+ {
+  "name": "Gare Santa Perpètua de Mogoda Riera de Caldes",
+  "lon": 2.18597,
+  "lat": 41.52605,
+  "kind": "station",
+  "zone": "peri",
+  "municipality": "Santa Perpètua de Mogoda",
+  "key": "630e1978ef"
+ }
+]

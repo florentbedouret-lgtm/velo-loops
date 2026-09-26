@@ -291,10 +291,15 @@ jobs:
           if [ "$MODE" = "generate_planned" ] || [ "$MODE" = "pilot" ] || [ "$MODE" = "full_replan" ]; then EXTRA="--starts-file data/starts_plan.json"; fi
           if [ "$MODE" = "full" ]; then                  # O-13 : garder les départs déjà publiés (pas de nouveau plan)
             OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
-            python scripts/published_starts.py --site "https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}" --out data/published_starts.json
+            python scripts/published_starts.py --site "https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}" --out data/published_starts.json \
+              --extra scripts/restore_starts.json          # départs à rétablir (s'il y en a) : voir handoff
             EXTRA="--starts-file data/published_starts.json"
           fi
-          if [ "${MODE#full}" != "$MODE" ]; then MAX_STARTS=1000; PER_ZONE=""; EXTRA="$EXTRA --time-budget-min 320"; fi
+          if [ "${MODE#full}" != "$MODE" ]; then          # budget épuisé : les départs non recalculés gardent leur version publiée
+            OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+            MAX_STARTS=1000; PER_ZONE=""
+            EXTRA="$EXTRA --time-budget-min 320 --carry-over-from https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+          fi
           if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
           if [ "$REUSE" = "true" ]; then

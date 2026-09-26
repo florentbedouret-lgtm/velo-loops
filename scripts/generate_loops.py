@@ -1137,6 +1137,7 @@ def st_key(st: dict) -> str:
 PARAMS_HASH = ""
 REUSE = None                    # {"src", "index", "by_key", "max_age_days"} si --reuse-from est fourni
 BUDGET_END = None               # instant (time.time()) au-delà duquel on ne démarre plus de nouveau départ
+CARRY = None                    # {"src", "by_key"} si --carry-over-from est fourni (départs publiés, toutes versions)
 
 
 def params_hash(config_dir: str = "config") -> str:
@@ -1187,6 +1188,8 @@ def reuse_candidate(key: str, levels):
     if REUSE is None or key not in REUSE["by_key"]:
         return None
     old = REUSE["by_key"][key]
+    if old.get("stale"):                                  # gardé tel quel lors d'un run interrompu : à recalculer
+        return None
     if not set(levels) <= set(REUSE["index"].get("levels", {})):
         return None
     try:
@@ -1194,6 +1197,32 @@ def reuse_candidate(key: str, levels):
     except (KeyError, ValueError):
         return None
     return old if age <= REUSE["max_age_days"] else None
+
+
+def load_carry(src: str):
+    """Départs publiés (toutes versions du générateur), pour garder la version en ligne d'un départ que le budget de
+    temps n'a pas permis de recalculer : le site reste complet même quand un recalcul est interrompu."""
+    try:
+        idx = _read_json(src, "web/data/index.json")
+    except Exception as e:  # noqa: BLE001
+        print(f"! reprise des départs publiés impossible ({type(e).__name__}: {e})", file=sys.stderr)
+        return None
+    return {"src": src, "by_key": {e["key"]: e for e in idx.get("starts", []) if e.get("key")}}
+
+
+def carry_over(st: dict, sid: str, out: Path, log):
+    """Recopie la version publiée d'un départ non recalculé, marquée "stale" (jamais réutilisée comme à jour)."""
+    old = CARRY["by_key"].get(st_key(st)) if CARRY else None
+    if old is None:
+        return None
+    try:
+        prev = _read_json(CARRY["src"], f"web/data/starts/{old['id']}.json")
+    except Exception as e:  # noqa: BLE001
+        log(f"  version publiée illisible ({type(e).__name__})")
+        return None
+    (out / "starts" / f"{sid}.json").write_text(json.dumps(prev, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    log(f"- {st['name']} : budget de temps épuisé, version publiée gardée (à recalculer)")
+    return {**old, "id": sid, "stale": True}
 
 
 def start_alt(options) -> dict:
@@ -1211,6 +1240,9 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     buf: list[str] = []
     log = buf.append
     if BUDGET_END is not None and time.time() > BUDGET_END:
+        kept = carry_over(st, sid, out, log)
+        if kept is not None:
+            return kept, buf, 0.0
         log(f"- {st['name']} : ignoré (budget de temps épuisé)")
         return None, buf, 0.0
     key0 = st_key(st)
@@ -1459,6 +1491,8 @@ def main() -> int:
     ap.add_argument("--reuse-from", default=None, help="adresse du site précédent (ou dossier local) dont on réutilise les départs "
                                                         "identiques (même clé, mêmes paramètres, moins de --reuse-max-age-days)")
     ap.add_argument("--reuse-max-age-days", type=float, default=60.0)
+    ap.add_argument("--carry-over-from", default=None, help="adresse du site publié : si le budget de temps s'épuise, un départ "
+                                                             "non recalculé garde sa version publiée, marquée à recalculer (stale)")
     ap.add_argument("--pilot-names", default="Barcelona;Badalona;Montcada i Reixac;Manresa;Vic",
                     help="départs toujours inclus par --per-zone (noms séparés par ; ; ceux qui n'existent pas sont ignorés)")
     ap.add_argument("--pilot-rural", type=int, default=0, help="pilote : nombre total de départs ruraux (au moins --per-zone)")
@@ -1564,16 +1598,17 @@ def main() -> int:
 
     out = Path(args.out)
     (out / "starts").mkdir(parents=True, exist_ok=True)
-    global REUSE, PARAMS_HASH, BUDGET_END
+    global REUSE, PARAMS_HASH, BUDGET_END, CARRY
     PARAMS_HASH = params_hash()
     BUDGET_END = time.time() + 60.0 * args.time_budget_min if args.time_budget_min else None
     REUSE = load_reuse(args.reuse_from, args.reuse_max_age_days) if args.reuse_from else None
+    CARRY = load_carry(args.carry_over_from) if args.carry_over_from else None
     used: dict[str, int] = {}
     ids = []
     reserved = {}
     for st in starts:                                   # un départ réutilisé garde l'identifiant de la génération précédente
-        old = reuse_candidate(st_key(st), levels)
-        if old is not None:
+        old = reuse_candidate(st_key(st), levels) or (CARRY["by_key"].get(st_key(st)) if CARRY else None)
+        if old is not None:                             # (ou version publiée gardée si le budget s'épuise)
             reserved[id(st)] = old["id"]
     taken = set(reserved.values())
     for st in starts:                                   # identifiants uniques
@@ -1603,6 +1638,7 @@ def main() -> int:
             results.append(process_start(st, sid, args.gh, durations, levels, candidates, out))
             print("\n".join(results[-1][1]), flush=True)
     index = [r[0] for r in results if r[0]]
+    carried = sum(1 for e in index if e.get("stale"))
     skipped = [st["name"] for st, r in zip(starts, results) if not r[0]]
 
     def reason(lines):
@@ -1648,7 +1684,8 @@ def main() -> int:
                   "seconds_per_computed_start_by_zone": by_zone_seconds(index),
                   "seconds_per_start_and_duration": by_duration_seconds(index),
                   "starts_skipped": len(skipped), "skipped_by_reason": reasons, "skipped_examples": skipped[:30],
-                  "incomplete": bool(reasons.get("budget de temps épuisé")),
+                  "starts_carried_over": carried,
+                  "incomplete": bool(reasons.get("budget de temps épuisé")) or carried > 0,
                   "time_budget_minutes": args.time_budget_min or None,
                   "generation_seconds": round(elapsed), "seconds_per_start": round(elapsed / max(1, len(starts)), 1),
                   "workers": args.workers, **res},
@@ -1659,6 +1696,9 @@ def main() -> int:
     meta["stats"]["index_kb"] = round(len(text.encode("utf-8")) / 1024, 1)
     meta["stats"]["index_bytes_per_start"] = round(len(text.encode("utf-8")) / max(1, len(index)))
     (out / "index.json").write_text(json.dumps(meta, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    if carried:
+        print(f"::warning::GÉNÉRATION INCOMPLÈTE : {carried} départs non recalculés (budget de temps épuisé), version publiée "
+              f"gardée. Relancer avec « reuse » coché pour les recalculer.", flush=True)
     if reasons.get("budget de temps épuisé"):
         print(f"::warning::GÉNÉRATION INCOMPLÈTE : {reasons['budget de temps épuisé']} départs non démarrés (budget de temps de "
               f"{args.time_budget_min:g} min épuisé). Relancer avec « reuse » coché pour terminer.", flush=True)

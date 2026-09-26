@@ -9,6 +9,7 @@ Chaque départ garde sa clé `key` (empreinte de la position du PLAN) : generate
 retrouver l'entrée publiée, car lon/lat publiés sont la position recalée sur la route, pas celle du plan.
 
 Usage : python scripts/published_starts.py --site https://<compte>.github.io/<dépôt> --out data/published_starts.json
+        [--extra scripts/restore_starts.json]   (départs à rétablir, ajoutés s'ils manquent au site : même format)
 Échoue (code 1) si l'index publié est introuvable ou vide : mieux vaut s'arrêter que générer un site vide.
 """
 from __future__ import annotations
@@ -27,6 +28,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--site", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--extra", default=None, help="JSON de départs à ajouter s'ils manquent au site (même format, clé `key`)")
     args = ap.parse_args()
     r = requests.get(f"{args.site.rstrip('/')}/web/data/index.json", timeout=60)
     r.raise_for_status()
@@ -35,6 +37,12 @@ def main() -> int:
         print("! index publié vide : arrêt", file=sys.stderr)
         return 1
     out = [{k: s[k] for k in FIELDS if s.get(k) is not None} for s in starts]
+    if args.extra and Path(args.extra).exists():
+        have = {s.get("key") for s in out}
+        extra = [{k: s[k] for k in FIELDS if s.get(k) is not None}
+                 for s in json.loads(Path(args.extra).read_text(encoding="utf-8")) if s.get("key") not in have]
+        out += extra
+        print(f"Départs rétablis depuis {args.extra} : {len(extra)}")
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"Départs publiés repris : {len(out)} (sans clé : {sum(1 for s in out if 'key' not in s)})")
     return 0
