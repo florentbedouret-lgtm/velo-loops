@@ -528,9 +528,9 @@
     // affichée seulement si la donnée existe (scenery.landcover, générateur v5 et suivants)
     const TERRAIN = [['city', 'ville', '--oyan-terrain-ville'], ['forest', 'forêt', '--oyan-terrain-foret'],
                      ['water', 'eau', '--oyan-terrain-eau'], ['countryside', 'espaces ouverts', '--oyan-terrain-campagne']];
-    // interrupteur : barre masquée tant que la définition de « ville » n'est pas corrigée (rues hors des zones bâties OSM :
-    // une boucle 100 % urbaine sortait à 5 % « ville », 26/09/2026)
-    const LANDCOVER_OK = false;
+    // interrupteur de la barre : « ville » mesurée par le bâti (5 bâtiments OSM à moins de ~75 m), données recalculées
+    // le 26/09/2026 (mode landcover) ; la v1 (dans une zone bâtie) sortait une boucle 100 % urbaine à 5 % « ville »
+    const LANDCOVER_OK = true;
     const cityShare = o => (LANDCOVER_OK && o.scenery && o.scenery.landcover) ? o.scenery.landcover.city : o.shares.urban.city;
     function terrainBar(o) {
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
