@@ -53,7 +53,11 @@ CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270), (7, 45)
 # boucle par Collserola, 888 m de D+, perdue au recalcul O-15). Le score choisit toujours la boucle « équilibrée ».
 # O-18 option B : poids du relief dans la note, par niveau (vide = aucun bonus, réglage actuel). Réglé après la sonde
 # « relief » (nature_check --relief) ; partie « relief » = D+ par km rapporté à RELIEF_FULL_M_PER_KM (plafonné à 1).
-RELIEF_WEIGHTS: dict = {}
+RELIEF_WEIGHTS: dict = {"soutenu": 0.10}   # sonde relief (run #92) : D+ médian +12 %, forêt 44 -> 54 %, routes de col acceptées
+# O-18 option A : une option secondaire (moins / plus de relief, variante) qui répète une option de l'allure inférieure
+# (même durée) est remplacée ; « répète » = chacune recouvre l'autre à au moins 80 % (une boucle courte contenue dans
+# une plus longue et plus vallonnée n'est PAS un doublon). La boucle principale (équilibrée) n'est jamais écartée.
+LEVEL_DUP_SIM = 0.8
 RELIEF_FULL_M_PER_KM = 20.0   # 20 m de D+ par km (2 000 m pour 100 km) = relief maximal noté
 CLIMB_LEVELS = ("soutenu",)
 CLIMB_CANDIDATES = [(11, None), (12, None), (13, 0), (14, 90), (15, 180), (16, 270)]
@@ -910,13 +914,22 @@ def similarity(a: Loop, b: Loop) -> float:
     return inter / max(1, min(len(a.cells), len(b.cells)))
 
 
-def pick_options(pool: list[Loop]) -> list[tuple[str, Loop]]:
+def same_route(a: Loop, b: Loop) -> bool:
+    """Doublon strict (O-18) : chacune des deux boucles recouvre l'autre à au moins LEVEL_DUP_SIM."""
+    return len(a.cells & b.cells) / max(1, len(a.cells), len(b.cells)) >= LEVEL_DUP_SIM
+
+
+def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str, Loop]]:
+    """avoid : boucles déjà proposées aux allures inférieures pour la même durée ; les options secondaires qui les
+    répètent (same_route) sont écartées (O-18 A)."""
     if not pool:
         return []
+    avoid = avoid or []
     pool = sorted(pool, key=lambda l: l.score, reverse=True)
     best = pool[0]
     chosen = [("equilibre", best)]
-    rest = [l for l in pool[1:] if l.score >= 0.8 * best.score and similarity(l, best) < 0.6]
+    rest = [l for l in pool[1:] if l.score >= 0.8 * best.score and similarity(l, best) < 0.6
+            and not any(same_route(l, a) for a in avoid)]
     if rest:
         flat = min(rest, key=lambda l: l.dplus_per_km)
         if flat.dplus_per_km <= best.dplus_per_km - 3.0:
@@ -928,7 +941,7 @@ def pick_options(pool: list[Loop]) -> list[tuple[str, Loop]]:
                 chosen.append(("plus_de_relief", hilly))
     if len(chosen) == 1 and len(pool) > 1:      # pas de contraste de relief : on propose une variante
         for l in pool[1:]:
-            if similarity(l, best) < 0.6:
+            if similarity(l, best) < 0.6 and not any(same_route(l, a) for a in avoid):
                 chosen.append(("variante", l))
                 break
     return chosen
@@ -1135,7 +1148,7 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "6"   # 6 : tirages « montée » en sportif, profil sportif sans bonus pistes (26/09/2026)
+GENERATOR_VERSION = "7"   # 7 : relief dans la note du sportif, options secondaires sans doublon d'allure (O-18, 26/09/2026)
 
 
 def compare_block(options: list) -> dict:
@@ -1193,7 +1206,8 @@ def params_hash(config_dir: str = "config") -> str:
               "signal": [SIGNAL_DELAY_S, SIGNAL_RADIUS_M, SIGNAL_CLUSTER_M, LIGHTS_PER_KM_ZERO_SCORE],
               "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
               "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M],
-              **({"relief": [RELIEF_WEIGHTS, RELIEF_FULL_M_PER_KM]} if RELIEF_WEIGHTS else {})}
+              **({"relief": [RELIEF_WEIGHTS, RELIEF_FULL_M_PER_KM]} if RELIEF_WEIGHTS else {}),
+              "level_dup": LEVEL_DUP_SIM}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     cfg = Path(config_dir)
     if cfg.exists():
@@ -1337,9 +1351,12 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     dur_seconds: dict[str, float] = {}
     for duration in missing_durations:
         t_dur = time.time()
-        for level in levels:
+        prior: list = []                                  # options des allures inférieures (O-18 A)
+        for level in sorted(levels, key=list(LEVELS).index):
             pool = level_pool(gh, st, level, duration, candidates, log)
-            for i, (label, loop) in enumerate(pick_options(pool), start=1):
+            picks = pick_options(pool, prior)
+            prior += [l for _, l in picks]
+            for i, (label, loop) in enumerate(picks, start=1):
                 options.append(to_json(loop, label, sid, i))
         dur_seconds[f"{duration:g}"] = round(time.time() - t_dur, 1)
     if not options:

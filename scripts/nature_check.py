@@ -349,7 +349,9 @@ def option_row(o) -> dict:
     """Résumé d'une option publiée (fichier starts/<id>.json) ou fraîchement générée (to_json)."""
     sc = o.get("scenery") or {}
     lc = sc.get("landcover") or {}
-    return {"label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
+    return {"cells": sorted({(round(c[0] / 0.006), round(c[1] / 0.005)) for c in o["coords"]}),   # doublons (O-18)
+            "main_roads_pct": round(100 * o["shares"]["main_roads"]),
+            "label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"]}
 
@@ -366,9 +368,12 @@ def run_probe(sid, site, gh_url, durations, levels):
     st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1]}
     rows = []
     for d in durations:
-        for level in levels:
-            pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)   # comme la génération réelle
-            new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(g.pick_options(pool), start=1)]
+        prior = []                                         # comme la génération réelle (O-18 A)
+        for level in sorted(levels, key=list(g.LEVELS).index):
+            pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
+            picks = g.pick_options(pool, prior)
+            prior += [l for _, l in picks]
+            new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(picks, start=1)]
             old = [option_row(o) for o in pub["options"]
                    if o["level"] == level and round(o["duration_target_min"]) == round(d * 60)]
             rows.append({"duration_h": d, "level": level, "published": old, "new": new, "valid": len(pool)})
@@ -457,13 +462,48 @@ def report_relief(results, out_json, out_md, note, t0):
     print("\n".join(L[:30]), flush=True)
 
 
+def probe_summary(results) -> list:
+    """Par niveau : D+ et routes principales médians de la boucle principale, doublons stricts avec l'allure inférieure,
+    publié contre nouveau (O-18)."""
+    import statistics as stt
+
+    def dup(a, b):
+        a, b = {tuple(x) for x in a["cells"]}, {tuple(x) for x in b["cells"]}
+        return len(a & b) / max(1, len(a), len(b)) >= g.LEVEL_DUP_SIM
+    order = list(g.LEVELS)
+    L = ["\n| Niveau | D+ médian principale (publié -> nouveau) | routes principales médiane | options secondaires en doublon "
+         "avec l'allure inférieure |", "|---|---|---|---|"]
+    for lvl in order:
+        rows = [(res, r) for res in results if not res.get("skipped") for r in res["rows"] if r["level"] == lvl]
+        if not rows:
+            continue
+        stat = {}
+        for k in ("published", "new"):
+            mains = [r[k][0] for _, r in rows if r[k]]
+            dups = tot = 0
+            if lvl != order[0]:
+                lower = order[order.index(lvl) - 1]
+                for res, r in rows:
+                    low = next((x for x in res["rows"] if x["level"] == lower and x["duration_h"] == r["duration_h"]), None)
+                    for o in r[k][1:]:
+                        tot += 1
+                        dups += bool(low and any(dup(o, b) for b in low[k]))
+            stat[k] = (stt.median([m["dplus_m"] for m in mains]) if mains else 0,
+                       stt.median([m["main_roads_pct"] for m in mains]) if mains else 0, dups, tot)
+        p, n = stat["published"], stat["new"]
+        L.append(f"| {lvl} | {p[0]:.0f} -> {n[0]:.0f} m | {p[1]:.0f} -> {n[1]:.0f} % | "
+                 + (f"{p[2]}/{p[3]} -> {n[2]}/{n[3]}" if lvl != order[0] else "—") + " |")
+    return L
+
+
 def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
     f = lambda o: (f"{o['label']} : {o['km']} km, D+ {o['dplus_m']}, forêt {o['forest_pct']} %, ville {o['city_pct']} %, "  # noqa: E731
                    f"pistes {o['cycleway_pct']} %, note {o['score']}")
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
-         "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt."]
+         "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",
+         *probe_summary(results)]
     for res in results:
         L.append(f"\n## {res.get('name', res['id'])}")
         if res.get("skipped"):
