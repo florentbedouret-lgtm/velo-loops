@@ -350,7 +350,7 @@ def option_row(o) -> dict:
     sc = o.get("scenery") or {}
     lc = sc.get("landcover") or {}
     return {"cells": sorted({(round(c[0] / 0.006), round(c[1] / 0.005)) for c in o["coords"]}),   # doublons (O-18)
-            "main_roads_pct": round(100 * o["shares"]["main_roads"]), "extended": bool(o.get("extended")),
+            "main_roads_pct": round(100 * o["shares"]["main_roads"]), "same_as": o.get("same_as"),
             "label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"]}
@@ -491,16 +491,16 @@ def probe_summary(results) -> list:
             stat[k] = (stt.median([m["dplus_m"] for m in mains]) if mains else 0,
                        stt.median([m["main_roads_pct"] for m in mains]) if mains else 0, dups, tot)
         p, n = stat["published"], stat["new"]
-        n_ext = sum(1 for _, r in rows for o in r["new"] if o.get("extended"))
+        n_ext = sum(1 for _, r in rows for o in r["new"] if o.get("same_as"))
         L.append(f"| {lvl} | {p[0]:.0f} -> {n[0]:.0f} m | {p[1]:.0f} -> {n[1]:.0f} % | "
                  + (f"{p[2]}/{p[3]} -> {n[2]}/{n[3]}" if lvl != order[0] else "—")
-                 + (f" ; {n_ext} boucle(s) prolongée(s)" if n_ext else "") + " |")
+                 + (f" (dont {n_ext} gardée(s) : même parcours, aucune autre boucle)" if n_ext else "") + " |")
     return L
 
 
 def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
-    f = lambda o: (f"{o['label']}{' (prolongée)' if o.get('extended') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
+    f = lambda o: (f"{o['label']}{' (= ' + o['same_as']['level'] + ')' if o.get('same_as') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
                    f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}")
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),

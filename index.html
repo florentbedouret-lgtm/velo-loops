@@ -828,6 +828,12 @@
     // (même mesure), pour que la barre et les phrases ne se contredisent pas (maquette 5c)
     function keyPoints(o) {
       const out = [];
+      if (o.same_as) {                                     // O-18 : aucune autre boucle que celle de l'allure inférieure
+        const lv = indexData.levels[o.same_as.level];
+        const name = lv ? lv.label : o.same_as.level;
+        out.push(['', 'Même parcours qu\'en ' + name + (o.same_as.km_more >= 0.5 ? ', prolongé de ' + km1(o.same_as.km_more) + ' km.'
+          : '.') + ' Aucune autre boucle différente pour cette durée.']);
+      }
       const ex = exitKm(o);
       if (ex === 0) out.push(['0 km', 'Tu pars directement hors de la ville.']);
       else if (ex == null) out.push(['', 'Tu restes en ville tout du long.']);
