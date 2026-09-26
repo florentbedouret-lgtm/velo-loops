@@ -166,7 +166,8 @@
                            border-right: 1.6px solid var(--color-text-2); border-bottom: 1.6px solid var(--color-text-2); transform: rotate(-45deg); transition: transform .2s; }
     .rows details[open] summary::after { transform: rotate(45deg); }
     .rows details > :not(summary) { margin-bottom: 12px; }
-    .facts, .climbs { font-size: 14px; margin: 0 0 8px; padding-left: 18px; }
+    .facts { font-size: 14px; margin: 0 0 8px; padding-left: 18px; }
+    .facts .climbs { list-style: none; margin: 2px 0 0; padding-left: 0; }   /* détail des montées, sous leur ligne */
     .other-dur { font-size: 15px; padding: 6px 10px; margin: 6px 6px 0 0; }
     .notes { display: block; margin-top: 16px; }
     #legal { padding: 8px 0 0; font-size: 12px; color: var(--color-text-2); }
@@ -859,10 +860,15 @@
         L.push(o.traffic_lights === 0 ? 'Aucun feu tricolore recensé dans OpenStreetMap.'
           : o.traffic_lights + ' feux tricolores recensés dans OpenStreetMap (' + km1(o.traffic_lights_per_km || 0) + ' par km).');
       }
+      // montées : une ligne de synthèse, puis chaque montée dans l'ordre de passage ({ text, sub })
       const tr = o.terrain;
-      L.push(tr.n_climbs ? tr.n_climbs + ' montée' + (tr.n_climbs > 1 ? 's' : '') + ' de plus de 20 m' +
-        (tr.avg_climb_grade_pct != null ? ' · ' + slopeCategory(tr.avg_climb_grade_pct) : '') + '.'
-        : 'Aucune montée de plus de 20 m d\'un seul tenant.');
+      const climbs = (tr.climbs || []).slice().sort((a, b) => a.start_km - b.start_km)
+        .map(c => 'Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m');
+      L.push(tr.n_climbs ? { text: tr.n_climbs + ' montée' + (tr.n_climbs > 1 ? 's' : '') + ' de plus de 20 mètres' +
+        (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct).toLowerCase() : '') +
+        (climbs.length ? (climbs.length < tr.n_climbs ? ', dont les ' + climbs.length + ' plus grosses :' : ' :') : '.'),
+        sub: climbs }                                         // le pipeline ne garde que les 5 plus grosses montées
+        : 'Aucune montée de plus de 20 mètres d\'un seul tenant.');
       const sc = o.scenery;
       if (sc) {
         if (sc.forest >= 0.05) L.push(pc(sc.forest) + ' dans ou en bordure de forêt.');
@@ -884,7 +890,7 @@
     // « espaces ouverts » = ni bâti, ni eau, ni forêt (champs, garrigue, mais aussi parcs urbains comme le long du Besòs)
     // affichée seulement si la donnée existe (scenery.landcover, générateur v5 et suivants)
     const TERRAIN = [['city', 'ville', '--oyan-terrain-ville'], ['forest', 'forêt', '--oyan-terrain-foret'],
-                     ['water', 'eau', '--oyan-terrain-eau'], ['countryside', 'espaces ouverts', '--oyan-terrain-campagne']];
+                     ['water', 'bord d\'eau', '--oyan-terrain-eau'], ['countryside', 'espaces ouverts', '--oyan-terrain-campagne']];
     // interrupteur de la barre : « ville » mesurée par le bâti (5 bâtiments OSM à moins de ~75 m), données recalculées
     // le 26/09/2026 (mode landcover) ; la v1 (dans une zone bâtie) sortait une boucle 100 % urbaine à 5 % « ville »
     const LANDCOVER_OK = true;
@@ -911,9 +917,9 @@
 
     // contenu du panneau (maquette 5c / 5d) : terrain, points clés, profil, suggestion, dépliants, autres boucles, notes
     function detailHtml(o) {
-      const facts = allFacts(o).map(p => '<li>' + esc(p) + '</li>').join('');
-      const climbs = (o.terrain.climbs || []).map(c =>
-        '<li>Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m</li>').join('');
+      const facts = allFacts(o).map(p => typeof p === 'string' ? '<li>' + esc(p) + '</li>'
+        : '<li>' + esc(p.text) + (p.sub.length ? '<ul class="climbs">' + p.sub.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>' : '') +
+          '</li>').join('');
       // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
       let longer = '';
       if (o.exit_dense_km != null && o.exit_dense_km !== 0 && o.exit_dense_km >= o.distance_km - 0.05 ||
@@ -938,7 +944,6 @@
         <div class="rows">
           <details><summary>Tous les chiffres</summary>
             <ul class="facts">${facts}</ul>
-            ${climbs ? '<ul class="climbs">' + climbs + '</ul>' : ''}
           </details>
           ${feedbackHtml(o)}
         </div>
