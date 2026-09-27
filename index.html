@@ -160,7 +160,18 @@
     #sheetBody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px 16px; line-height: 1.5; }
     #sheet[data-state=peek] #sheetBody, #sheet[data-state=peek] #sheetFoot { display: none; }
     #sheetFoot { flex: none; padding: 12px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); }
-    .gpx { width: 100%; height: 52px; border-radius: 14px; font-size: 17px; }
+    .foot-row { display: flex; gap: 10px; }
+    .gpx { flex: 1; min-width: 0; height: 52px; border-radius: 14px; font-size: 17px; }
+    .share { flex: none; width: 52px; height: 52px; border-radius: 14px; border: 1px solid var(--color-border);
+             background: var(--color-surface); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .gpx-help { font-size: 14px; line-height: 1.45; background: var(--color-bg); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+    .gpx-help b { font-weight: var(--fw-medium); }
+    .gpx-help button { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; margin-left: 6px; color: var(--color-text-2);
+                       text-decoration: underline; cursor: pointer; }
+    .hint { font-size: 13px; color: var(--color-text-2); margin-top: 6px; text-align: center; }
+    .k .qm { font: inherit; font-size: 11px; width: 16px; height: 16px; border-radius: 8px; border: 1px solid var(--color-border);
+             background: var(--color-surface); color: var(--color-text-2); padding: 0; margin-left: 4px; cursor: pointer; line-height: 14px; }
+    .dplus-help { grid-column: 1 / -1; font-size: 13px; color: var(--color-text-2); margin-top: 6px; }
     #sheetBody small, #sheetBody .sub { color: var(--color-text-2); }
     .badge { display: inline-block; font-size: 13px; background: var(--color-border); color: var(--color-text); padding: 2px 6px; border-radius: 6px; }
     .sec-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--color-text-2); }
@@ -251,6 +262,7 @@
       <div id="results"></div>
       <div class="k-label" id="levelLabel" data-i18n="pace">ALLURE</div>
       <div class="seg" id="levelSeg" role="group" aria-labelledby="levelLabel"></div>
+      <div id="paceHint" class="hint"></div>
       <div class="k-label" id="durLabel" data-i18n="duration">DURÉE DE LA BOUCLE</div>
       <div class="stepper" role="group" aria-labelledby="durLabel">
         <button type="button" id="durMinus" aria-label="Durée plus courte" data-i18n-aria="dur_minus">−</button>
@@ -283,7 +295,13 @@
     </div>
     <div id="sheetBody"></div>
     <div id="sheetFoot">
-      <button type="button" class="btn btn-accent gpx" data-i18n="gpx" onclick="downloadGpx(startData.start, shown[current], t('lvl_' + shown[current].level))">Télécharger le GPX</button>
+      <div id="gpxHelp" class="gpx-help" hidden></div>
+      <div class="foot-row">
+        <button type="button" class="btn btn-accent gpx" data-i18n="gpx" onclick="getGpx()">Télécharger le GPX</button>
+        <button type="button" class="share" id="shareBtn" data-i18n-aria="share" data-i18n-title="share" onclick="shareLoop()">
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="15" cy="4.5" r="2.2" fill="none" stroke="#24221F" stroke-width="1.5"/><circle cx="15" cy="15.5" r="2.2" fill="none" stroke="#24221F" stroke-width="1.5"/><circle cx="5" cy="10" r="2.2" fill="none" stroke="#24221F" stroke-width="1.5"/><path d="M7 9l6-3.4M7 11l6 3.4" stroke="#24221F" stroke-width="1.5"/></svg>
+        </button>
+      </div>
     </div>
   </div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
@@ -793,6 +811,7 @@
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
       showEmptySheet();
       setAdv(false);
+      restoreLoop();                                        // lien partagé ou derniers réglages de l'appareil
     }
     // panneau sans départ choisi (brief v2) : « Choisis un départ pour voir la boucle. »
     function showEmptySheet() {
@@ -873,6 +892,7 @@
 
     // barre repliée des réglages : « Gràcia · Modéré · 2 h 00 » ; met aussi à jour les segments et la durée affichée
     function updatePill() {
+      updatePaceHint();
       document.querySelectorAll('#levelSeg button').forEach(b =>
         b.setAttribute('aria-pressed', String(b.dataset.v === levelSel.value)));
       document.getElementById('durVal').textContent = hm(Number(durSel.value) * 60);
@@ -930,7 +950,9 @@
         clearHighlight();
         return;
       }
-      const i = shown.findIndex(o => o.label === 'equilibre');
+      const w = wantedOption ? shown.findIndex(o => o.label === wantedOption) : -1;   // option demandée par un lien
+      wantedOption = null;
+      const i = w >= 0 ? w : shown.findIndex(o => o.label === 'equilibre');
       select(i >= 0 ? i : 0);
     }
 
@@ -1159,8 +1181,9 @@
       return `<div class="head-row${seg ? ' has-seg' : ''}"><span class="opt-label">${esc(optName(o))}</span>${seg}</div>
         <div class="sum-line">${km(o.distance_km)} km · ${esc(t('dplus_inline', { m: Math.round(o.ascend_m) }))} · ≈ ${hm(o.time_est_min)}</div>
         <div class="figs">
-          <div class="k">${esc(t('fig_distance'))}</div><div class="k">${esc(t('fig_dplus'))}</div><div class="k">${esc(t('fig_duration'))}</div>
+          <div class="k">${esc(t('fig_distance'))}</div><div class="k">${esc(t('fig_dplus'))}<button type="button" class="qm" aria-expanded="false" aria-label="${esc(t('dplus_help_btn'))}" onclick="toggleDplusHelp(this)">?</button></div><div class="k">${esc(t('fig_duration'))}</div>
           <div class="big">${km(o.distance_km)}<span> km</span></div><div class="v">${Math.round(o.ascend_m)} m</div><div class="v">≈ ${hm(o.time_est_min)}</div>
+          <div class="dplus-help" hidden>${esc(t('dplus_help'))}</div>
         </div>${o.shares.main_roads > 0.10 ? '<div class="roadwarn">' + WARN_ICON_() + '<span><b>' + pc(o.shares.main_roads) +
           '</b> ' + esc(t('k_main_short')) + '</span></div>' : ''}`;
     }
@@ -1168,6 +1191,7 @@
     function select(i) {
       current = i;
       clearHighlight();
+      document.getElementById('gpxHelp').hidden = true;
       const o = shown[current];
       const totalEl = document.getElementById('totalApproach');
       totalEl.textContent = approachMin != null
@@ -1193,6 +1217,7 @@
       map.getSource('routes').setData({ type: 'FeatureCollection', features });
       altLabels();
       fitRoute();
+      rememberLoop();
     }
 
     // étiquette « Moins de relief · 45,3 km » sur chaque autre boucle ; la toucher échange les deux boucles.
@@ -1294,6 +1319,61 @@
       // pas de zoom sur le tronçon (demande de Florent) : toute la boucle reste cadrée pour situer l'endroit exact
       if (sheet.dataset.state === 'high') setSheet('mid');  // laisser voir la carte
       fitRoute();
+    }
+
+    // ---------- panel d'utilisateurs (27/09/2026) : lien partageable, mémoire des réglages, explications
+    // lien partageable : ?s=<départ>&d=<durée en h>&l=<allure>&o=<option> (bouton Partager)
+    function loopUrl() {
+      const o = shown[current];
+      const q = new URLSearchParams({ s: startSel.value, d: durSel.value, l: levelSel.value });
+      if (o && o.label !== 'equilibre') q.set('o', o.label);
+      return location.origin + location.pathname + '?' + q.toString();
+    }
+    const LAST_KEY = 'oyan-last';                          // derniers réglages, sur cet appareil seulement
+    function rememberLoop() {
+      if (!startData || !shown[current]) return;
+      try { localStorage.setItem(LAST_KEY, JSON.stringify({ s: startSel.value, d: durSel.value, l: levelSel.value, o: shown[current].label })); }
+      catch (e) { /* stockage bloqué : rien n'est retenu */ }
+    }
+    let wantedOption = null;                               // option demandée par un lien (appliquée au chargement du départ)
+    function restoreLoop() {                               // un lien passe avant les derniers réglages de l'appareil
+      const q = new URLSearchParams(location.search);
+      let r = q.get('s') ? { s: q.get('s'), d: q.get('d'), l: q.get('l'), o: q.get('o'), link: true } : null;
+      if (!r) { try { r = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch (e) { r = null; } }
+      if (!r || !indexData.starts.some(x => x.id === r.s)) return;
+      if (r.link) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* adresse inchangée */ } }
+      if (r.l && [...levelSel.options].some(o => o.value === r.l)) levelSel.value = r.l;
+      if (r.d && [...durSel.options].some(o => o.value === r.d)) durSel.value = r.d;
+      wantedOption = r.o || null;
+      const s = indexData.starts.find(x => x.id === r.s);
+      setWhere(() => startLine(s, esc(t(r.link ? 'from_link' : 'last_start'))));
+      approachMin = null;
+      chooseStart(r.s);
+    }
+    async function shareLoop() {
+      const url = loopUrl(), o = shown[current];
+      const title = 'Oyan · ' + optName(o) + ' · ' + km(o.distance_km) + ' km';
+      try { if (navigator.share) { await navigator.share({ title, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+      try { await navigator.clipboard.writeText(url); showGpxHelp(esc(t('link_copied'))); }
+      catch (e) { showGpxHelp(esc(t('link_here')) + ' <br><input readonly value="' + esc(url) + '" style="width:100%" onfocus="this.select()">'); }
+    }
+    function showGpxHelp(html) {
+      const h = document.getElementById('gpxHelp');
+      h.innerHTML = html + '<button type="button" onclick="this.parentNode.hidden = true">' + esc(t('close')) + '</button>';
+      h.hidden = false;
+    }
+    function getGpx() {                                    // téléchargement, puis « comment suivre la boucle ? »
+      downloadGpx(startData.start, shown[current], t('lvl_' + shown[current].level));
+      showGpxHelp(t('gpx_help'));
+    }
+    function toggleDplusHelp(b) {
+      const h = sheetHead.querySelector('.dplus-help');
+      h.hidden = !h.hidden;
+      b.setAttribute('aria-expanded', String(!h.hidden));
+    }
+    const PACE_KMH = { facile: 22, modere: 25, soutenu: 27 };   // vitesse sur le plat du modèle (110 / 150 / 190 W, 85 kg)
+    function updatePaceHint() {
+      document.getElementById('paceHint').textContent = t('pace_hint', { v: PACE_KMH[levelSel.value] || '' });
     }
 
     // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)
