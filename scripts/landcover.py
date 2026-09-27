@@ -4,6 +4,8 @@ Répartition du terrain (ville / eau / forêt / espaces ouverts) des boucles DÉ
 elle ne dépend que du tracé (coords publiés) et des cartes OSM. Deux usages :
 
   --check          diagnostic (rien n'est publié) : part « ville » selon plusieurs définitions, sur des départs témoins
+  --check-water    diagnostic (rien n'est publié) : part « bord d'eau » selon la distance à la mer (27/09/2026, boucle
+                   Garraf-Sitges : route en corniche à 150-250 m de la mer comptée forêt / espaces ouverts)
   --apply METHODE  recalcule scenery.landcover de toutes les boucles de --data avec la définition METHODE, ainsi que
                    scenery.landcover_seq (catégorie tous les 100 m : bande sous le profil), exit_city_km (sortie de ville
                    mesurée par le bâti) et le bloc « compare » de l'index (suggestion de départ voisin)
@@ -117,6 +119,77 @@ def partition(pts, land, mask, with_cls: bool = False):
     return (shares, cls) if with_cls else shares
 
 
+# ---------------------------------------------------------------- « bord d'eau » : la mer se voit de plus loin qu'une rivière
+SEA_DEG = 0.0027          # ~225 m en longitude, ~300 m en latitude (rivières et lacs : SCENERY_WATER_DEG, ~100 m)
+SEA_NEAR_DEG = 0.0006     # ~50 m : front de mer (promenade), où « bord d'eau » passerait avant « ville »
+WATER_VARIANTS = ("actuel", "mer250", "mer250_front50")
+WATER_WITNESSES = ("garraf-nord", "sitges", "vilanova-i-la-geltru", "castelldefels", "ciutat-vella", "badalona",
+                   "el-masnou", "sant-adria-de-besos", "molins-de-rei", "gracia")
+
+
+def partition_water(pts, land, mask, variant: str):
+    """Comme partition(), avec la variante « bord d'eau » : mer jusqu'à SEA_DEG ; et, pour mer250_front50, la mer à moins
+    de SEA_NEAR_DEG passe avant la ville. Retourne (parts, catégorie par point)."""
+    n = len(pts)
+    cls = np.full(n, 3)
+    ft = land.trees.get("forest")
+    if ft is not None:
+        cls[np.unique(ft.query(pts, predicate="dwithin", distance=g.SCENERY_FOREST_DEG)[0])] = 2
+    wt = land.trees.get("water")
+    if wt is not None:
+        cls[np.unique(wt.query(pts, predicate="dwithin", distance=g.SCENERY_WATER_DEG)[0])] = 1
+    st_ = land.trees.get("sea")
+    if variant != "actuel" and st_ is not None:
+        cls[np.unique(st_.query(pts, predicate="dwithin", distance=SEA_DEG)[0])] = 1
+    cls[mask] = 0
+    if variant == "mer250_front50" and st_ is not None:
+        cls[np.unique(st_.query(pts, predicate="dwithin", distance=SEA_NEAR_DEG)[0])] = 1
+    c = np.bincount(cls, minlength=4) / max(n, 1)
+    return {"city": round(float(c[0]), 3), "water": round(float(c[1]), 3), "forest": round(float(c[2]), 3),
+            "countryside": round(float(c[3]), 3)}, cls
+
+
+def check_water(data: Path, land, bld_tree, out_md: Path, out_json: Path):
+    rows = []
+    for sid in WATER_WITNESSES:
+        f = data / "starts" / f"{sid}.json"
+        if not f.exists():
+            continue
+        d = json.loads(f.read_text(encoding="utf-8"))
+        for o in d["options"]:
+            pts = sample(o["coords"])
+            mask = city_mask(pts, land, "bld75_5", bld_tree)
+            r = {"start": sid, "level": o["level"], "min": round(o["duration_target_min"]), "label": o["label"],
+                 "km": o["distance_km"]}
+            for v in WATER_VARIANTS:
+                sh, cls = partition_water(pts, land, mask, v)
+                r[v] = {"water": round(100 * sh["water"]), "city": round(100 * sh["city"])}
+                if v != "actuel":
+                    r[v]["seq"] = g.landcover_seq(cls)
+            r["actuel"]["seq"] = g.landcover_seq(partition_water(pts, land, mask, "actuel")[1])
+            rows.append(r)
+    out_json.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+    L = ["# Diagnostic « bord d'eau » de la barre de terrain (rien n'est publié)",
+         f"\n{len(rows)} boucles publiées de {len({r['start'] for r in rows})} départs témoins (côte, rivière, et Gràcia sans "
+         "eau). Parts médianes par départ, en % : **eau / ville**. actuel = eau à moins de ~100 m, ville prioritaire ; "
+         "mer250 = la mer compte jusqu'à ~250 m ; mer250_front50 = en plus, à moins de ~50 m de la mer, bord d'eau avant ville.",
+         "\n| Départ | " + " | ".join(WATER_VARIANTS) + " |", "|---|" + "---|" * len(WATER_VARIANTS)]
+    for sid in WATER_WITNESSES:
+        rs = [r for r in rows if r["start"] == sid]
+        if not rs:
+            continue
+        cell = lambda v: f"{round(st.median(r[v]['water'] for r in rs))} / {round(st.median(r[v]['city'] for r in rs))}"  # noqa: E731
+        L.append(f"| {sid} | " + " | ".join(cell(v) for v in WATER_VARIANTS) + " |")
+    L.append("\n## Cas signalé : Garraf (nord), 2 h, sportif (par variante : eau / ville, puis bande v/e/f/o)")
+    for r in rows:
+        if r["start"] == "garraf-nord" and r["min"] == 120 and r["level"] == "soutenu":
+            L.append(f"\n**{r['label']}** ({r['km']} km)")
+            for v in WATER_VARIANTS:
+                L.append(f"- {v} : eau {r[v]['water']} %, ville {r[v]['city']} % — `{r[v]['seq']}`")
+    out_md.write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 def check(data: Path, land, bld_tree, out_md: Path, out_json: Path):
     rows = []
     for sid in WITNESSES:
@@ -186,6 +259,8 @@ def main() -> int:
     ap.add_argument("--pbf", required=True)
     ap.add_argument("--workdir", required=True)
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--check-water", action="store_true")
+    ap.add_argument("--check-city", dest="check", action="store_true", help="alias de --check")
     ap.add_argument("--apply", choices=METHODS)
     ap.add_argument("--bld-bbox", default="", help="emprise des bâtiments chargés (vide = tout l'extrait, la province)")
     ap.add_argument("--out", default="data/landcover_check.json")
@@ -197,11 +272,13 @@ def main() -> int:
         sys.exit("paysage OSM non chargé")
     print("Paysage : " + ", ".join(f"{k} {v}" for k, v in land.counts.items()), flush=True)
     bld_tree = None
-    if args.check or args.apply in BLD:
+    if args.check or args.check_water or args.apply in BLD:
         import time
         t0 = time.time()
         bld_tree, nb = load_buildings(pbf, wd, args.bld_bbox)
         print(f"Bâtiments chargés ({args.bld_bbox or 'province'}) : {nb} en {time.time() - t0:.0f} s", flush=True)
+    if args.check_water:
+        check_water(data, land, bld_tree, Path(args.out_md), Path(args.out))
     if args.check:
         check(data, land, bld_tree, Path(args.out_md), Path(args.out))
         with open(args.out_md, "a", encoding="utf-8") as fh:

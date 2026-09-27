@@ -357,7 +357,8 @@ jobs:
           LANDCOVER_METHOD: "bld75_5"     # « ville » = 5 bâtiments à moins de ~75 m (diagnostic landcover_check n°2, 26/09/2026)
         run: |
           if [ "$MODE" = "landcover_check" ]; then
-            python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check \
+            LANDCOVER_CHECK="water"       # water : « bord d'eau » selon la distance à la mer (27/09/2026) ; city : « ville »
+            python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check-$LANDCOVER_CHECK \
               --out data/landcover_check.json --out-md data/landcover_check.md
             cat data/landcover_check.md >> "$GITHUB_STEP_SUMMARY"
           else

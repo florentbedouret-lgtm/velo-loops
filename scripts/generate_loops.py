@@ -221,15 +221,16 @@ def load_signals(pbf: Path, workdir: Path):
 class LandscapeIndex:
     """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
 
-    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=()):
+    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=()):
         import numpy as np  # noqa: F401
         from shapely.strtree import STRtree
-        builtup = list(builtup)
+        builtup, sea = list(builtup), list(sea)
         self.trees = {k: (STRtree(v) if v else None)
                       for k, v in (("forest", forests), ("water", waters), ("protected", protected),
-                                   ("view", viewpoints), ("builtup", builtup), ("buildings", list(buildings)))}
+                                   ("view", viewpoints), ("builtup", builtup), ("buildings", list(buildings)),
+                                   ("sea", sea))}          # sea : trait de côte et plages (aussi dans water)
         self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
-                       "view": len(viewpoints), "builtup": len(builtup), "buildings": len(buildings)}
+                       "view": len(viewpoints), "builtup": len(builtup), "buildings": len(buildings), "sea": len(sea)}
 
     def measure(self, coords, cum) -> dict:
         import numpy as np
@@ -324,7 +325,7 @@ def load_landscape(pbf: Path, workdir: Path):
     except subprocess.CalledProcessError as e:
         print(f"! extraction du paysage échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
         return None
-    forests, waters, protected, views, builtup = [], [], [], [], []
+    forests, waters, protected, views, builtup, sea = [], [], [], [], [], []
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -347,6 +348,8 @@ def load_landscape(pbf: Path, workdir: Path):
             geom = geom.simplify(0.00005, preserve_topology=True)   # ~5 m : allège l'index
             if props.get("natural") in ("water", "coastline", "beach") or props.get("waterway") == "river":
                 waters.append(geom)
+                if props.get("natural") in ("coastline", "beach"):
+                    sea.append(geom)
             elif props.get("landuse") == "forest" or props.get("natural") == "wood":
                 forests.append(geom)
             elif props.get("landuse") in ("residential", "commercial", "industrial", "retail"):
@@ -354,7 +357,7 @@ def load_landscape(pbf: Path, workdir: Path):
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
-    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir))
+    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea)
 
 
 def load_building_points(pbf: Path, workdir: Path, bbox: str = "") -> list:
