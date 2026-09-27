@@ -55,7 +55,10 @@ function profileSvg(o) {
   if (!o.coords[0] || o.coords[0].length < 3) return '';
   const p = profileData(o.coords, o.distance_km);
   const seq = (o.scenery && o.scenery.landcover_seq) || '';
-  const W = 320, H = seq ? 128 : 120, mL = 34, mR = 8, mT = 8, mB = seq ? 28 : 20;
+  // avec des montées : 16 px de marge en plus au-dessus de la courbe, pour que les repères numérotés restent au-dessus
+  // des sommets au lieu de les cacher (remarque de Florent, 27/09/2026)
+  const top = ((o.terrain && o.terrain.climbs) || []).length ? 16 : 0;
+  const W = 320, H = (seq ? 128 : 120) + top, mL = 34, mR = 8, mT = 8 + top, mB = seq ? 28 : 20;
   let lo = Math.min(...p.alt), hi = Math.max(...p.alt);
   if (hi - lo < 20) { const mid = (hi + lo) / 2; lo = mid - 10; hi = mid + 10; } // profil presque plat : échelle minimale de 20 m
   lo = Math.floor(lo / 10) * 10;
@@ -72,7 +75,7 @@ function profileSvg(o) {
   const climbs = ((o.terrain && o.terrain.climbs) || []).map((c, k) => [c, k]).sort((a, b) => a[0].start_km - b[0].start_km);
   const marks = climbs.map(([c, k], n) => {
     const d = Math.min(p.total, c.start_km + c.length_km);
-    const cx = x(d), cy = Math.max(mT + 7, y(p.alt[Math.min(p.alt.length - 1, Math.round(d / p.step))]) - 10);
+    const cx = x(d), cy = Math.max(8, y(p.alt[Math.min(p.alt.length - 1, Math.round(d / p.step))]) - 12);
     return `<g class="pf-mk" data-hl="climb:${k}" role="button" tabindex="0" style="cursor:pointer">` +
       `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7" fill="#FFFFFF" stroke="#625D55"/>` +
       `<text x="${cx.toFixed(1)}" y="${(cy + 3.2).toFixed(1)}" font-size="9" text-anchor="middle" fill="#24221F" ` +
