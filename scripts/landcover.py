@@ -123,7 +123,7 @@ def partition(pts, land, mask, with_cls: bool = False):
 # Remarque de Florent (Gràcia 2 h, le long du Besòs) : des morceaux qui suivent la rivière ne sont pas « bord d'eau ». Le Besòs
 # n'est dessiné que par sa ligne centrale (lit de plus de 100 m) : la piste passe à 70-90 m de cette ligne, à la limite du
 # seuil de ~100 m ; et la ville (5 bâtiments à ~75 m) passe avant l'eau. Variantes comparées (la mer garde sa règle) :
-RIVER_VARIANTS = {"actuel": (None, None),
+RIVER_VARIANTS = {"actuel": (None, None),               # (riv150_front60 retenue le 28/09/2026 : règle en production)
                   "riv150": (0.0016, None),             # grande rivière jusqu'à ~135 m (longitude) / ~180 m (latitude)
                   "riv150_front60": (0.0016, 0.0007)}   # + à moins de ~60 m de la ligne centrale, bord d'eau avant ville
 RIVER_WITNESSES = ("gracia", "sant-adria-de-besos", "santa-coloma-de-gramenet", "montcada-i-reixac", "ripollet",
@@ -219,11 +219,11 @@ def apply(data: Path, land, bld_tree, method: str):
                 continue
             pts = sample(o["coords"])
             mask = city_mask(pts, land, method, bld_tree)
-            cls = g.landcover_classes(land.trees, pts, mask)     # même règle que le générateur (mer ~250 m, front de mer)
+            cls = g.landcover_classes(land.trees, pts, mask)     # même règle que le générateur (mer, grandes rivières)
             c = np.bincount(cls, minlength=4) / max(len(pts), 1)
             o["scenery"]["landcover"] = {"city": round(float(c[0]), 3), "water": round(float(c[1]), 3),
                                          "forest": round(float(c[2]), 3), "countryside": round(float(c[3]), 3)}
-            o["scenery"]["landcover_method"] = method + "+mer250_front50"
+            o["scenery"]["landcover_method"] = method + "+mer250_front50+riv150_front60"
             o["scenery"]["landcover_seq"] = g.landcover_seq(cls)
             o["exit_city_km"] = g.exit_city_km(np.where(mask, 0, 3), o["distance_km"])   # sortie de ville : bâti seul
             n += 1

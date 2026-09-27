@@ -292,11 +292,17 @@ SEA_DEG = 0.0027              # ~225 m en longitude, ~300 m en latitude (rivièr
 SEA_NEAR_DEG = 0.0006         # ~50 m
 
 
-def landcover_classes(trees, pts, city, river_deg=None, river_near_deg=None):
+# grandes rivières (diagnostic landcover_check « river », 28/09/2026 ; Gràcia 2 h le long du Besòs 9 -> 13 %, départs sans
+# grande rivière inchangés) : comptées jusqu'à ~150 m de leur ligne centrale ; à moins de ~60 m, bord d'eau avant ville
+RIVER_DEG = 0.0016            # ~135 m en longitude, ~180 m en latitude
+RIVER_NEAR_DEG = 0.0007       # ~60 m : front de rivière
+
+
+def landcover_classes(trees, pts, city, river_deg=RIVER_DEG, river_near_deg=RIVER_NEAR_DEG):
     """Catégorie de chaque point (0 ville, 1 bord d'eau, 2 forêt, 3 espaces ouverts) ; city : masque du bâti dense.
     Partagée par le générateur et scripts/landcover.py (mode landcover, sans GraphHopper).
-    river_deg / river_near_deg (diagnostic « river », 27/09/2026) : grande rivière comptée jusqu'à river_deg de sa ligne
-    centrale ; à moins de river_near_deg, bord d'eau avant ville (front de rivière). None = règle actuelle."""
+    river_deg / river_near_deg : grande rivière comptée jusqu'à river_deg de sa ligne centrale ; à moins de river_near_deg,
+    bord d'eau avant ville (front de rivière). None = sans cette règle (diagnostic « actuel »)."""
     import numpy as np
     cls = np.full(len(pts), 3)
     near = lambda key, dist: np.unique(trees[key].query(pts, predicate="dwithin", distance=dist)[0])  # noqa: E731
