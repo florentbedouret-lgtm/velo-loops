@@ -51,6 +51,7 @@ const I18N = {
   history: ['Mes boucles ({n})', 'My loops ({n})', 'Mis rutas ({n})', 'Les meves rutes ({n})'],
   h_gpx: ['GPX le {date}', 'GPX on {date}', 'GPX el {date}', 'GPX el {date}'],
   h_shared: ['partagée le {date}', 'shared on {date}', 'compartida el {date}', 'compartida el {date}'],
+  h_remove: ['Retirer de Mes boucles', 'Remove from My loops', 'Quitar de Mis rutas', 'Treu de Les meves rutes'],
   h_clear: ["Effacer l'historique", 'Clear history', 'Borrar el historial', "Esborra l'historial"],
   from_history: ['Depuis Mes boucles', 'From My loops', 'Desde Mis rutas', 'Des de Les meves rutes'],
   choose_start: ['Choisir un départ', 'Choose a start', 'Elige una salida', 'Tria una sortida'],

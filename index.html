@@ -106,8 +106,11 @@
     #history { margin-top: 12px; border-top: 1px solid var(--color-border); padding-top: 10px; }
     #history summary { cursor: pointer; font-size: 15px; }
     #historyList { display: flex; flex-direction: column; margin-top: 6px; }
-    #historyList button.h-item { font: inherit; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--color-border);
+    #historyList .h-row { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--color-border); }
+    #historyList button.h-item { flex: 1; min-width: 0; font: inherit; text-align: left; background: none; border: 0;
                                  padding: 9px 0; cursor: pointer; color: var(--color-text); display: flex; flex-direction: column; gap: 2px; }
+    #historyList .h-del { flex: none; width: 36px; height: 36px; border-radius: 18px; border: 0; background: var(--color-bg);
+                          color: var(--color-text-2); font-size: 20px; line-height: 1; cursor: pointer; }
     #historyList .h-sub { font-size: 13px; color: var(--color-text-2); }
     #historyList .h-clear { font: inherit; font-size: 13px; background: none; border: 0; padding: 8px 0 0; color: var(--color-text-2);
                             text-decoration: underline; cursor: pointer; align-self: flex-start; }
@@ -1387,12 +1390,21 @@
       document.getElementById('historyList').innerHTML = list.map((x, i) => {
         const s = indexData && indexData.starts.find(y => y.id === x.s);
         if (!s) return '';
-        return '<button type="button" class="h-item" data-h="' + i + '"><span>' + esc(startLabel(s)) + ' · ' + hm(Number(x.d) * 60) + ' · ' +
+        return '<div class="h-row"><button type="button" class="h-item" data-h="' + i + '"><span>' + esc(startLabel(s)) + ' · ' + hm(Number(x.d) * 60) + ' · ' +
           esc(t('lvl_' + x.l)) + '</span><span class="h-sub">' + esc(optLabel(x.o)) + ' · ' + km(x.km) + ' km · ' +
-          esc(t('dplus_inline', { m: x.up })) + ' · ' + esc(t(x.a === 'share' ? 'h_shared' : 'h_gpx', { date: new Date(x.at + 'T12:00:00').toLocaleDateString(LANG, { day: 'numeric', month: 'short' }) })) + '</span></button>';
+          esc(t('dplus_inline', { m: x.up })) + ' · ' + esc(t(x.a === 'share' ? 'h_shared' : 'h_gpx', { date: new Date(x.at + 'T12:00:00').toLocaleDateString(LANG, { day: 'numeric', month: 'short' }) })) + '</span></button>' +
+          '<button type="button" class="h-del" data-del="' + i + '" aria-label="' + esc(t('h_remove')) + '" title="' + esc(t('h_remove')) + '">×</button></div>';
       }).join('') + '<button type="button" class="h-clear" data-h="clear">' + esc(t('h_clear')) + '</button>';
     }
     document.getElementById('historyList').addEventListener('click', e => {
+      const del = e.target.closest('button[data-del]');   // × : retirer cette seule boucle
+      if (del) {
+        const list = readHistory();
+        list.splice(Number(del.dataset.del), 1);
+        try { localStorage.setItem(HIST_KEY, JSON.stringify(list)); } catch (err) { /* stockage bloqué */ }
+        renderHistory();
+        return;
+      }
       const b = e.target.closest('button[data-h]');
       if (!b) return;
       if (b.dataset.h === 'clear') { try { localStorage.removeItem(HIST_KEY); } catch (err) { /* rien */ } renderHistory(); return; }
