@@ -40,6 +40,8 @@
                 border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(36, 34, 31, .35); }
     .mk-user { width: 30px; height: 30px; border-radius: 50%; background: rgba(36, 34, 31, .14); display: flex; align-items: center; justify-content: center; }
     .mk-user::after { content: ''; width: 12px; height: 12px; box-sizing: border-box; border-radius: 50%; background: var(--color-text); border: 2px solid #fff; }
+    .mk-poi { width: 22px; height: 22px; border-radius: 11px; background: #fff; border: 1px solid var(--color-border);
+              box-shadow: 0 1px 3px rgba(36, 34, 31, .25); display: flex; align-items: center; justify-content: center; }
     .mk-alt { font: 12px var(--font-sans); white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; cursor: pointer;
               background: #fff; border: 1px solid var(--color-border); border-radius: 12px; padding: 3px 9px; color: var(--color-text);
               box-shadow: 0 1px 4px rgba(36, 34, 31, .15); }
@@ -932,6 +934,7 @@
         startData = null; shown = []; sheetFoot.hidden = true; updatePill(); setAdv(false);
         map.getSource('routes').setData(EMPTY);
         altMarkers.forEach(m => m.marker.remove()); altMarkers = [];
+        poiMarkers(null);
         return;
       }
       startData = await res.json();
@@ -964,6 +967,7 @@
         map.getSource('routes').setData(EMPTY);
         map.getSource('cursor').setData(EMPTY);
         altMarkers.forEach(m => m.marker.remove()); altMarkers = [];
+        poiMarkers(null);
         clearHighlight();
         return;
       }
@@ -1060,7 +1064,7 @@
                         ['water', lc ? lc.water : sc.water, 0.05, t('k_water')]]
           .filter(([, v, min]) => v >= min).sort((a, b) => b[1] - a[1]);
         if (nature.length) out.push([pc(nature[0][1]), nature[0][3], false,
-          lc && sc.landcover_seq && nature[0][0] !== 'protected' ? nature[0][0] : null]);   // forêt / bord d'eau : bande de terrain
+          nature[0][0] === 'protected' ? (sc.protected_seq ? 'park' : null) : (lc && sc.landcover_seq ? nature[0][0] : null)]);
       }
       const sh = o.shares;
       if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), t('k_main'), true]);
@@ -1072,6 +1076,11 @@
           (c.avg_grade_pct != null ? ' ' + climbCategory(c.avg_grade_pct).charAt(0).toUpperCase() + climbCategory(c.avg_grade_pct).slice(1) + '.' : ''),
           false, 'climb:0']);
       }
+      // échappatoires (panel d'utilisateurs) : points d'eau, cafés hors ville, gares de retour
+      const P = o.pois || [], nW = P.filter(x => x.t === 'w').length, nC = P.filter(x => x.t === 'c').length;
+      const G = P.filter(x => x.t === 'g');
+      if (P.length) out.push(['', [nW ? tn('p_water', nW) : '', nC ? tn('p_cafe', nC) : '',
+        G.length ? t('p_station', { km: G.map(x => km1(x.km)).join(', ') }) : ''].filter(Boolean).join(' · ') + '.']);
       // pente : badge à seuil unique, jamais de chiffre (D17)
       if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', t('k_steep'), true]);
       return out;
@@ -1102,14 +1111,14 @@
         R.push([String(tr.n_climbs), tn('fr_climbs', tr.n_climbs) + (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct) : '') +
           (climbs.length && climbs.length < tr.n_climbs ? t('fr_biggest', { k: climbs.length }) : '') + '.']);
         climbs.forEach(([c, k], n) => R.push(['n° ' + (n + 1), t('fr_climb', { a: km(c.start_km), l: km(c.length_km), g: Math.round(c.gain_m) }) +
-          (c.avg_grade_pct != null ? ', ' + climbCategory(c.avg_grade_pct) : ''), 'climb:' + k]));
+          (c.avg_grade_pct != null ? ', ' + climbCategory(c.avg_grade_pct) : '') + (c.name ? ' — ' + c.name : ''), 'climb:' + k]));
       } else R.push(['0', t('fr_noclimb')]);
       const lcF = LANDCOVER_OK && o.scenery && o.scenery.landcover, seq = !!(o.scenery && o.scenery.landcover_seq);
       const sc = o.scenery;
       if (sc) {
         const fo = lcF ? lcF.forest : sc.forest, wa = lcF ? lcF.water : sc.water;
         if (fo >= 0.05) E.push([pc(fo), t('fr_forest'), seq ? 'forest' : null]);
-        if (sc.protected >= 0.05) E.push([pc(sc.protected), t('fr_protected')]);
+        if (sc.protected >= 0.05) E.push([pc(sc.protected), t('fr_protected'), sc.protected_seq ? 'park' : null]);
         if (wa >= 0.05) E.push([pc(wa), t('fr_water'), seq ? 'water' : null]);
         if (sc.viewpoints >= 1) E.push([String(sc.viewpoints), tn('fr_views', sc.viewpoints)]);
       }
@@ -1123,7 +1132,12 @@
       if (o.surface && o.surface.unknown >= 0.3) C.push([pc(o.surface.unknown), t('fr_surface')]);
       if (o.overlap > 0.10) C.push([pc(o.overlap), t('fr_overlap')]);
       if (o.u_turns) C.push([String(o.u_turns), tn('fr_uturns', o.u_turns)]);
-      return [['grp_relief', R], ['grp_env', E], ['grp_circ', C]].filter(([, rows]) => rows.length);
+      const W = [], P = o.pois || [], kms = t2 => P.filter(x => x.t === t2).map(x => km1(x.km)).join(' · ');
+      const nW = P.filter(x => x.t === 'w').length, nC = P.filter(x => x.t === 'c').length;
+      if (nW) W.push([String(nW), tn('fr_water_pts', nW, { list: kms('w') })]);
+      if (nC) W.push([String(nC), tn('fr_cafes', nC, { list: kms('c') })]);
+      P.filter(x => x.t === 'g').forEach(x => W.push(['km ' + km1(x.km), t('fr_station', { name: x.n || '' })]));
+      return [['grp_relief', R], ['grp_env', E], ['grp_road', W], ['grp_circ', C]].filter(([, rows]) => rows.length);
     }
     function factsHtml(o) {
       return allFacts(o).map(([g, rows]) => '<div class="sec-label facts-h">' + esc(t(g)) + '</div>' + keyRowsHtml(rows)).join('');
@@ -1235,8 +1249,29 @@
         .sort((a, b) => a.properties.selected - b.properties.selected);
       map.getSource('routes').setData({ type: 'FeatureCollection', features });
       altLabels();
+      poiMarkers(o);
       fitRoute();
       rememberLoop();
+    }
+
+    // points d'intérêt de la boucle affichée (eau, cafés, gares) : petites icônes, nom au survol / toucher long
+    let poiMk = [];
+    const POI_ICON = {
+      w: '<path d="M7 2.2c1.8 2.4 3.3 4.4 3.3 6.1A3.3 3.3 0 0 1 3.7 8.3c0-1.7 1.5-3.7 3.3-6.1z" fill="#8FA3AB"/>',
+      c: '<path d="M3 5h6.2v3.2A2.6 2.6 0 0 1 6.6 10.8H5.6A2.6 2.6 0 0 1 3 8.2zM9.2 6h1a1.3 1.3 0 0 1 0 2.6h-1" fill="none" stroke="#625D55" stroke-width="1.3"/>',
+      g: '<rect x="3.6" y="2.6" width="6.8" height="7.2" rx="1.6" fill="none" stroke="#24221F" stroke-width="1.3"/><path d="M3.6 6.4h6.8M5 12l1-2.2M9 12l-1-2.2" stroke="#24221F" stroke-width="1.3" stroke-linecap="round"/>'
+    };
+    function poiMarkers(o) {
+      poiMk.forEach(m => m.remove());
+      poiMk = [];
+      (o && o.pois || []).forEach(x => {
+        const el = document.createElement('div');
+        el.className = 'mk-poi';
+        el.title = (x.n ? x.n + ' · ' : '') + t('poi_' + x.t) + ' · km ' + km1(x.km);
+        el.setAttribute('aria-label', el.title);
+        el.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">' + POI_ICON[x.t] + '</svg>';
+        poiMk.push(new maplibregl.Marker({ element: el }).setLngLat([x.lon, x.lat]).addTo(map));
+      });
     }
 
     // étiquette « Moins de relief · 45,3 km » sur chaque autre boucle ; la toucher échange les deux boucles.
@@ -1297,7 +1332,8 @@
         const c = (o.terrain.climbs || [])[Number(kind.slice(6))];
         return c ? [[c.start_km, c.start_km + c.length_km]] : [];
       }
-      const seq = (o.scenery && o.scenery.landcover_seq) || '', ch = { water: 'e', forest: 'f', town: 'v' }[kind];
+      const seq = (o.scenery && (kind === 'park' ? o.scenery.protected_seq : o.scenery.landcover_seq)) || '';
+      const ch = { water: 'e', forest: 'f', town: 'v', park: 'p' }[kind];
       const step = o.distance_km / Math.max(seq.length, 1), out = [];
       for (let i = 0; i < seq.length;) {                   // suites de points du milieu, trous de 100 m ignorés
         if (seq[i] !== ch) { i++; continue; }

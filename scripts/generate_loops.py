@@ -100,6 +100,7 @@ LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km ou plus, le sous-score "feux" t
 SIGNALS = None                  # SignalIndex des feux tricolores, chargé dans main()
 STOPS = None                    # SignalIndex des panneaux stop
 LANDSCAPE = None                # LandscapeIndex (forêts, eau, parcs, points de vue), chargé dans main()
+POIS = None                     # points d'intérêt le long des boucles (eau, cafés, gares, cols), voir load_pois()
 # Proxy "paysage" : distances (en degrés, ~100 m = 0,0009 à cette latitude) et pondération PROVISOIRE
 SCENERY_FOREST_DEG, SCENERY_WATER_DEG, SCENERY_PROTECTED_DEG, SCENERY_VIEW_DEG = 0.0004, 0.001, 0.0002, 0.003
 UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand"}
@@ -283,7 +284,8 @@ class LandscapeIndex:
         counts = np.bincount(cls, minlength=4) / max(len(pts), 1)
         return {"city": round(float(counts[0]), 3), "water": round(float(counts[1]), 3),
                 "forest": round(float(counts[2]), 3), "countryside": round(float(counts[3]), 3),
-                "cls": cls.tolist(), "citymask": city.tolist()}   # par point : retirés à l'export (to_json)
+                "cls": cls.tolist(), "citymask": city.tolist(),   # par point : retirés à l'export (to_json)
+                "park": protected_mask(self.trees, pts).tolist()}
 
 
 # « bord d'eau » (diagnostic landcover_check « water », 27/09/2026 ; Garraf-Sitges 2 h : 19 -> 30 %, autres départs témoins
@@ -405,6 +407,110 @@ def load_landscape(pbf: Path, workdir: Path):
                     "protected_area", "national_park"):
                 protected.append(geom)
     return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea, rivers)
+
+
+def protected_mask(trees, pts):
+    """Point par point : dans (ou tout près d') un parc ou un espace protégé — même seuil que scenery.protected."""
+    import numpy as np
+    m = np.zeros(len(pts), dtype=bool)
+    if trees.get("protected") is not None:
+        m[np.unique(trees["protected"].query(pts, predicate="dwithin", distance=SCENERY_PROTECTED_DEG)[0])] = True
+    return m
+
+
+# ---------------------------------------------------------------- points d'intérêt le long des boucles (27/09/2026)
+# Panel d'utilisateurs : points d'eau, cafés et gares de retour (« échappatoires ») ; noms des cols. Ne dépend que du
+# tracé et d'OSM : calculé par le générateur ET par le mode landcover (sans GraphHopper).
+POI_WATER_DEG = 0.0006        # ~50 m du tracé : fontaine d'eau potable
+POI_CAFE_DEG = 0.0006         # ~50 m : café ou boulangerie, seulement hors de la ville (en ville, il y en a partout)
+POI_STATION_DEG = 0.0036      # ~300 m : gare, pour rentrer en train en cas de pépin
+POI_PASS_DEG = 0.0024         # ~200 m du sommet d'une montée : col nommé
+POI_PEAK_DEG = 0.003          # ~250 m : sinon, sommet nommé
+POI_RULES = {"w": (POI_WATER_DEG, 0.5, 12), "c": (POI_CAFE_DEG, 1.0, 10), "g": (POI_STATION_DEG, 2.0, 6)}   # (distance,
+#                                                                               écart mini en km, nombre maxi) par type
+
+
+def load_pois(pbf: Path, workdir: Path):
+    """Eau potable, cafés / boulangeries, gares, cols et sommets nommés (osmium) -> {type: (STRtree, [(point, nom)])}."""
+    import subprocess
+    from shapely.geometry import shape
+    from shapely.strtree import STRtree
+    filt, out = workdir / "pois.osm.pbf", workdir / "pois.geojsonseq"
+    subprocess.run(["osmium", "tags-filter", str(pbf), "n/amenity=drinking_water", "nw/amenity=fountain",
+                    "nw/amenity=cafe", "nw/shop=bakery", "nw/railway=station", "n/mountain_pass=yes", "n/natural=saddle",
+                    "n/natural=peak", "-o", str(filt), "--overwrite"], check=True, capture_output=True)
+    subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"], check=True,
+                   capture_output=True)
+    kinds = {"w": [], "c": [], "g": [], "pass": [], "peak": []}
+    with out.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip("\x1e\n ")
+            if not line:
+                continue
+            try:
+                feat = json.loads(line)
+                geom = shape(feat["geometry"])
+            except (ValueError, KeyError):
+                continue
+            p = feat.get("properties", {})
+            pt = geom if geom.geom_type == "Point" else geom.centroid
+            name = p.get("name")
+            if p.get("amenity") == "drinking_water" or (p.get("amenity") == "fountain" and p.get("drinking_water") == "yes"):
+                kinds["w"].append((pt, name))
+            elif p.get("amenity") == "cafe" or p.get("shop") == "bakery":
+                kinds["c"].append((pt, name))
+            elif p.get("railway") == "station" and p.get("station") not in ("subway", "light_rail") and name:
+                kinds["g"].append((pt, name))
+            elif (p.get("mountain_pass") == "yes" or p.get("natural") == "saddle") and name:
+                kinds["pass"].append((pt, name))
+            elif p.get("natural") == "peak" and name:
+                kinds["peak"].append((pt, name))
+    print("Points d'intérêt : " + ", ".join(f"{k} {len(v)}" for k, v in kinds.items()), flush=True)
+    return {k: (STRtree([g for g, _ in v]), v) for k, v in kinds.items() if v}
+
+
+def enrich_option(o: dict, pois) -> dict:
+    """Ajoute à une option exportée : o["pois"] (eau, cafés hors ville, gares, avec le km de passage) et le nom du col ou
+    du sommet de chaque montée (terrain.climbs[].name). Sans points d'intérêt chargés : option inchangée."""
+    if not pois or len(o.get("coords") or []) < 2:
+        return o
+    from shapely.geometry import LineString
+    line = LineString([(c[0], c[1]) for c in o["coords"]])
+    L, dist = max(line.length, 1e-9), o["distance_km"]
+    seq = (o.get("scenery") or {}).get("landcover_seq") or ""
+    km_of = lambda pt: line.project(pt) / L * dist  # noqa: E731
+    out = []
+    for kind, (deg, gap, cap) in POI_RULES.items():
+        if kind not in pois:
+            continue
+        tree, items = pois[kind]
+        found = sorted(((km_of(items[i][0]), items[i]) for i in tree.query(line, predicate="dwithin", distance=deg)),
+                       key=lambda x: x[0])
+        kept, last, names = [], -1e9, set()
+        for km, (pt, name) in found:
+            if kind == "c" and seq and seq[min(len(seq) - 1, int(km / dist * len(seq)))] == "v":
+                continue                                  # café en ville : sans intérêt comme échappatoire
+            if km - last < gap or (kind == "g" and name in names):
+                continue
+            kept.append({"t": kind, "km": round(km, 1), "lon": round(pt.x, 5), "lat": round(pt.y, 5),
+                         **({"n": name} if name else {})})
+            last = km
+            names.add(name)
+            if len(kept) >= cap:
+                break
+        out += kept
+    o["pois"] = sorted(out, key=lambda x: x["km"])
+    for c in (o.get("terrain") or {}).get("climbs") or []:        # nom du col (ou du sommet) au haut de la montée
+        top = line.interpolate(min(dist, c["start_km"] + c["length_km"]) / dist * L)
+        c.pop("name", None)
+        for kind, deg in (("pass", POI_PASS_DEG), ("peak", POI_PEAK_DEG)):
+            if kind in pois:
+                tree, items = pois[kind]
+                near = [items[i] for i in tree.query(top, predicate="dwithin", distance=deg)]
+                if near:
+                    c["name"] = min(near, key=lambda it: it[0].distance(top))[1]
+                    break
+    return o
 
 
 def load_building_points(pbf: Path, workdir: Path, bbox: str = "") -> list:
@@ -1166,7 +1272,9 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
             "score": l.scenery["score"],
-            "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k not in ("cls", "citymask")}
+            **({"protected_seq": "".join("p" if x else "-" for x in l.scenery["landcover"]["park"])}
+               if l.scenery.get("landcover") and "park" in l.scenery["landcover"] else {}),
+            "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k not in ("cls", "citymask", "park")}
                           if l.scenery.get("landcover") else None),
             **({"landcover_seq": landcover_seq(l.scenery["landcover"]["cls"])} if l.scenery.get("landcover") else {})}),
         "exit_dense_km": None if l.exit_dense_m is None else round(l.exit_dense_m / 1000.0, 1),
@@ -1433,7 +1541,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
             picks = choose_options(gh, st, level, duration, pool, prior, log)
             prior += [l for _, l in picks]
             for i, (label, loop) in enumerate(picks, start=1):
-                options.append(to_json(loop, label, sid, i))
+                options.append(enrich_option(to_json(loop, label, sid, i), POIS))
         dur_seconds[f"{duration:g}"] = round(time.time() - t_dur, 1)
     if not options:
         log("  aucune option valide, départ ignoré")
@@ -1662,7 +1770,7 @@ def main() -> int:
     res = machine_resources()
     print(f"Machine : {res['cpu_count']} CPU, {res['ram_gb']} Go de RAM ; {args.workers} départ(s) en parallèle", flush=True)
 
-    global SIGNALS, STOPS, LANDSCAPE
+    global SIGNALS, STOPS, LANDSCAPE, POIS
     places_path = Path(args.places)
     pbf_path = Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf"
     SIGNALS = load_signals(pbf_path, places_path.parent)
@@ -1676,6 +1784,11 @@ def main() -> int:
         LANDSCAPE = None
     print("Paysage OSM chargé : " + (", ".join(f"{k} {v}" for k, v in LANDSCAPE.counts.items()) if LANDSCAPE
                                      else "non disponible"), flush=True)
+    try:
+        POIS = None if args.no_landscape else load_pois(pbf_path, places_path.parent)
+    except Exception as e:  # noqa: BLE001 : facultatif
+        print(f"! points d'intérêt ignorés ({type(e).__name__}: {e})", file=sys.stderr)
+        POIS = None
     gh = GraphHopper(args.gh)
     if not gh.info().get("elevation") and not args.allow_no_elevation:
         print("Le serveur GraphHopper n'a pas de données d'altitude : D+ et durées seraient faux.\n"

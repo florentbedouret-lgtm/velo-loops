@@ -208,7 +208,7 @@ def check(data: Path, land, bld_tree, out_md: Path, out_json: Path):
     print("\n".join(L), flush=True)
 
 
-def apply(data: Path, land, bld_tree, method: str):
+def apply(data: Path, land, bld_tree, method: str, pois=None):
     files = sorted((data / "starts").glob("*.json"))
     n = 0
     compares = {}
@@ -225,6 +225,8 @@ def apply(data: Path, land, bld_tree, method: str):
                                          "forest": round(float(c[2]), 3), "countryside": round(float(c[3]), 3)}
             o["scenery"]["landcover_method"] = method + "+mer250_front50+riv150_front60"
             o["scenery"]["landcover_seq"] = g.landcover_seq(cls)
+            o["scenery"]["protected_seq"] = "".join("p" if x else "-" for x in g.protected_mask(land.trees, pts))
+            g.enrich_option(o, pois)                           # eau, cafés hors ville, gares ; noms des cols
             o["exit_city_km"] = g.exit_city_km(np.where(mask, 0, 3), o["distance_km"])   # sortie de ville : bâti seul
             n += 1
         f.write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
@@ -236,6 +238,8 @@ def apply(data: Path, land, bld_tree, method: str):
             e["compare"] = compares[e["id"]]
     idx_path.write_text(json.dumps(idx, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"Répartition recalculée ({method}) : {n} boucles dans {len(files)} départs ; index mis à jour", flush=True)
+    print(f"Points d'intérêt : {sum(len(o.get('pois') or []) for f in files for o in json.loads(f.read_text(encoding='utf-8'))['options'])} "
+          "au total", flush=True)
 
 
 def main() -> int:
@@ -269,7 +273,7 @@ def main() -> int:
         with open(args.out_md, "a", encoding="utf-8") as fh:
             fh.write(f"\nBâtiments chargés : {nb} ({args.bld_bbox or 'province'}), en {time.time() - t0:.0f} s.\n")
     if args.apply:
-        apply(data, land, bld_tree, args.apply)
+        apply(data, land, bld_tree, args.apply, g.load_pois(pbf, wd))
     return 0
 
 
