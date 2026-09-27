@@ -75,7 +75,12 @@ function profileSvg(o) {
   const climbs = ((o.terrain && o.terrain.climbs) || []).map((c, k) => [c, k]).sort((a, b) => a[0].start_km - b[0].start_km);
   const marks = climbs.map(([c, k], n) => {
     const d = Math.min(p.total, c.start_km + c.length_km);
-    const cx = x(d), cy = Math.max(8, y(p.alt[Math.min(p.alt.length - 1, Math.round(d / p.step))]) - 12);
+    // au-dessus du point le plus haut de la courbe sous toute la largeur du repère (le sommet dessiné peut être un peu
+    // décalé par rapport à la fin de montée calculée par le pipeline, qui lisse autrement)
+    const cx = x(d);
+    let top = Infinity;
+    p.alt.forEach((a, k) => { if (Math.abs(x(Math.min(k * p.step, p.total)) - cx) <= 11) top = Math.min(top, y(a)); });
+    const cy = Math.max(8, (top === Infinity ? y(p.alt[Math.min(p.alt.length - 1, Math.round(d / p.step))]) : top) - 11);
     return `<g class="pf-mk" data-hl="climb:${k}" role="button" tabindex="0" style="cursor:pointer">` +
       `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7" fill="#FFFFFF" stroke="#625D55"/>` +
       `<text x="${cx.toFixed(1)}" y="${(cy + 3.2).toFixed(1)}" font-size="9" text-anchor="middle" fill="#24221F" ` +
