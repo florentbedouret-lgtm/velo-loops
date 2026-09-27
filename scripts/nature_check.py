@@ -103,7 +103,7 @@ def green_candidates(gh, start, level, profile, duration_h, entry):
     """Candidats « vers le vert » valides (mêmes filtres que fit_and_sample) et raisons de rejet."""
     lon, lat = start["lon"], start["lat"]
     target_s = duration_h * 3600.0
-    flat_ms = g.speed_from_power(g.LEVELS[level]["watts"], 0.0) * g.REAL_WORLD_FACTOR
+    flat_ms = g.speed_from_power(g.level_watts(level, duration_h), 0.0) * g.REAL_WORLD_FACTOR
     dist_km = 0.8 * flat_ms * target_s / 1000.0
     theta = g.bearing(lon, lat, entry[0], entry[1])
     out, why = [], Counter()

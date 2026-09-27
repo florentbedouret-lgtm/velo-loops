@@ -1371,9 +1371,21 @@
       h.hidden = !h.hidden;
       b.setAttribute('aria-expanded', String(!h.hidden));
     }
-    const PACE_KMH = { facile: 22, modere: 25, soutenu: 27 };   // vitesse sur le plat du modèle (110 / 150 / 190 W, 85 kg)
+    // allures = FTP (W/kg) et part de FTP tenue, comme scripts/generate_loops.py (LEVELS, level_watts, speed_from_power) :
+    // vitesse EN ROULANT sur le plat, seul, sans vent (le temps estimé retranche en plus arrêts et prudence)
+    const PACE = { facile: [2.3, 0.65], modere: [3.0, 0.70], soutenu: [3.8, 0.75] };
+    function flatKmh(watts) {                              // même physique que le pipeline : 85 kg, CdA 0,40, Crr 0,005
+      const target = watts * 0.975, need = v => 0.5 * 1.2 * 0.40 * v ** 3 + 85 * 9.81 * 0.005 * v;
+      let lo = 0.3, hi = 25;
+      for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (need(m) < target) lo = m; else hi = m; }
+      return lo * 3.6;
+    }
     function updatePaceHint() {
-      document.getElementById('paceHint').textContent = t('pace_hint', { v: PACE_KMH[levelSel.value] || '' });
+      const p = PACE[levelSel.value];
+      if (!p) return;
+      const w = p[0] * 75 * (p[1] - (Number(durSel.value) >= 3 ? 0.05 : 0));
+      document.getElementById('paceHint').textContent =
+        t('pace_hint', { f: dec(p[0].toFixed(1)), v: Math.round(flatKmh(w)) });
     }
 
     // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)

@@ -31,6 +31,15 @@ import requests
 # --------------------------------------------------------------------------- constantes modèle
 # Valeurs par défaut du POC ; à remplacer plus tard par poids / vélo / watts réels de l'utilisateur.
 TOTAL_MASS_KG = 85.0          # cycliste + vélo + équipement
+RIDER_KG = 75.0               # cycliste seul : puissance = FTP (W/kg) × RIDER_KG × part de FTP tenue
+LONG_RIDE_H = 3.0             # à partir de 3 h, on tient 5 points de FTP en moins (on ne tient pas 75 % pendant 4 h)
+LONG_RIDE_DROP = 0.05
+
+
+def level_watts(level: str, duration_h: float) -> float:
+    """Puissance moyenne tenue sur la sortie (W) pour une allure et une durée."""
+    lv = LEVELS[level]
+    return lv["ftp_wkg"] * RIDER_KG * (lv["intensity"] - (LONG_RIDE_DROP if duration_h >= LONG_RIDE_H else 0.0))
 CDA = 0.40                    # m² (position mains sur les cocottes)
 CRR = 0.005                   # résistance au roulement, route goudronnée
 DRIVETRAIN_EFF = 0.975
@@ -40,9 +49,12 @@ DESCENT_CAP_MS = 13.0         # ~47 km/h : on ne suppose pas de descentes plus r
 REAL_WORLD_FACTOR = 0.88      # arrêts, virages, prudence : à calibrer avec les retours utilisateurs
 
 LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTERNE uniquement
-    "facile": {"watts": 110, "label": "tranquille", "profiles": ["calm"]},
-    "modere": {"watts": 150, "label": "modéré", "profiles": ["calm", "sport"]},
-    "soutenu": {"watts": 190, "label": "sportif", "profiles": ["sport"]},
+    # allures définies par la FTP (W/kg, tableau de profil de puissance de Coggan) et la part de FTP tenue sur la sortie
+    # (décision de Florent, 27/09/2026) : 2,3 (« Untrained / Fair ») à 65 %, 3,0 (« Fair / Moderate ») à 70 %,
+    # 3,8 (« Good », cat. 3) à 75 %, pour un cycliste de RIDER_KG ; voir level_watts()
+    "facile": {"ftp_wkg": 2.3, "intensity": 0.65, "label": "tranquille", "profiles": ["calm"]},
+    "modere": {"ftp_wkg": 3.0, "intensity": 0.70, "label": "modéré", "profiles": ["calm", "sport"]},
+    "soutenu": {"ftp_wkg": 3.8, "intensity": 0.75, "label": "sportif", "profiles": ["sport"]},
 }
 
 # Candidats testés pour chaque combinaison : (seed, cap souhaité ou None). Les 8 caps permettent de trouver
@@ -757,7 +769,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     shares["main_roads_by_urban"] = {
         u: sum(m for (rc, ud), m in joint.items() if rc in ("primary", "trunk", "secondary") and ud == u) / total
         for u in ("city", "residential", "rural")}
-    watts = LEVELS[level]["watts"]
+    watts = level_watts(level, duration_h)
     ds, prof = elevation_profile(coords, cum)
     ascend, descend = gain_loss(prof)
     n_signals = SIGNALS.count_along(coords, cum) if SIGNALS is not None else None
@@ -837,7 +849,7 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
 def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h: float, candidates, log):
     """Retourne (candidats valides, compteur des raisons de rejet)."""
     lon, lat = start["lon"], start["lat"]
-    watts = LEVELS[level]["watts"]
+    watts = level_watts(level, duration_h)
     target_s = duration_h * 3600.0
     rejects = {"pas de boucle": 0, "durée": 0, "tronçons répétés": 0, "demi-tours": 0, "non goudronné": 0}
     flat_ms = speed_from_power(watts, 0.0) * REAL_WORLD_FACTOR
@@ -1195,7 +1207,7 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "7"   # 7 : relief dans la note du sportif, options secondaires sans doublon d'allure (O-18, 26/09/2026)
+GENERATOR_VERSION = "8"   # 8 : allures définies par la FTP (2,3 / 3,0 / 3,8 W/kg), moins d'intensité dès 3 h (27/09/2026)
 
 
 def compare_block(options: list) -> dict:
@@ -1251,7 +1263,8 @@ def params_hash(config_dir: str = "config") -> str:
               "flow_overlap": FLOW_OVERLAP_FACTOR, "climb": [CLIMB_LEVELS, CLIMB_CANDIDATES, CLIMB_MODEL],
               "tol": TIME_TOLERANCE, "overlap": MAX_OVERLAP, "unpaved": MAX_UNPAVED, "uturns": MAX_UTURNS,
               "signal": [SIGNAL_DELAY_S, SIGNAL_RADIUS_M, SIGNAL_CLUSTER_M, LIGHTS_PER_KM_ZERO_SCORE],
-              "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS],
+              "physics": [TOTAL_MASS_KG, CDA, CRR, DRIVETRAIN_EFF, REAL_WORLD_FACTOR, DESCENT_CAP_MS,
+                          RIDER_KG, LONG_RIDE_H, LONG_RIDE_DROP],
               "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M],
               **({"relief": [RELIEF_WEIGHTS, RELIEF_FULL_M_PER_KM]} if RELIEF_WEIGHTS else {}),
               "level_dup": [LEVEL_DUP_SIM, "same_as"]}
