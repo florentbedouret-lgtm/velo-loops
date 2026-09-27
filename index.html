@@ -786,6 +786,7 @@
       });
       map.on('mouseenter', 'starts-pts', () => { map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'starts-pts', () => { map.getCanvas().style.cursor = ''; });
+      map.on('moveend', placeAltLabels);                  // étiquettes des autres boucles : recalculées après chaque déplacement
       map.on('mouseenter', 'routes-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'routes-hit', () => { map.getCanvas().style.cursor = ''; });
       const b = coverageBox(0.02);
@@ -893,7 +894,7 @@
         sheetBody.textContent = t('load_error', { s: res.status });
         startData = null; shown = []; sheetFoot.hidden = true; updatePill(); setAdv(false);
         map.getSource('routes').setData(EMPTY);
-        altMarkers.forEach(m => m.remove()); altMarkers = [];
+        altMarkers.forEach(m => m.marker.remove()); altMarkers = [];
         return;
       }
       startData = await res.json();
@@ -925,7 +926,7 @@
         });
         map.getSource('routes').setData(EMPTY);
         map.getSource('cursor').setData(EMPTY);
-        altMarkers.forEach(m => m.remove()); altMarkers = [];
+        altMarkers.forEach(m => m.marker.remove()); altMarkers = [];
         clearHighlight();
         return;
       }
@@ -1194,33 +1195,53 @@
       fitRoute();
     }
 
-    // étiquette « Variante · 41,6 km » posée sur chaque autre boucle, au point le plus éloigné de la boucle affichée
-    // (là où on la distingue le mieux) ; la toucher échange les deux boucles
+    // étiquette « Moins de relief · 45,3 km » sur chaque autre boucle ; la toucher échange les deux boucles.
+    // Placement calculé à l'écran après chaque cadrage (remarque de Florent, 27/09/2026 : l'étiquette recouvrait la boucle
+    // recommandée) : parmi les points de l'autre boucle, on garde celui où le rectangle de l'étiquette, posé à droite ou
+    // à gauche du point, reste le plus loin de la boucle affichée et du départ, dans la partie visible de la carte.
     let altMarkers = [];
     function altLabels() {
-      altMarkers.forEach(m => m.remove());
+      altMarkers.forEach(m => m.marker.remove());
       altMarkers = [];
-      const main = shown[current].coords.filter((_, j) => j % 5 === 0);
-      // cadre commun des boucles : l'étiquette évite le bas (crédits, panneau) et la droite (elle s'étend vers la droite)
-      const all = shown.flatMap(x => x.coords);
-      const [x0, x1] = [Math.min(...all.map(c => c[0])), Math.max(...all.map(c => c[0]))];
-      const [y0, y1] = [Math.min(...all.map(c => c[1])), Math.max(...all.map(c => c[1]))];
-      const ok = c => c[1] > y0 + 0.2 * (y1 - y0) && c[0] < x1 - 0.35 * (x1 - x0);
       shown.forEach((x, k) => {
         if (k === current) return;
-        let best = x.coords[Math.floor(x.coords.length / 2)], bestD = -1;
-        for (let j = 0; j < x.coords.length; j += 3) {
-          const c = x.coords[j];
-          if (!ok(c)) continue;
-          let d = Infinity;
-          for (const m of main) d = Math.min(d, (m[0] - c[0]) ** 2 + (m[1] - c[1]) ** 2);
-          if (d > bestD) { bestD = d; best = c; }
-        }
         const el = document.createElement('div');
         el.className = 'mk-alt';
         el.textContent = optName(x) + ' · ' + km(x.distance_km) + ' km';
         el.onclick = e => { e.stopPropagation(); select(k); };
-        altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] }).setLngLat([best[0], best[1]]).addTo(map));
+        const c = x.coords[Math.floor(x.coords.length / 2)];
+        altMarkers.push({ x, marker: new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([c[0], c[1]]).addTo(map) });
+      });
+      placeAltLabels();
+    }
+    function placeAltLabels() {
+      if (!altMarkers.length || !shown[current]) return;
+      const cv = map.getCanvas().getBoundingClientRect(), W = cv.width, H = cv.height;
+      const top = (getComputedStyle(topCard).display !== 'none' ? topCard.getBoundingClientRect().bottom : 0) + 6;
+      const bottom = H - (sheet.hidden ? 0 : sheet.getBoundingClientRect().height) - 40;   // au-dessus du panneau et des crédits
+      const avoid = shown[current].coords.filter((_, j) => j % 2 === 0).map(c => map.project([c[0], c[1]]));
+      if (startData) avoid.push(map.project([startData.start.lon, startData.start.lat]));
+      const taken = [];                                      // étiquettes déjà posées (plusieurs autres boucles)
+      const gap = (r, q) => Math.hypot(Math.max(r[0] - q.x, 0, q.x - r[2]), Math.max(r[1] - q.y, 0, q.y - r[3]));
+      altMarkers.forEach(({ x, marker }) => {
+        const el = marker.getElement(), w = el.offsetWidth || 160, h = el.offsetHeight || 24;
+        let best = null;
+        for (let j = 0; j < x.coords.length; j += 2) {
+          const q = map.project([x.coords[j][0], x.coords[j][1]]);
+          for (const side of [1, -1]) {                      // étiquette à droite du point, ou à gauche
+            const x0 = side > 0 ? q.x + 8 : q.x - 8 - w;
+            const r = [x0, q.y - h / 2, x0 + w, q.y + h / 2];
+            if (r[0] < 6 || r[2] > W - 56 || r[1] < top || r[3] > bottom) continue;   // hors de la carte visible (56 : bouton de position)
+            let d = Infinity;
+            for (const m of avoid) { d = Math.min(d, gap(r, m)); if (d < (best ? best.d : 0)) break; }
+            for (const t of taken) d = Math.min(d, Math.max(t[0] - r[2], r[0] - t[2], t[1] - r[3], r[1] - t[3], 0));
+            if (!best || d > best.d) best = { d, c: x.coords[j], off: [side * (8 + w / 2), 0], r };
+          }
+        }
+        if (!best) { el.style.visibility = 'hidden'; return; }   // aucune place : pas d'étiquette plutôt qu'une étiquette gênante
+        el.style.visibility = '';
+        marker.setLngLat([best.c[0], best.c[1]]).setOffset(best.off);
+        taken.push(best.r);
       });
     }
 
