@@ -422,11 +422,13 @@ def protected_mask(trees, pts):
 # Panel d'utilisateurs : points d'eau, cafés et gares de retour (« échappatoires ») ; noms des cols. Ne dépend que du
 # tracé et d'OSM : calculé par le générateur ET par le mode landcover (sans GraphHopper).
 POI_WATER_DEG = 0.0006        # ~50 m du tracé : fontaine d'eau potable
+POI_OUT_OF_TOWN = ("w", "c")  # eau et cafés : seulement hors de la ville (Barcelone a une fontaine presque à chaque rue ;
+#                               28/09/2026, les 12 points d'eau d'une boucle de Gràcia tombaient tous dans les 7 premiers km)
 POI_CAFE_DEG = 0.0006         # ~50 m : café ou boulangerie, seulement hors de la ville (en ville, il y en a partout)
 POI_STATION_DEG = 0.0036      # ~300 m : gare, pour rentrer en train en cas de pépin
 POI_PASS_DEG = 0.0024         # ~200 m du sommet d'une montée : col nommé
 POI_PEAK_DEG = 0.003          # ~250 m : sinon, sommet nommé
-POI_RULES = {"w": (POI_WATER_DEG, 0.5, 12), "c": (POI_CAFE_DEG, 1.0, 10), "g": (POI_STATION_DEG, 2.0, 6)}   # (distance,
+POI_RULES = {"w": (POI_WATER_DEG, 2.0, 12), "c": (POI_CAFE_DEG, 1.0, 10), "g": (POI_STATION_DEG, 2.0, 6)}   # (distance,
 #                                                                               écart mini en km, nombre maxi) par type
 
 
@@ -488,8 +490,8 @@ def enrich_option(o: dict, pois) -> dict:
                        key=lambda x: x[0])
         kept, last, names = [], -1e9, set()
         for km, (pt, name) in found:
-            if kind == "c" and seq and seq[min(len(seq) - 1, int(km / dist * len(seq)))] == "v":
-                continue                                  # café en ville : sans intérêt comme échappatoire
+            if kind in POI_OUT_OF_TOWN and seq and seq[min(len(seq) - 1, int(km / dist * len(seq)))] == "v":
+                continue                                  # en ville il y en a partout : sans intérêt comme échappatoire
             if km - last < gap or (kind == "g" and name in names):
                 continue
             kept.append({"t": kind, "km": round(km, 1), "lon": round(pt.x, 5), "lat": round(pt.y, 5),
