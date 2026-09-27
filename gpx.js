@@ -1,15 +1,11 @@
-const GPX_ATTRIBUTION = '© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)';
-const GPX_LABELS = {
-  equilibre: 'équilibrée', moins_de_relief: 'moins de relief',
-  plus_de_relief: 'plus de relief', variante: 'variante'
-};
+// textes dans la langue choisie (i18n.js) : nom de la trace, description, attribution
 
 const xmlEsc = s => String(s).replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
 function buildGpx(start, o, levelLabel) {
   const title = start.name + ' · ' + (levelLabel || o.level) + ' · ' +
-    (GPX_LABELS[o.label] || o.label) + ' · ' + Math.round(o.distance_km) + ' km';
+    (I18N['opt_' + o.label] ? t('opt_' + o.label).toLowerCase() : o.label) + ' · ' + Math.round(o.distance_km) + ' km';
   const pts = o.coords.map(c =>
     '      <trkpt lat="' + c[1].toFixed(6) + '" lon="' + c[0].toFixed(6) + '">' +
     (c.length > 2 ? '<ele>' + c[2].toFixed(1) + '</ele>' : '') + '</trkpt>').join('\n');
@@ -17,7 +13,7 @@ function buildGpx(start, o, levelLabel) {
     '<gpx version="1.1" creator="Oyan" xmlns="http://www.topografix.com/GPX/1/1">\n' +
     '  <metadata>\n' +
     '    <name>' + xmlEsc(title) + '</name>\n' +
-    '    <desc>' + xmlEsc('Boucle générée par Oyan. ' + GPX_ATTRIBUTION) + '</desc>\n' +
+    '    <desc>' + xmlEsc(t('gpx_desc') + ' ' + t('gpx_attr')) + '</desc>\n' +
     '    <copyright author="Contributeurs OpenStreetMap">\n' +
     '      <year>' + new Date().getFullYear() + '</year>\n' +
     '      <license>https://opendatacommons.org/licenses/odbl/</license>\n' +

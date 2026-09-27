@@ -18,11 +18,20 @@
     b, strong { font-weight: var(--fw-medium); }
     a { color: var(--color-text); }
     small { color: var(--color-text-2); }
-    .back { display: inline-block; margin-bottom: 16px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .langs a { font-family: var(--font-mono); font-size: 12px; margin-left: 10px; color: var(--color-text-2); }
+    .langs a[aria-current=true] { color: var(--color-text); text-decoration: none; }
+    .note { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 8px 12px; }
+    section[lang] { display: none; }
+    section.on { display: block; }
   </style>
 </head>
 <body>
-  <a class="back" href="index.html">← Retour à l'application</a>
+  <!-- Version française = version de référence. Traductions indicatives (27/09/2026), à faire relire par un juriste. -->
+  <div class="top"><a class="back" href="index.html" id="back">← Retour à l'application</a>
+    <span class="langs" id="langs"><a href="?lang=ca" data-l="ca">CA</a><a href="?lang=es" data-l="es">ES</a><a href="?lang=fr" data-l="fr">FR</a><a href="?lang=en" data-l="en">EN</a></span></div>
+
+  <section lang="fr">
   <h1>Mentions légales & confidentialité</h1>
   <p><em>Oyan</em> (dépôt de code « velo-loops ») est un projet personnel, gratuit et sans but commercial, en cours de développement (POC). Cette
   page résume ce qu'il faut savoir avant d'utiliser le site.</p>
@@ -50,6 +59,7 @@
     <li><strong>Retours après sortie</strong> (note, temps réel, etc.) : enregistrés uniquement dans le stockage local
     de votre navigateur (<code>localStorage</code>), jamais envoyés nulle part. Vous pouvez les exporter ou les
     effacer à tout moment depuis l'application.</li>
+    <li><strong>Langue choisie</strong> : mémorisée dans le stockage local de votre navigateur, jamais envoyée.</li>
     <li>Aucun compte utilisateur, aucun cookie de suivi, aucun outil de statistiques ou de publicité.</li>
   </ul>
 
@@ -63,6 +73,160 @@
     <li>Recherche d'adresse : <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a> (Komoot).</li>
   </ul>
 
-  <p><small>Dernière mise à jour : 25 septembre 2026.</small></p>
+  <p><small>Dernière mise à jour : 27 septembre 2026.</small></p>
+  </section>
+
+  <section lang="en">
+  <p class="note"><small>Indicative translation. The French version is the reference version.</small></p>
+  <h1>Legal notice & privacy</h1>
+  <p><em>Oyan</em> (code repository “velo-loops”) is a personal, free, non-commercial project under development (proof of
+  concept). This page sums up what you should know before using the site.</p>
+
+  <h2>Who publishes this site</h2>
+  <p>Site published by <strong>florentbedouret-lgtm</strong> (pseudonym). Contact: through the
+  <a href="https://github.com/florentbedouret-lgtm/velo-loops/issues" target="_blank" rel="noopener">GitHub repository issues</a>.</p>
+  <p>Hosting: GitHub Pages (GitHub, Inc., 88 Colin P. Kelly Jr. St, San Francisco, CA 94107, United States).</p>
+
+  <h2>Responsibility for the routes</h2>
+  <p>The suggested loops are <strong>generated automatically</strong> from OpenStreetMap data and a calculation model
+  (GraphHopper routing, physical speed model). They have not been checked one by one on the ground: a route may be closed,
+  dangerous, wrongly classified in OpenStreetMap or may have changed since it was calculated.</p>
+  <p><strong>Before and during your ride, check for yourself</strong> the actual condition of the road, the signage, the
+  traffic, the weather and your own level. You use these routes at your own risk.</p>
+
+  <h2>Personal data</h2>
+  <p>The site deliberately keeps the personal data it uses to a minimum:</p>
+  <ul>
+    <li><strong>Location (geolocation or typed address)</strong>: used only in your browser to find the nearest starting
+    point. It is never sent to a server or stored by the site.</li>
+    <li><strong>Address search</strong>: the text you type is sent to <a href="https://photon.komoot.io" target="_blank"
+    rel="noopener">Photon</a>, a public service run by Komoot, only when you start a search. See Komoot's privacy policy
+    for details about this third-party service.</li>
+    <li><strong>Post-ride feedback</strong> (rating, actual time, etc.): saved only in your browser's local storage
+    (<code>localStorage</code>) and never sent anywhere. You can export or delete it at any time from the app.</li>
+    <li><strong>Chosen language</strong>: remembered in your browser's local storage, never sent.</li>
+    <li>No user account, no tracking cookie, no analytics or advertising tool.</li>
+  </ul>
+
+  <h2>Data attribution</h2>
+  <ul>
+    <li>Maps and routes: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
+    contributors (ODbL licence).</li>
+    <li>Loop calculation: <a href="https://www.graphhopper.com/" target="_blank" rel="noopener">GraphHopper</a> (Apache 2.0 licence).</li>
+    <li>Base map: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.</li>
+    <li>Address search: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a> (Komoot).</li>
+  </ul>
+
+  <p><small>Last updated: 27 September 2026.</small></p>
+  </section>
+
+  <section lang="es">
+  <p class="note"><small>Traducción orientativa. La versión francesa es la versión de referencia.</small></p>
+  <h1>Aviso legal y privacidad</h1>
+  <p><em>Oyan</em> (repositorio de código «velo-loops») es un proyecto personal, gratuito y sin ánimo de lucro, en
+  desarrollo (prueba de concepto). Esta página resume lo que conviene saber antes de usar el sitio.</p>
+
+  <h2>Quién publica este sitio</h2>
+  <p>Sitio publicado por <strong>florentbedouret-lgtm</strong> (seudónimo). Contacto: a través de las
+  <a href="https://github.com/florentbedouret-lgtm/velo-loops/issues" target="_blank" rel="noopener">issues del repositorio de GitHub</a>.</p>
+  <p>Alojamiento: GitHub Pages (GitHub, Inc., 88 Colin P. Kelly Jr. St, San Francisco, CA 94107, Estados Unidos).</p>
+
+  <h2>Responsabilidad sobre las rutas</h2>
+  <p>Las rutas propuestas se <strong>generan automáticamente</strong> a partir de datos de OpenStreetMap y de un modelo de
+  cálculo (enrutamiento GraphHopper, modelo físico de velocidad). No se han comprobado una a una sobre el terreno: un
+  recorrido puede estar cortado, ser peligroso, estar mal clasificado en OpenStreetMap o haber cambiado desde el cálculo.</p>
+  <p><strong>Antes y durante su salida, compruebe usted mismo</strong> el estado real de la carretera, la señalización, el
+  tráfico, la meteorología y su propio nivel. El uso de estas rutas es bajo su exclusiva responsabilidad.</p>
+
+  <h2>Datos personales</h2>
+  <p>El sitio reduce deliberadamente al mínimo los datos personales que utiliza:</p>
+  <ul>
+    <li><strong>Ubicación (geolocalización o dirección escrita)</strong>: se usa únicamente en su navegador para encontrar
+    el punto de salida más cercano. Nunca se envía a un servidor ni la guarda el sitio.</li>
+    <li><strong>Búsqueda de direcciones</strong>: el texto escrito se envía a <a href="https://photon.komoot.io"
+    target="_blank" rel="noopener">Photon</a>, un servicio público de Komoot, solo en el momento en que lanza una
+    búsqueda. Consulte la política de privacidad de Komoot para conocer el detalle de este servicio de terceros.</li>
+    <li><strong>Opiniones tras la salida</strong> (nota, tiempo real, etc.): se guardan únicamente en el almacenamiento local
+    de su navegador (<code>localStorage</code>) y nunca se envían a ningún sitio. Puede exportarlas o borrarlas en cualquier
+    momento desde la aplicación.</li>
+    <li><strong>Idioma elegido</strong>: se recuerda en el almacenamiento local de su navegador, nunca se envía.</li>
+    <li>Ninguna cuenta de usuario, ninguna cookie de seguimiento, ninguna herramienta de estadísticas o de publicidad.</li>
+  </ul>
+
+  <h2>Atribución de los datos</h2>
+  <ul>
+    <li>Mapas y rutas: © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank"
+    rel="noopener">OpenStreetMap</a> (licencia ODbL).</li>
+    <li>Cálculo de las rutas: <a href="https://www.graphhopper.com/" target="_blank" rel="noopener">GraphHopper</a> (licencia Apache 2.0).</li>
+    <li>Mapa base: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.</li>
+    <li>Búsqueda de direcciones: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a> (Komoot).</li>
+  </ul>
+
+  <p><small>Última actualización: 27 de septiembre de 2026.</small></p>
+  </section>
+
+  <section lang="ca">
+  <p class="note"><small>Traducció orientativa. La versió francesa és la versió de referència.</small></p>
+  <h1>Avís legal i privadesa</h1>
+  <p><em>Oyan</em> (repositori de codi «velo-loops») és un projecte personal, gratuït i sense ànim de lucre, en
+  desenvolupament (prova de concepte). Aquesta pàgina resumeix el que cal saber abans de fer servir el lloc.</p>
+
+  <h2>Qui publica aquest lloc</h2>
+  <p>Lloc publicat per <strong>florentbedouret-lgtm</strong> (pseudònim). Contacte: a través de les
+  <a href="https://github.com/florentbedouret-lgtm/velo-loops/issues" target="_blank" rel="noopener">issues del repositori de GitHub</a>.</p>
+  <p>Allotjament: GitHub Pages (GitHub, Inc., 88 Colin P. Kelly Jr. St, San Francisco, CA 94107, Estats Units).</p>
+
+  <h2>Responsabilitat sobre les rutes</h2>
+  <p>Les rutes proposades es <strong>generen automàticament</strong> a partir de dades d'OpenStreetMap i d'un model de
+  càlcul (encaminament GraphHopper, model físic de velocitat). No s'han comprovat una per una sobre el terreny: un
+  recorregut pot estar tallat, ser perillós, estar mal classificat a OpenStreetMap o haver canviat des del càlcul.</p>
+  <p><strong>Abans i durant la sortida, comproveu vosaltres mateixos</strong> l'estat real de la carretera, la
+  senyalització, el trànsit, la meteorologia i el vostre propi nivell. L'ús d'aquestes rutes és sota la vostra exclusiva
+  responsabilitat.</p>
+
+  <h2>Dades personals</h2>
+  <p>El lloc redueix deliberadament al mínim les dades personals que utilitza:</p>
+  <ul>
+    <li><strong>Ubicació (geolocalització o adreça escrita)</strong>: s'utilitza només al vostre navegador per trobar el
+    punt de sortida més proper. Mai no s'envia a cap servidor ni el lloc la desa.</li>
+    <li><strong>Cerca d'adreces</strong>: el text escrit s'envia a <a href="https://photon.komoot.io" target="_blank"
+    rel="noopener">Photon</a>, un servei públic de Komoot, només en el moment en què llanceu una cerca. Consulteu la
+    política de privadesa de Komoot per conèixer el detall d'aquest servei de tercers.</li>
+    <li><strong>Opinions després de la sortida</strong> (nota, temps real, etc.): es desen només a l'emmagatzematge local
+    del vostre navegador (<code>localStorage</code>) i mai no s'envien enlloc. Les podeu exportar o esborrar en qualsevol
+    moment des de l'aplicació.</li>
+    <li><strong>Idioma triat</strong>: es recorda a l'emmagatzematge local del vostre navegador, mai no s'envia.</li>
+    <li>Cap compte d'usuari, cap galeta de seguiment, cap eina d'estadístiques ni de publicitat.</li>
+  </ul>
+
+  <h2>Atribució de les dades</h2>
+  <ul>
+    <li>Mapes i rutes: © col·laboradors d'<a href="https://www.openstreetmap.org/copyright" target="_blank"
+    rel="noopener">OpenStreetMap</a> (llicència ODbL).</li>
+    <li>Càlcul de les rutes: <a href="https://www.graphhopper.com/" target="_blank" rel="noopener">GraphHopper</a> (llicència Apache 2.0).</li>
+    <li>Mapa base: <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.</li>
+    <li>Cerca d'adreces: <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a> (Komoot).</li>
+  </ul>
+
+  <p><small>Darrera actualització: 27 de setembre de 2026.</small></p>
+  </section>
+
+  <script>
+    // langue : ?lang=xx, sinon celle choisie dans l'app (stockage local), sinon celle du navigateur, sinon anglais
+    (function () {
+      const L = ['fr', 'en', 'es', 'ca'];
+      const back = { fr: "← Retour à l'application", en: '← Back to the app', es: '← Volver a la aplicación', ca: "← Torna a l'aplicació" };
+      const titles = { fr: 'Mentions légales & confidentialité — Oyan', en: 'Legal notice & privacy — Oyan',
+                       es: 'Aviso legal y privacidad — Oyan', ca: 'Avís legal i privadesa — Oyan' };
+      let l = new URLSearchParams(location.search).get('lang');
+      if (!L.includes(l)) { try { l = localStorage.getItem('oyan-lang'); } catch (e) { l = null; } }
+      if (!L.includes(l)) l = (navigator.languages || [navigator.language || '']).map(x => String(x).slice(0, 2)).find(x => L.includes(x)) || 'en';
+      document.querySelectorAll('section[lang]').forEach(s => s.classList.toggle('on', s.lang === l));
+      document.querySelectorAll('#langs a').forEach(a => a.setAttribute('aria-current', String(a.dataset.l === l)));
+      document.documentElement.lang = l;
+      document.getElementById('back').textContent = back[l];
+      document.title = titles[l];
+    })();
+  </script>
 </body>
 </html>

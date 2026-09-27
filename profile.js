@@ -1,5 +1,5 @@
 const EARTH_KM = 6371;
-const pfKm = n => n.toFixed(1).replace('.', ',');
+const pfKm = n => dec(n.toFixed(1));   // séparateur décimal selon la langue (i18n.js)
 
 // distance cumulée, rééchantillonnage tous les 100 m, lissage sur 500 m
 // (même recette que le pipeline pour le D+)
@@ -79,12 +79,12 @@ function profileSvg(o) {
     i = j;
   }
   // touch-action pan-y : un glissement vertical fait défiler la page, un glissement horizontal déplace le curseur
-  return `<svg class="pf" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Profil altimétrique"
+  return `<svg class="pf" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${t('pf_aria')}"
     style="touch-action: pan-y; cursor: crosshair">
     <path d="${area}" fill="#A8522F" fill-opacity="0.15"/>
     <path d="${line}" fill="none" stroke="#A8522F" stroke-width="1.5" stroke-linejoin="round"/>
     <line x1="${mL}" y1="${H - mB}" x2="${W - mR}" y2="${H - mB}" stroke="#E6E2DB"/>
-    ${band ? '<g aria-label="Milieu traversé">' + band + '</g>' : ''}
+    ${band ? '<g aria-label="' + t('band_aria') + '">' + band + '</g>' : ''}
     <text x="${mL - 4}" y="${mT + 8}" text-anchor="end" ${txt}>${hi} m</text>
     <text x="${mL - 4}" y="${H - mB}" text-anchor="end" ${txt}>${lo} m</text>
     <text x="${mL}" y="${H - 6}" ${txt}>0</text>

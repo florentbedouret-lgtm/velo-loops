@@ -2,16 +2,11 @@
 const FB_KEY = 'velo-loops-retours';
 let fbSession = []; // secours si le navigateur bloque le stockage
 
-const FB_POS = [
-  ['lights', 'Peu de feux'], ['traffic', 'Peu de trafic'], ['city', 'Hors de la ville'],
-  ['cycleway', 'Pistes cyclables'], ['flow', 'Tracé fluide'], ['scenery', 'Paysage'],
-  ['surface', 'Bon revêtement']
-];
-const FB_NEG = [
-  ['lights', 'Trop de feux'], ['traffic', 'Trop de trafic'], ['city', 'Trop urbain'],
-  ['cycleway', 'Manque de pistes'], ['flow', 'Tracé confus, demi-tours'],
-  ['scenery', 'Paysage décevant'], ['surface', 'Mauvais revêtement']
-];
+// étiquettes dans la langue choisie (i18n.js : fbp_* ce qui était bien, fbn_* ce qui a gêné) ; les valeurs enregistrées
+// (lights, traffic…) ne changent pas avec la langue
+const FB_KEYS = ['lights', 'traffic', 'city', 'cycleway', 'flow', 'scenery', 'surface'];
+const FB_POS = () => FB_KEYS.map(k => [k, t('fbp_' + k)]);
+const FB_NEG = () => FB_KEYS.map(k => [k, t('fbn_' + k)]);
 
 document.head.insertAdjacentHTML('beforeend', '<style>' +
   '.fb label{display:block;margin:6px 0}' +
@@ -35,23 +30,24 @@ const fbChips = (name, items) => items.map(([k, label]) =>
   '<label class="chip"><input type="checkbox" name="' + name + '" value="' + k + '"> ' + label + '</label>').join('');
 
 function feedbackHtml(o) {
-  return '<details><summary>J\'ai roulé cette boucle : mon retour</summary>' +
+  const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return '<details><summary>' + e(t('fb_title')) + '</summary>' +
     '<div class="fb">' +
-    '<label>Note<select id="fb-rating"><option value="">Choisir</option>' +
+    '<label>' + e(t('fb_rating')) + '<select id="fb-rating"><option value="">' + e(t('fb_choose')) + '</option>' +
     [1, 2, 3, 4, 5].map(n => '<option value="' + n + '">' + '★'.repeat(n) + '</option>').join('') + '</select></label>' +
-    '<label>Temps en mouvement (min), comme sur ta montre<input id="fb-min" type="number" inputmode="numeric" min="1"></label>' +
-    '<label>Dénivelé positif réel (m), facultatif<input id="fb-asc" type="number" inputmode="numeric" min="0"></label>' +
-    '<label>Difficulté ressentie<select id="fb-diff"><option value="">Choisir</option>' +
-    '<option value="easy">Trop facile</option><option value="ok">Adaptée</option><option value="hard">Trop dure</option></select></label>' +
-    '<p><b>Ce qui était bien</b><br>' + fbChips('fb-pos', FB_POS) + '</p>' +
-    '<p><b>Ce qui a gêné</b><br>' + fbChips('fb-neg', FB_NEG) + '</p>' +
-    '<label>Commentaire, facultatif<input id="fb-comment" type="text" maxlength="200"></label>' +
-    '<button onclick="saveFeedback()">Enregistrer mon retour</button>' +
+    '<label>' + e(t('fb_min')) + '<input id="fb-min" type="number" inputmode="numeric" min="1"></label>' +
+    '<label>' + e(t('fb_asc')) + '<input id="fb-asc" type="number" inputmode="numeric" min="0"></label>' +
+    '<label>' + e(t('fb_diff')) + '<select id="fb-diff"><option value="">' + e(t('fb_choose')) + '</option>' +
+    '<option value="easy">' + e(t('fb_easy')) + '</option><option value="ok">' + e(t('fb_ok')) + '</option><option value="hard">' +
+    e(t('fb_hard')) + '</option></select></label>' +
+    '<p><b>' + e(t('fb_pos')) + '</b><br>' + fbChips('fb-pos', FB_POS()) + '</p>' +
+    '<p><b>' + e(t('fb_neg')) + '</b><br>' + fbChips('fb-neg', FB_NEG()) + '</p>' +
+    '<label>' + e(t('fb_comment')) + '<input id="fb-comment" type="text" maxlength="200"></label>' +
+    '<button onclick="saveFeedback()">' + e(t('fb_save')) + '</button>' +
     '<div id="fb-result"></div>' +
-    '<small>Retours sur cet appareil : <span id="fb-count">' + fbCount() + '</span>. ' +
-    'Ils ne sont pas envoyés : pense à les exporter.</small><br>' +
-    '<button class="sec" onclick="exportFeedback()">Exporter</button>' +
-    '<button class="sec" onclick="clearFeedback()">Tout effacer</button>' +
+    '<small>' + e(t('fb_count_pre')) + '<span id="fb-count">' + fbCount() + '</span>' + e(t('fb_count_post')) + '</small><br>' +
+    '<button class="sec" onclick="exportFeedback()">' + e(t('fb_export')) + '</button>' +
+    '<button class="sec" onclick="clearFeedback()">' + e(t('fb_clear')) + '</button>' +
     '</div></details>';
 }
 
@@ -65,7 +61,7 @@ function saveFeedback() {
   const rating = Number(val('fb-rating'));
   const minutes = Number(val('fb-min'));
   if (!rating || !minutes) {
-    out.textContent = 'Indique au moins la note et le temps en mouvement.';
+    out.textContent = t('fb_need');
     return;
   }
   const ascent = val('fb-asc') === '' ? null : Number(val('fb-asc'));
@@ -107,12 +103,11 @@ function saveFeedback() {
   if (!stored) fbSession.push(rec);
 
   const gap = (real, pred) =>
-    (real >= pred ? '+' : '−') + Math.abs(Math.round((real - pred) / pred * 100)) + ' %';
-  let msg = stored ? 'Merci, retour enregistré. ' : 'Stockage bloqué sur cet appareil : utilise Exporter. ';
-  msg += 'Temps : prévu ≈ ' + hm(rec.route.time_est_min) + ', réel ' + hm(minutes) +
-    ' (' + gap(minutes, rec.route.time_est_min) + ').';
+    (real >= pred ? '+' : '−') + pctStr(Math.abs(Math.round((real - pred) / pred * 100)));
+  let msg = stored ? t('fb_saved') : t('fb_blocked');
+  msg += t('fb_time', { p: hm(rec.route.time_est_min), r: hm(minutes), g: gap(minutes, rec.route.time_est_min) });
   if (ascent !== null && rec.route.ascend_m > 0) {
-    msg += ' D+ : prévu ' + rec.route.ascend_m + ' m, réel ' + ascent + ' m (' + gap(ascent, rec.route.ascend_m) + ').';
+    msg += t('fb_asc_res', { p: rec.route.ascend_m, r: ascent, g: gap(ascent, rec.route.ascend_m) });
   }
   out.textContent = msg;
   document.getElementById('fb-count').textContent = fbCount();
@@ -132,7 +127,7 @@ function exportFeedback() {
 }
 
 function clearFeedback() {
-  if (!confirm('Effacer tous les retours enregistrés sur cet appareil ?')) return;
+  if (!confirm(t('fb_confirm'))) return;
   try { localStorage.removeItem(FB_KEY); } catch (e) {}
   fbSession = [];
   document.getElementById('fb-count').textContent = '0';

@@ -61,6 +61,16 @@
     .round { width: 36px; height: 36px; border-radius: 18px; border: 0; padding: 0; background: var(--color-bg);
              display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
     #top.open #pill .round svg { transform: rotate(180deg); }
+    /* menu des langues (dans la barre des réglages, à côté du chevron) */
+    .lang-wrap { position: relative; flex: none; }
+    .lang-btn { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; height: 32px; padding: 0 8px 0 10px;
+                border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); color: var(--color-text);
+                display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .lang-menu { position: absolute; right: 0; top: 40px; z-index: 10; min-width: 150px; padding: 4px; background: var(--color-surface);
+                 border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 6px 24px rgba(36, 34, 31, .12); }
+    .lang-menu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 10px 12px; border: 0;
+                        border-radius: 8px; background: none; color: var(--color-text); cursor: pointer; }
+    .lang-menu button[aria-checked=true] { background: var(--color-bg); }
     #settings { display: none; padding: 0 16px 16px; max-height: calc(100dvh - 128px - 90px); overflow-y: auto; }
     #top.open #settings { display: block; }
     .k-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--color-text-2); margin: 16px 0 8px; }
@@ -186,30 +196,36 @@
       <svg width="26" height="26" viewBox="0 0 48 48" aria-hidden="true"><path d="M37.86 18.26 A15 15 0 1 1 29.74 10.14" fill="none" stroke="#24221F" stroke-width="5.5" stroke-linecap="round"/><circle cx="29.74" cy="10.14" r="4.5" fill="#A8522F"/></svg>
       <span class="word" aria-label="Oyan">yan</span>
       <span class="sum" id="pillSum"></span>
-      <button type="button" class="round" aria-label="Afficher ou masquer les réglages" tabindex="-1">
+      <div class="lang-wrap">
+        <button type="button" id="langBtn" class="lang-btn" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="lang">
+          <span id="langCur"></span><svg width="10" height="10" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="#24221F" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div id="langMenu" class="lang-menu" role="menu" hidden></div>
+      </div>
+      <button type="button" class="round" aria-label="Afficher ou masquer les réglages" data-i18n-aria="settings_toggle" tabindex="-1">
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4" fill="none" stroke="#24221F" stroke-width="1.6" stroke-linecap="round"/></svg>
       </button>
     </div>
     <div id="settings">
       <div id="search">
         <div class="field">
-          <button id="go" type="button" class="icon-btn" aria-label="Chercher l'adresse">
+          <button id="go" type="button" class="icon-btn" aria-label="Chercher l'adresse" data-i18n-aria="search_btn">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="#625D55" stroke-width="1.5"/><path d="M11 11l3.5 3.5" stroke="#625D55" stroke-width="1.5" stroke-linecap="round"/></svg>
           </button>
-          <input id="addr" type="search" placeholder="Adresse de départ" enterkeyhint="search" autocomplete="off" aria-label="Adresse de départ">
+          <input id="addr" type="search" placeholder="Adresse de départ" enterkeyhint="search" autocomplete="off" aria-label="Adresse de départ" data-i18n-ph="addr_ph" data-i18n-aria="addr_ph">
         </div>
-        <button id="me" class="icon-btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position">
+        <button id="me" class="icon-btn" type="button" title="Utiliser ma position" aria-label="Utiliser ma position" data-i18n-title="locate" data-i18n-aria="locate">
           <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5.5" fill="none" stroke="#24221F" stroke-width="1.5"/><circle cx="10" cy="10" r="2" fill="#24221F"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
       </div>
       <div id="results"></div>
-      <div class="k-label" id="levelLabel">ALLURE</div>
+      <div class="k-label" id="levelLabel" data-i18n="pace">ALLURE</div>
       <div class="seg" id="levelSeg" role="group" aria-labelledby="levelLabel"></div>
-      <div class="k-label" id="durLabel">DURÉE DE LA BOUCLE</div>
+      <div class="k-label" id="durLabel" data-i18n="duration">DURÉE DE LA BOUCLE</div>
       <div class="stepper" role="group" aria-labelledby="durLabel">
-        <button type="button" id="durMinus" aria-label="Durée plus courte">−</button>
+        <button type="button" id="durMinus" aria-label="Durée plus courte" data-i18n-aria="dur_minus">−</button>
         <div id="durVal" aria-live="polite"></div>
-        <button type="button" id="durPlus" aria-label="Durée plus longue">+</button>
+        <button type="button" id="durPlus" aria-label="Durée plus longue" data-i18n-aria="dur_plus">+</button>
       </div>
       <div id="totalApproach"></div>
       <!-- sélecteurs d'origine, masqués : ils gardent l'état (allure, durée) lu par le reste du code -->
@@ -218,15 +234,15 @@
       <div id="startRow">
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="#A8522F" stroke="#FFFFFF" stroke-width="2"/></svg>
         <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
-        <button type="button" id="change" aria-expanded="false" aria-controls="adv">Changer</button>
+        <button type="button" id="change" aria-expanded="false" aria-controls="adv" data-i18n="change">Changer</button>
       </div>
       <div id="adv" hidden>
-        <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off">
-        <select id="start" aria-label="Départ"></select>
+        <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off" data-i18n-ph="filter_ph" data-i18n-aria="filter_aria">
+        <select id="start" aria-label="Départ" data-i18n-aria="start_aria"></select>
       </div>
     </div>
   </div>
-  <button type="button" id="locate" aria-label="Utiliser ma position" title="Utiliser ma position">
+  <button type="button" id="locate" aria-label="Utiliser ma position" title="Utiliser ma position" data-i18n-aria="locate" data-i18n-title="locate">
     <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5.5" fill="none" stroke="#24221F" stroke-width="1.5"/><circle cx="10" cy="10" r="2" fill="#24221F"/><path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/></svg>
   </button>
   <div id="sheet" hidden data-state="low">
@@ -236,20 +252,16 @@
     </div>
     <div id="sheetBody"></div>
     <div id="sheetFoot">
-      <button type="button" class="btn btn-accent gpx" onclick="downloadGpx(startData.start, shown[current], indexData.levels[shown[current].level].label)">Télécharger le GPX</button>
+      <button type="button" class="btn btn-accent gpx" data-i18n="gpx" onclick="downloadGpx(startData.start, shown[current], t('lvl_' + shown[current].level))">Télécharger le GPX</button>
     </div>
   </div>
   <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+  <script src="i18n.js"></script>
   <script src="gpx.js"></script>
   <script src="profile.js"></script>
   <script src="feedback.js"></script>
   <script>
-    const LABELS = {
-      equilibre: 'Équilibrée',
-      moins_de_relief: 'Moins de relief',
-      plus_de_relief: 'Plus de relief',
-      variante: 'Variante'
-    };
+    const optLabel = l => I18N['opt_' + l] ? t('opt_' + l) : l;   // nom d'une option (équilibrée, variante…)
     const EMPTY = { type: 'FeatureCollection', features: [] };
     // couleurs de la carte, reprises de brand/oyan-tokens.css (MapLibre ne lit pas les variables CSS) ;
     // autre boucle = pointillé galet sur liseré blanc, sous la boucle choisie (maquette 5b)
@@ -387,7 +399,7 @@
     let marker = null;
     let indexData = null;
 
-    const km = n => n.toFixed(1).replace('.', ',');
+    const km = n => dec(n.toFixed(1));
     function hm(min) {
       const t = Math.round(min);
       return Math.floor(t / 60) + ' h ' + String(t % 60).padStart(2, '0');
@@ -398,29 +410,28 @@
 
     // ---------- nom d'un départ : « Commune · lieu » (commune OSM, champ municipality du pipeline, O-10.2) ;
     // sans commune (données plus anciennes) : « Ville la plus proche · lieu » pour les départs intermédiaires
+    // « (nord) », « (sud-est) »… : suffixes français ajoutés par le pipeline, traduits à l'affichage
+    const trName = n => String(n).replace(/\((nord|sud|est|ouest|nord-est|nord-ouest|sud-est|sud-ouest)\)$/, (x, d) => '(' + t('dir_' + d) + ')');
     function startLabel(s) {
       const m = s.municipality;
       if (m && s.kind === 'station') {                 // « Gare Calella » -> « Calella · Gare », « Gare Granollers Centre » -> « Granollers · Gare Centre »
         let rest = s.name.replace(/^Gare\s+/, '');
         if (fold(rest).startsWith(fold(m))) rest = rest.slice(m.length).replace(/^[\s\-–|]+/, '');
-        return m + ' · Gare' + (rest ? ' ' + rest : '');
+        return m + ' · ' + t('station') + (rest ? ' ' + trName(rest) : '');
       }
-      if (m) return s.name === m || fold(s.name).includes(fold(m)) ? s.name : m + ' · ' + s.name;
+      if (m) return s.name === m || fold(s.name).includes(fold(m)) ? trName(s.name) : m + ' · ' + trName(s.name);
       const near = /^Près de (.+)$/.exec(s.display_name || '');
-      return near ? near[1] + ' · ' + s.name : (s.display_name || s.name);
+      return near ? near[1] + ' · ' + trName(s.name) : trName(s.display_name || s.name);
     }
     const byName = new Intl.Collator('ca', { sensitivity: 'base', numeric: true }).compare;
 
     // ---------- gare : mention affichée à côté du nom du départ
     const stationNote = kind => kind === 'station'
-      ? ' <span class="badge">🚆 Gare : vérifie les conditions du transporteur.</span>' : '';
+      ? ' <span class="badge">' + esc(t('station_note')) + '</span>' : '';
 
     // ---------- pente : catégories qualitatives (jamais de pourcentage affiché)
-    function slopeCategory(pct) {
-      if (pct < 2.5) return 'Peu de côtes';
-      if (pct < 4) return 'Quelques côtes';
-      if (pct < 6) return 'Vallonné';
-      return 'Très vallonné';
+    function slopeCategory(pct) {                          // en minuscules : placée après une virgule
+      return t('slope_' + (pct < 2.5 ? 0 : pct < 4 ? 1 : pct < 6 ? 2 : 3));
     }
 
     // ---------- modèle d'approche (repli si le fichier est absent ou d'une version majeure inconnue)
@@ -465,13 +476,13 @@
     const photonLabel = p => [p.name, [p.street, p.housenumber].filter(Boolean).join(' '), p.postcode, p.city]
       .filter((v, i, a) => v && a.indexOf(v) === i).join(', ');
     async function geocode(q) {
-      const key = q.trim().toLowerCase();
+      const key = LANG + '|' + q.trim().toLowerCase();
       if (GEO.cache.has(key)) return GEO.cache.get(key);
       const wait = 1100 - (Date.now() - GEO.last);
       if (wait > 0) await new Promise(r => setTimeout(r, wait));
       GEO.last = Date.now();
       const bbox = coverageBox(0.3).map(v => v.toFixed(4)).join(',');
-      const res = await fetch(GEO.url + '?q=' + encodeURIComponent(q) + '&limit=5&lang=fr&bbox=' + bbox,
+      const res = await fetch(GEO.url + '?q=' + encodeURIComponent(q) + '&limit=5&lang=' + (LANG === 'fr' || LANG === 'en' ? LANG : 'default') + '&bbox=' + bbox,
         { signal: AbortSignal.timeout(8000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
@@ -490,14 +501,14 @@
 
     async function searchAddress() {
       const q = addr.value.trim();
-      if (q.length < 3) { resultsEl.textContent = 'Tape au moins 3 caractères.'; return; }
-      resultsEl.textContent = 'Recherche…';
+      if (q.length < 3) { resultsEl.textContent = t('search_min3'); return; }
+      resultsEl.textContent = t('searching');
       try {
         const items = await geocode(q);
-        if (!items.length) { resultsEl.textContent = 'Aucune adresse trouvée dans la zone couverte.'; return; }
+        if (!items.length) { resultsEl.textContent = t('no_addr'); return; }
         resultsEl.innerHTML = items.map((it, i) =>
           '<button type="button" data-i="' + i + '">' + esc(it.label) + '</button>').join('') +
-          '<small id="geoattr">Adresses : Photon (Komoot) · © contributeurs OpenStreetMap</small>';
+          '<small id="geoattr">' + esc(t('geo_attr')) + '</small>';
         resultsEl.onclick = e => {
           const b = e.target.closest('button');
           if (!b) return;
@@ -507,9 +518,16 @@
           setPosition(it.lon, it.lat);
         };
       } catch (err) {
-        resultsEl.textContent = 'Recherche d\'adresse indisponible pour l\'instant. Touche la carte ou utilise ta position.';
+        resultsEl.textContent = t('search_down');
       }
     }
+
+    // ---------- ligne « Départ : … » des réglages : le texte est produit par une fonction, rejouée au changement de langue
+    let whereFn = () => esc(t('where_hint')), whereAfter = null;
+    function setWhere(fn, after) { whereFn = fn; whereAfter = after || null; renderWhere(); }
+    function renderWhere() { whereEl.innerHTML = whereFn(); if (whereAfter) whereAfter(); }
+    const startLine = (s, sub) => esc(t('start_prefix')) + ' <b>' + esc(startLabel(s)) + '</b>' + stationNote(s.kind) +
+      (sub ? '<div class="w2">' + sub + '</div>' : '');
 
     // ---------- position de l'utilisateur -> départ le plus proche -> temps d'approche
     let approachMin = null; // temps d'approche connu pour le départ actuellement choisi (null si choisi dans la liste)
@@ -517,12 +535,11 @@
       if (userMarker) userMarker.remove();
       userMarker = new maplibregl.Marker({ element: dotEl('mk-user') }).setLngLat([lon, lat]).addTo(map);
       const { s, km } = nearestStart(lon, lat);
-      const name = esc(startLabel(s)) + stationNote(s.kind);
       pendingStart = s.id;
 
       if (!modelOk) {
         approachMin = null;
-        whereEl.innerHTML = 'Départ : <b>' + name + '</b><div class="w2">Temps d\'approche indisponible pour le moment.</div>';
+        setWhere(() => startLine(s, esc(t('approach_na'))));
         chooseStart(s.id);
         return;
       }
@@ -533,22 +550,22 @@
       const med = Math.round(km * z.detour_ratio_median / speed * 60);
       const hi = Math.round(km * z.detour_ratio_p90 / speed * 60);
       const portee = Math.round(DMAX_KM[zoneKey] * z.detour_ratio_median / speed * 60);
-      const range = zoneKey === 'rural' && hi > med + 3 ? ', jusqu\'à ≈ ' + hi + ' min' : '';
+      const range = () => (zoneKey === 'rural' && hi > med + 3 ? t('range', { hi }) : '');
       const nav = 'https://www.openstreetmap.org/directions?engine=fossgis_osrm_bike&route=' +
         lat.toFixed(5) + '%2C' + lon.toFixed(5) + '%3B' + s.lat.toFixed(5) + '%2C' + s.lon.toFixed(5);
       approachMin = med;
 
       if (med > 30) {
-        whereEl.innerHTML = '<span class="warn">Trop loin : le départ le plus proche est à ≈ ' + med + ' min à vélo' + range +
-          '.</span><br>Départ : <b>' + name + '</b><br><button type="button" class="btn" id="see">Voir quand même</button>' +
-          ' <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>';
-        document.getElementById('see').onclick = () => chooseStart(s.id);
+        setWhere(() => '<span class="warn">' + esc(t('too_far', { min: med, range: range() })) + '</span><br>' + startLine(s) +
+          '<br><button type="button" class="btn" id="see">' + esc(t('see_anyway')) + '</button>' +
+          ' <a href="' + nav + '" target="_blank" rel="noopener">' + esc(t('route')) + '</a>',
+          () => { document.getElementById('see').onclick = () => chooseStart(s.id); });
         map.fitBounds(new maplibregl.LngLatBounds([lon, lat], [s.lon, s.lat]), { padding: 60, duration: 500 });
         return;
       }
-      whereEl.innerHTML = 'Départ : <b>' + name + '</b><div class="w2">' +
-        (med > portee ? '<span class="warn">Un peu loin : </span>' : '') + '≈ ' + med + ' min à vélo pour le rejoindre' + range +
-        (med > portee ? ' · <a href="' + nav + '" target="_blank" rel="noopener">Itinéraire</a>' : '') + '</div>';
+      setWhere(() => startLine(s, (med > portee ? '<span class="warn">' + esc(t('bit_far')) + '</span>' : '') +
+        esc(t('approach', { min: med, range: range() })) +
+        (med > portee ? ' · <a href="' + nav + '" target="_blank" rel="noopener">' + esc(t('route')) + '</a>' : '')));
       chooseStart(s.id);
     }
     let pendingStart = null;
@@ -566,8 +583,7 @@
       const keep = startItems.filter(it => words.every(w => it[2].includes(w)));
       const current = startSel.value;
       startSel.textContent = '';
-      startSel.add(new Option(keep.length ? keep.length + ' départ' + (keep.length > 1 ? 's' : '') + ' : choisir…'
-        : 'Aucun départ ne correspond', ''));
+      startSel.add(new Option(keep.length ? tn('starts', keep.length) : t('starts_none'), ''));
       keep.forEach(([label, id]) => startSel.add(new Option(label, id)));
       startSel.value = keep.some(it => it[1] === current) ? current : '';
     }
@@ -587,21 +603,15 @@
           else modelOk = false; // version majeure inconnue : on ignore ce fichier, aucun temps chiffré
         }
       } catch (e) { /* réseau indisponible : on garde le repli */ }
-      startItems = index.starts.map(s => {
-        const label = startLabel(s);
-        return [label, s.id, fold((s.municipality || '') + ' ' + label), s.municipality || label];
-      }).sort((a, b) => byName(a[3], b[3]) || byName(a[0], b[0]));
-      fillStarts();
+      buildStartItems();
       startFilter.oninput = fillStarts;
-      const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
-      Object.entries(index.levels).forEach(([k, v]) => levelSel.add(new Option(cap(v.label), k)));
+      Object.keys(index.levels).forEach(k => levelSel.add(new Option(t('lvl_' + k), k)));
       levelSel.value = 'modere';
       index.durations_h.forEach(h => durSel.add(new Option(hm(h * 60), h)));
       durSel.value = '2';
       // allure en 3 segments et durée en − / + : ils pilotent les sélecteurs masqués
       const seg = document.getElementById('levelSeg');
-      seg.innerHTML = [...levelSel.options].map(o =>
-        '<button type="button" data-v="' + o.value + '">' + esc(o.text) + '</button>').join('');
+      buildLevelSeg();
       seg.onclick = e => {
         const b = e.target.closest('button');
         if (b && b.dataset.v !== levelSel.value) { levelSel.value = b.dataset.v; showLevel(); }
@@ -622,6 +632,7 @@
       const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
       const isSel = ['get', 'selected'];
       soberBasemap();
+      mapLang();
       map.addLayer({ id: 'routes-other-casing', type: 'line', source: 'routes', filter: ['!', isSel], layout: lineLayout,
         paint: { 'line-color': ROUTE.casing, 'line-width': 6 } }, beforeId);
       map.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['!', isSel], layout: { 'line-join': 'round' },
@@ -662,8 +673,7 @@
       startSel.onchange = () => {
         if (!startSel.value) return; // ligne « N départs : choisir… »
         const entry = indexData.starts.find(x => x.id === startSel.value);
-        whereEl.innerHTML = 'Départ : <b>' + esc(startLabel(entry)) + '</b>' + stationNote(entry.kind) +
-          '<div class="w2">Choisi dans la liste</div>';
+        setWhere(() => startLine(entry, esc(t('chosen_list'))));
         setAdv(false);
         approachMin = null; loadStart();
       };
@@ -684,11 +694,11 @@
       document.getElementById('go').onclick = searchAddress;
       addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
       const locate = () => {
-        if (!navigator.geolocation) { setSettings(true); whereEl.textContent = 'La localisation n\'est pas disponible sur cet appareil.'; return; }
-        whereEl.textContent = 'Localisation…';
+        if (!navigator.geolocation) { setSettings(true); setWhere(() => esc(t('geo_unavail'))); return; }
+        setWhere(() => esc(t('locating')));
         navigator.geolocation.getCurrentPosition(
           p => { addr.value = ''; setPosition(p.coords.longitude, p.coords.latitude); },
-          () => { setSettings(true); whereEl.textContent = 'Localisation refusée. Tape une adresse ou touche la carte.'; },
+          () => { setSettings(true); setWhere(() => esc(t('geo_denied'))); },
           { enableHighAccuracy: true, timeout: 15000 });
       };
       document.getElementById('me').onclick = locate;
@@ -704,11 +714,70 @@
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
     }
 
+    // libellés triés de la liste des départs (dans la langue choisie)
+    function buildStartItems() {
+      startItems = indexData.starts.map(s => {
+        const label = startLabel(s);
+        return [label, s.id, fold((s.municipality || '') + ' ' + label), s.municipality || label];
+      }).sort((a, b) => byName(a[3], b[3]) || byName(a[0], b[0]));
+      fillStarts();
+    }
+    function buildLevelSeg() {
+      [...levelSel.options].forEach(o => { o.text = t('lvl_' + o.value); });
+      document.getElementById('levelSeg').innerHTML = [...levelSel.options].map(o =>
+        '<button type="button" data-v="' + o.value + '">' + esc(o.text) + '</button>').join('');
+    }
+
+    // ---------- langue : menu dans la barre des réglages ; au changement, tout ce qui est affiché est refait
+    function buildLangMenu() {
+      document.getElementById('langCur').textContent = LANG.toUpperCase();
+      document.getElementById('langMenu').innerHTML = ['ca', 'es', 'fr', 'en'].map(l =>
+        '<button type="button" role="menuitemradio" lang="' + l + '" data-l="' + l + '" aria-checked="' + (l === LANG) + '">' +
+        LANG_NAMES[l] + '</button>').join('');
+    }
+    function toggleLangMenu(open) {
+      const menu = document.getElementById('langMenu');
+      menu.hidden = !open;
+      document.getElementById('langBtn').setAttribute('aria-expanded', String(open));
+    }
+    (function bindLang() {
+      const btn = document.getElementById('langBtn'), menu = document.getElementById('langMenu');
+      btn.addEventListener('click', e => { e.stopPropagation(); toggleLangMenu(menu.hidden); });
+      menu.addEventListener('click', e => {
+        e.stopPropagation();
+        const b = e.target.closest('button[data-l]');
+        if (b) { toggleLangMenu(false); setLang(b.dataset.l); }
+      });
+      document.addEventListener('click', () => toggleLangMenu(false));
+      buildLangMenu();
+      applyStaticI18n();
+      renderWhere();
+    })();
+    document.addEventListener('langchange', () => {
+      buildLangMenu();
+      if (!indexData) return;
+      buildLevelSeg();
+      buildStartItems();
+      renderWhere();
+      resultsEl.textContent = '';
+      setAdv(!document.getElementById('adv').hidden);
+      mapLang();
+      if (shown.length) select(current); else if (startData) showLevel();
+      updatePill();
+    });
+    // noms de lieux de la carte dans la langue choisie (OpenStreetMap « name:xx »), sinon le nom local
+    let nameLayers = null;
+    function mapLang() {
+      if (!nameLayers) nameLayers = map.getStyle().layers.filter(l => l.type === 'symbol' && l.layout &&
+        JSON.stringify(l.layout['text-field'] || '').includes('name')).map(l => l.id);
+      nameLayers.forEach(id => map.setLayoutProperty(id, 'text-field', ['coalesce', ['get', 'name:' + LANG], ['get', 'name']]));
+    }
+
     // liste des départs, dépliée par « Changer »
     function setAdv(open) {
       document.getElementById('adv').hidden = !open;
       document.getElementById('change').setAttribute('aria-expanded', String(open));
-      document.getElementById('change').textContent = open ? 'Fermer' : 'Changer';
+      document.getElementById('change').textContent = t(open ? 'close' : 'change');
       if (open) startFilter.focus();
     }
 
@@ -720,7 +789,7 @@
       document.getElementById('durMinus').disabled = durSel.selectedIndex <= 0;
       document.getElementById('durPlus').disabled = durSel.selectedIndex >= durSel.options.length - 1;
       const s = startData && indexData.starts.find(x => x.id === startData.start.id);
-      const name = s ? (s.kind === 'station' ? startLabel(s) : s.name) : 'Choisir un départ';
+      const name = s ? (s.kind === 'station' ? startLabel(s) : trName(s.name)) : t('choose_start');
       const lvl = levelSel.options[levelSel.selectedIndex];
       document.getElementById('pillSum').innerHTML = esc(name) + ' <i>·</i> ' + esc(lvl ? lvl.text : '') +
         ' <i>·</i> ' + hm(Number(durSel.value) * 60);
@@ -728,11 +797,11 @@
 
     async function loadStart() {
       sheetHead.textContent = '';
-      sheetBody.textContent = 'Chargement…';
+      sheetBody.textContent = t('loading');
       showSheet();
       const res = await fetch('web/data/starts/' + startSel.value + '.json');
       if (!res.ok) {                                        // on n'affiche pas la boucle du départ précédent
-        sheetBody.textContent = 'Erreur de chargement (' + res.status + ')';
+        sheetBody.textContent = t('load_error', { s: res.status });
         startData = null; shown = []; sheetFoot.hidden = true; updatePill();
         map.getSource('routes').setData(EMPTY);
         altMarkers.forEach(m => m.remove()); altMarkers = [];
@@ -755,13 +824,12 @@
       if (!shown.length) {
         const avail = [...new Set(startData.options.filter(o => o.level === levelSel.value)
           .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);
-        sheetHead.innerHTML = '<div class="head-row"><span class="opt-label">Aucune boucle</span></div>';
+        sheetHead.innerHTML = '<div class="head-row"><span class="opt-label">' + esc(t('no_loop_label')) + '</span></div>';
         sheetFoot.hidden = true;
-        sheetBody.innerHTML = 'Pas de boucle de ' + hm(Number(durSel.value) * 60) + ' en « ' +
-          esc(levelSel.options[levelSel.selectedIndex].text) + ' » depuis ce départ.' +
-          (avail.length ? '<br>Autre durée possible : ' + avail.map(m =>
+        sheetBody.innerHTML = esc(t('no_loop', { d: hm(Number(durSel.value) * 60), lvl: levelSel.options[levelSel.selectedIndex].text })) +
+          (avail.length ? '<br>' + esc(t('other_dur')) + avail.map(m =>
             '<button type="button" class="btn other-dur" data-min="' + m + '">' +
-            hm(m) + '</button>').join('') : '<br>Essaie un autre niveau.');
+            hm(m) + '</button>').join('') : '<br>' + esc(t('try_level')));
         sheetBody.querySelectorAll('button[data-min]').forEach(b => {
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
         });
@@ -815,15 +883,14 @@
         }
       }
       if (!best) return '';
-      return '<div class="tip"><div class="sec-label">PLUS VITE DANS LA NATURE</div><p>Depuis <b>' + esc(startLabel(best.s)) +
-        '</b>, à ≈ ' + best.min + ' min à vélo, la boucle de ' + hm(o.duration_target_min) +
-        (best.exit === 0 ? ' part directement hors de la ville.' : ' sort de la ville après ' + km(best.exit) + ' km.') +
-        '</p><button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">Voir ce départ</button></div>';
+      return '<div class="tip"><div class="sec-label">' + esc(t('tip_nature')) + '</div><p>' +
+        t('tip_nature_txt', { name: esc(startLabel(best.s)), min: best.min, dur: hm(o.duration_target_min),
+          exit: esc(best.exit === 0 ? t('exit0') : t('exitX', { km: km(best.exit) })) }) +
+        '</p><button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">' + esc(t('see_start')) + '</button></div>';
     }
     function goNeighbour(id, min) {
       const s = indexData.starts.find(x => x.id === id);
-      whereEl.innerHTML = 'Départ : <b>' + esc(startLabel(s)) + '</b>' + stationNote(s.kind) +
-        '<div class="w2">Départ voisin, ≈ ' + min + ' min à vélo depuis le précédent</div>';
+      setWhere(() => startLine(s, esc(t('neighbour_where', { min }))));
       approachMin = null;                               // la position de l'utilisateur n'est pas connue ici : pas de total chiffré
       chooseStart(id);
     }
@@ -837,96 +904,93 @@
 
     // ---------- O-9.5 : pitch au ton Oyan (brand.md §8), construit ici à partir des mêmes mesures que le pitch du
     // pipeline (o.pitch, gardé dans les données) : 3 phrases au plus, tout le reste dans « Tous les chiffres ».
-    const pc = f => Math.round(f * 100) + ' %';
-    const km1 = n => (Math.round(n * 10) / 10).toFixed(1).replace('.', ',');
+    const pc = f => pctStr(Math.round(f * 100));
+    const km1 = n => dec((Math.round(n * 10) / 10).toFixed(1));
     function reliefCategory(per100) {                       // mêmes seuils que relief_category() du pipeline
-      return per100 < 500 ? 'plat' : per100 < 1000 ? 'peu vallonné' : per100 < 1600 ? 'vallonné' : 'très vallonné';
+      return t('relief_' + (per100 < 500 ? 0 : per100 < 1000 ? 1 : per100 < 1600 ? 2 : 3));
     }
     // points clés : [repère chiffré, phrase, alerte ?] ; forêt et eau reprennent les pourcentages de la barre de terrain
     // (même mesure), pour que la barre et les phrases ne se contredisent pas (maquette 5c)
     function keyPoints(o) {
       const out = [];
       if (o.same_as) {                                     // O-18 : aucune autre boucle que celle de l'allure inférieure
-        const lv = indexData.levels[o.same_as.level];
-        const name = lv ? lv.label : o.same_as.level;
-        out.push(['', 'Même parcours qu\'en ' + name + (o.same_as.km_more >= 0.5 ? ', prolongé de ' + km1(o.same_as.km_more) + ' km.'
-          : '.') + ' Aucune autre boucle différente pour cette durée.']);
+        const name = t('lvl_' + o.same_as.level).toLowerCase();
+        out.push(['', (o.same_as.km_more >= 0.5 ? t('same_as_more', { lvl: name, km: km1(o.same_as.km_more) })
+          : t('same_as', { lvl: name })) + t('same_as_tail')]);
       }
       const ex = exitKm(o);
-      if (ex === 0) out.push(['0 km', 'Tu pars directement hors de la ville.']);
-      else if (ex == null) out.push(['', 'Tu restes en ville tout du long.', false, 'city']);
-      else out.push([km1(ex) + ' km', 'Tu sors de la ville.', false, 'exit']);
+      if (ex === 0) out.push(['0 km', t('k_exit0')]);
+      else if (ex == null) out.push(['', t('k_stay'), false, 'city']);
+      else out.push([km1(ex) + ' km', t('k_exit'), false, 'exit']);
       const sc = o.scenery;
       if (sc) {                                             // la nature la plus présente, si elle compte vraiment
         const lc = LANDCOVER_OK && sc.landcover;
-        const nature = [['protected', sc.protected, 0.15, 'du parcours traverse un parc ou un espace protégé.'],
-                        ['forest', lc ? lc.forest : sc.forest, 0.15, lc ? 'du parcours en forêt.' : 'du parcours longe la forêt.'],
-                        ['water', lc ? lc.water : sc.water, 0.05, 'du parcours au bord de l\'eau.']]
+        const nature = [['protected', sc.protected, 0.15, t('k_protected')],
+                        ['forest', lc ? lc.forest : sc.forest, 0.15, lc ? t('k_forest_lc') : t('k_forest')],
+                        ['water', lc ? lc.water : sc.water, 0.05, t('k_water')]]
           .filter(([, v, min]) => v >= min).sort((a, b) => b[1] - a[1]);
         if (nature.length) out.push([pc(nature[0][1]), nature[0][3], false,
           lc && sc.landcover_seq && nature[0][0] !== 'protected' ? nature[0][0] : null]);   // forêt / bord d'eau : bande de terrain
       }
       const sh = o.shares;
-      if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), 'sur des routes principales : reste vigilant.', true]);
-      else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), 'sur pistes cyclables ou voies vertes.']);
-      else if (o.traffic_lights === 0) out.push(['0 feu', 'Aucun feu tricolore sur le parcours.']);
+      if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), t('k_main'), true]);
+      else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), t('k_cycle')]);
+      else if (o.traffic_lights === 0) out.push([t('k_nolight_fig'), t('k_nolight')]);
       else if (o.terrain.climbs && o.terrain.climbs.length) {
         const c = o.terrain.climbs[0];
-        out.push([km1(c.length_km) + ' km', 'Plus longue montée (+' + Math.round(c.gain_m) + ' m).', false, 'climb:0']);
+        out.push([km1(c.length_km) + ' km', t('k_climb', { m: Math.round(c.gain_m) }), false, 'climb:0']);
       }
       // pente : badge à seuil unique, jamais de chiffre (D17)
-      if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', 'Au moins une rampe très raide.', true]);
+      if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', t('k_steep'), true]);
       return out;
     }
-    const WARN_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-label="Attention"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="#A8522F" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2" stroke="#A8522F" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="#A8522F"/></svg>';
+    const WARN_ICON_ = () => '<svg width="16" height="16" viewBox="0 0 16 16" aria-label="' + t('warn') + '"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="#A8522F" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2" stroke="#A8522F" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="#A8522F"/></svg>';
     function keysHtml(o) {
       return '<div class="keys">' + keyPoints(o).map(([fig, txt, warn, hl]) =>
         '<div' + (warn ? ' class="warn-row"' : '') + (hl ? ' data-hl="' + hl + '" role="button" tabindex="0"' : '') +
         '><span class="fig">' + esc(fig) + '</span><span class="txt">' + esc(txt) +
-        '</span>' + (warn ? WARN_ICON : '') + '</div>').join('') + '</div>';
+        '</span>' + (warn ? WARN_ICON_() : '') + '</div>').join('') + '</div>';
     }
     function allFacts(o) {                                  // tous les chiffres mesurés, sans pourcentage de pente (D17)
       const L = [];
       const per100 = o.ascend_m / Math.max(o.distance_km, 0.1) * 100;
-      L.push(km1(o.distance_km) + ' km, D+ ' + Math.round(o.ascend_m) + ' m : profil ' + reliefCategory(per100) +
-        ' (' + Math.round(per100) + ' m de D+ pour 100 km).');
-      L.push(pc(o.shares.urban.city) + ' en ville (zone urbaine dense).');
+      L.push(t('f_dist', { km: km1(o.distance_km), d: Math.round(o.ascend_m), relief: reliefCategory(per100), p: Math.round(per100) }));
+      L.push(t('f_city', { p: pc(o.shares.urban.city) }));
       if (o.traffic_lights != null) {
-        L.push(o.traffic_lights === 0 ? 'Aucun feu tricolore recensé dans OpenStreetMap.'
-          : o.traffic_lights + ' feux tricolores recensés dans OpenStreetMap (' + km1(o.traffic_lights_per_km || 0) + ' par km).');
+        L.push(o.traffic_lights === 0 ? t('f_nolights') : tn('f_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) }));
       }
       // montées : une ligne de synthèse, puis chaque montée dans l'ordre de passage ({ text, sub })
       const tr = o.terrain;
       const climbs = (tr.climbs || []).map((c, k) => [c, k]).sort((a, b) => a[0].start_km - b[0].start_km)
-        .map(([c, k]) => ({ t: 'Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m',
+        .map(([c, k]) => ({ t: t('f_climb_item', { a: km(c.start_km), l: km(c.length_km), g: Math.round(c.gain_m) }),
                             hl: 'climb:' + k }));
-      L.push(tr.n_climbs ? { text: tr.n_climbs + ' montée' + (tr.n_climbs > 1 ? 's' : '') + ' de plus de 20 mètres' +
-        (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct).toLowerCase() : '') +
-        (climbs.length ? (climbs.length < tr.n_climbs ? ', dont les ' + climbs.length + ' plus grosses :' : ' :') : '.'),
+      L.push(tr.n_climbs ? { text: tn('f_climbs', tr.n_climbs) +
+        (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct) : '') +
+        (climbs.length ? (climbs.length < tr.n_climbs ? t('f_biggest', { k: climbs.length }) : t('f_colon')) : '.'),
         sub: climbs }                                         // le pipeline ne garde que les 5 plus grosses montées
-        : 'Aucune montée de plus de 20 mètres d\'un seul tenant.');
+        : t('f_noclimb'));
       const sc = o.scenery;
       if (sc) {
-        if (sc.forest >= 0.05) L.push(pc(sc.forest) + ' dans ou en bordure de forêt.');
-        if (sc.protected >= 0.05) L.push(pc(sc.protected) + ' dans un parc ou un espace protégé.');
-        if (sc.water >= 0.05) L.push(pc(sc.water) + ' à moins de 100 m d\'un plan d\'eau, d\'une rivière ou de la mer.');
-        if (sc.viewpoints >= 1) L.push(sc.viewpoints + ' point' + (sc.viewpoints > 1 ? 's' : '') + ' de vue à moins de 300 m.');
+        if (sc.forest >= 0.05) L.push(t('f_forest', { p: pc(sc.forest) }));
+        if (sc.protected >= 0.05) L.push(t('f_protected', { p: pc(sc.protected) }));
+        if (sc.water >= 0.05) L.push(t('f_water', { p: pc(sc.water) }));
+        if (sc.viewpoints >= 1) L.push(tn('f_views', sc.viewpoints));
       }
       const sh = o.shares;
-      L.push(pc(sh.dedicated_cycleway) + ' sur pistes cyclables ou voies vertes.');
-      L.push(sh.main_roads < 0.01 ? 'Aucune route principale.' : pc(sh.main_roads) + ' sur des routes principales.');
-      if (sh.unpaved > 0.05) L.push(pc(sh.unpaved) + ' sur revêtement non goudronné.');
-      if (o.surface && o.surface.unknown >= 0.3) L.push('Revêtement non renseigné dans OpenStreetMap sur ' + pc(o.surface.unknown) + '.');
-      if (o.overlap > 0.10) L.push(pc(o.overlap) + ' de tronçons empruntés deux fois.');
-      if (o.u_turns) L.push(o.u_turns + ' demi-tour' + (o.u_turns > 1 ? 's' : '') + ' sur le parcours.');
+      L.push(t('f_cycle', { p: pc(sh.dedicated_cycleway) }));
+      L.push(sh.main_roads < 0.01 ? t('f_nomain') : t('f_main', { p: pc(sh.main_roads) }));
+      if (sh.unpaved > 0.05) L.push(t('f_unpaved', { p: pc(sh.unpaved) }));
+      if (o.surface && o.surface.unknown >= 0.3) L.push(t('f_surface_unknown', { p: pc(o.surface.unknown) }));
+      if (o.overlap > 0.10) L.push(t('f_overlap', { p: pc(o.overlap) }));
+      if (o.u_turns) L.push(tn('f_uturns', o.u_turns));
       return L;
     }
 
     // ---------- O-9.4 : barre de terrain (répartition ville / eau / forêt / espaces ouverts calculée par le pipeline, 100 %) ;
     // « espaces ouverts » = ni bâti, ni eau, ni forêt (champs, garrigue, mais aussi parcs urbains comme le long du Besòs)
     // affichée seulement si la donnée existe (scenery.landcover, générateur v5 et suivants)
-    const TERRAIN = [['city', 'ville', '--oyan-terrain-ville'], ['forest', 'forêt', '--oyan-terrain-foret'],
-                     ['water', 'bord d\'eau', '--oyan-terrain-eau'], ['countryside', 'espaces ouverts', '--oyan-terrain-campagne']];
+    const TERRAIN = [['city', 't_city', '--oyan-terrain-ville'], ['forest', 't_forest', '--oyan-terrain-foret'],
+                     ['water', 't_water', '--oyan-terrain-eau'], ['countryside', 't_open', '--oyan-terrain-campagne']];
     // interrupteur de la barre : « ville » mesurée par le bâti (5 bâtiments OSM à moins de ~75 m), données recalculées
     // le 26/09/2026 (mode landcover) ; la v1 (dans une zone bâtie) sortait une boucle 100 % urbaine à 5 % « ville »
     const LANDCOVER_OK = true;
@@ -935,11 +999,11 @@
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       if (!lc) return '';
       const parts = TERRAIN.filter(([k]) => lc[k] > 0);
-      return '<div class="terrain" role="img" aria-label="Répartition du terrain : ' +
-        parts.map(([k, lab]) => lab + ' ' + pc(lc[k])).join(', ') + '">' +
+      return '<div class="terrain" role="img" aria-label="' + esc(t('terrain_aria')) +
+        parts.map(([k, lab]) => esc(t(lab)) + ' ' + pc(lc[k])).join(', ') + '">' +
         parts.map(([k, , v]) => '<span style="width:' + (lc[k] * 100).toFixed(1) + '%;background:var(' + v + ')"></span>').join('') +
         '</div><div class="terrain-legend">' +
-        parts.map(([k, lab, v]) => '<div><i style="background:var(' + v + ')"></i><span>' + lab.charAt(0).toUpperCase() + lab.slice(1) +
+        parts.map(([k, lab, v]) => '<div><i style="background:var(' + v + ')"></i><span>' + esc(t(lab).charAt(0).toUpperCase() + t(lab).slice(1)) +
           '</span><b>' + pc(lc[k]) + '</b></div>').join('') + '</div>';
     }
 
@@ -960,43 +1024,43 @@
       let longer = '';
       if (exitKm(o) == null) {
         const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
-        if (hasLonger) longer = '<div class="tip"><div class="sec-label">ALLER PLUS LOIN</div><p>Une sortie plus longue sort de la ville.</p>' +
-          '<button type="button" class="btn" onclick="nextDuration()">Essayer plus long</button></div>';
+        if (hasLonger) longer = '<div class="tip"><div class="sec-label">' + esc(t('longer_label')) + '</div><p>' + esc(t('longer_txt')) + '</p>' +
+          '<button type="button" class="btn" onclick="nextDuration()">' + esc(t('longer_btn')) + '</button></div>';
       }
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       const others = shown.map((x, k) => k === current ? '' :
         '<button type="button" class="vcard" data-i="' + k + '"><span class="vc"><span class="sec-label">' +
-        esc((LABELS[x.label] || x.label).toUpperCase()) + '</span><span class="vs">' + km(x.distance_km) + ' km · D+ ' +
-        Math.round(x.ascend_m) + ' m · ≈ ' + hm(x.time_est_min) + '</span><span class="vd">' + deltas(x, o) + '</span></span>' +
+        esc((optLabel(x.label)).toUpperCase()) + '</span><span class="vs">' + km(x.distance_km) + ' km · ' +
+        esc(t('dplus_inline', { m: Math.round(x.ascend_m) })) + ' · ≈ ' + hm(x.time_est_min) + '</span><span class="vd">' + deltas(x, o) + '</span></span>' +
         '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" fill="none" stroke="#625D55" stroke-width="1.6" stroke-linecap="round"/></svg></button>').join('');
       const pf = profileSvg(o);
 
       return `
-        ${lc ? terrainBar(o) : '<div class="sub">En ville ' + Math.round(cityShare(o) * 100) + ' %</div>'}
+        ${lc ? terrainBar(o) : '<div class="sub">' + esc(t('city_pct', { p: pctStr(Math.round(cityShare(o) * 100)) })) + '</div>'}
         ${keysHtml(o)}
-        ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">PROFIL</span><span id="pfRead"></span></div>' + pf + '</div>' : ''}
+        ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead"></span></div>' + pf + '</div>' : ''}
         ${longer}${natureNeighbour(o)}
         <div class="rows">
-          <details><summary>Tous les chiffres</summary>
+          <details><summary>${esc(t('all_figures'))}</summary>
             <ul class="facts">${facts}</ul>
           </details>
           ${feedbackHtml(o)}
         </div>
         ${others}
-        <small class="notes">Durées estimées en mouvement, sans pauses. Dénivelé : estimation.</small>
-        <div id="legal">Parcours indicatifs, à vérifier avant de partir · <a href="mentions.html" target="_blank" rel="noopener">Mentions légales &amp; confidentialité</a></div>`;
+        <small class="notes">${esc(t('notes'))}</small>
+        <div id="legal">${esc(t('legal_line'))} · <a href="mentions.html" target="_blank" rel="noopener">${esc(t('legal_link'))}</a></div>`;
     }
 
     // en-tête du panneau : nom de la boucle, pastilles des autres boucles, chiffres (colonnes ou ligne selon la hauteur)
     function headHtml(o) {
       const alts = shown.map((x, k) => k === current ? '' :
-        '<button type="button" class="alt" data-i="' + k + '">' + esc(LABELS[x.label] || x.label) + '</button>').join('');
-      return `<div class="head-row"><span class="opt-label">${esc(LABELS[o.label] || o.label)}</span><span class="alts">${alts}</span></div>
-        <div class="sum-line">${km(o.distance_km)} km · D+ ${Math.round(o.ascend_m)} m · ≈ ${hm(o.time_est_min)}</div>
+        '<button type="button" class="alt" data-i="' + k + '">' + esc(optLabel(x.label)) + '</button>').join('');
+      return `<div class="head-row"><span class="opt-label">${esc(optLabel(o.label))}</span><span class="alts">${alts}</span></div>
+        <div class="sum-line">${km(o.distance_km)} km · ${esc(t('dplus_inline', { m: Math.round(o.ascend_m) }))} · ≈ ${hm(o.time_est_min)}</div>
         <div class="figs">
-          <div><div class="k">DISTANCE</div><div class="big">${km(o.distance_km)}<span> km</span></div></div>
-          <div><div class="k">D+</div><div class="v">${Math.round(o.ascend_m)} m</div></div>
-          <div><div class="k">DURÉE</div><div class="v">≈ ${hm(o.time_est_min)}</div></div>
+          <div><div class="k">${esc(t('fig_distance'))}</div><div class="big">${km(o.distance_km)}<span> km</span></div></div>
+          <div><div class="k">${esc(t('fig_dplus'))}</div><div class="v">${Math.round(o.ascend_m)} m</div></div>
+          <div><div class="k">${esc(t('fig_duration'))}</div><div class="v">≈ ${hm(o.time_est_min)}</div></div>
         </div>`;
     }
 
@@ -1006,7 +1070,7 @@
       const o = shown[current];
       const totalEl = document.getElementById('totalApproach');
       totalEl.textContent = approachMin != null
-        ? '+ trajet jusqu\'au départ : ≈ ' + hm(o.time_est_min + approachMin) + ' au total, sans pauses'
+        ? t('total_approach', { t: hm(o.time_est_min + approachMin) })
         : '';
       sheetHead.innerHTML = headHtml(o);
       sheetFoot.hidden = false;
@@ -1054,7 +1118,7 @@
         }
         const el = document.createElement('div');
         el.className = 'mk-alt';
-        el.textContent = (LABELS[x.label] || x.label) + ' · ' + km(x.distance_km) + ' km';
+        el.textContent = optLabel(x.label) + ' · ' + km(x.distance_km) + ' km';
         el.onclick = e => { e.stopPropagation(); select(k); };
         altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] }).setLngLat([best[0], best[1]]).addTo(map));
       });

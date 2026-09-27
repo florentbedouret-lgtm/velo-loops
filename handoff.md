@@ -82,6 +82,7 @@ velo-loops/
 ├── scripts/                            # pipeline Python réel : plan_starts, generate_loops,
 │                                        #   measure_detour, build_approach_model, fetch_published…
 ├── index.html, gpx.js, profile.js, feedback.js   # front (vanilla JS, sans build, MapLibre via CDN)
+├── i18n.js, mentions.html              # textes de l'app en 4 langues (fr, en, es, ca) ; mentions légales (ajout du 27/09/2026, accord de Florent)
 ├── web/approach_model.json             # publié à chaque run ; suivi en Git (petit fichier)
 ├── web/data/                           # généré à chaque run, jamais committé (.gitignore, O-8)
 ├── .gitignore

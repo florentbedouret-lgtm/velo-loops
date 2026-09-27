@@ -1,7 +1,7 @@
 name: Générer les boucles vélo
 
 # Lancement manuel : onglet Actions > "Générer les boucles vélo" > Run workflow.
-# Lancement AUTOMATIQUE : tout push sur main qui touche index.html, mentions.html, gpx.js, profile.js, feedback.js,
+# Lancement AUTOMATIQUE : tout push sur main qui touche index.html, mentions.html, gpx.js, profile.js, feedback.js, i18n.js,
 # brand/ ou fonts/ republie le
 # site tout seul, en mode "site" (sans recalcul, 3 à 5 min) — pas besoin de lancer le workflow à la main après un
 # correctif front. Un commit seul, sans ce déclencheur, ne republie JAMAIS le site (Pages = "GitHub Actions" veut
@@ -38,7 +38,7 @@ name: Générer les boucles vélo
 on:
   push:
     branches: [main]
-    paths: [index.html, mentions.html, gpx.js, profile.js, feedback.js, 'brand/**', 'fonts/**']
+    paths: [index.html, mentions.html, gpx.js, profile.js, feedback.js, i18n.js, 'brand/**', 'fonts/**']
   workflow_dispatch:
     inputs:
       mode:
