@@ -354,7 +354,8 @@ jobs:
         if: ${{ startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         env:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
-          LANDCOVER_METHOD: "bld75_5"     # « ville » = 5 bâtiments à moins de ~75 m (diagnostic landcover_check n°2, 26/09/2026)
+          LANDCOVER_METHOD: "bld75_5"     # « ville » = 5 bâtiments à moins de ~75 m (diagnostic landcover_check n°2, 26/09/2026) ;
+                                          # bord d'eau : mer ~250 m, front de mer ~50 m (diagnostic « water », 27/09/2026)
         run: |
           if [ "$MODE" = "landcover_check" ]; then
             LANDCOVER_CHECK="water"       # water : « bord d'eau » selon la distance à la mer (27/09/2026) ; city : « ville »

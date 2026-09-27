@@ -236,11 +236,14 @@ def apply(data: Path, land, bld_tree, method: str):
             if o.get("scenery") is None:
                 continue
             pts = sample(o["coords"])
-            shares, cls = partition(pts, land, city_mask(pts, land, method, bld_tree), with_cls=True)
-            o["scenery"]["landcover"] = shares
-            o["scenery"]["landcover_method"] = method
+            mask = city_mask(pts, land, method, bld_tree)
+            cls = g.landcover_classes(land.trees, pts, mask)     # même règle que le générateur (mer ~250 m, front de mer)
+            c = np.bincount(cls, minlength=4) / max(len(pts), 1)
+            o["scenery"]["landcover"] = {"city": round(float(c[0]), 3), "water": round(float(c[1]), 3),
+                                         "forest": round(float(c[2]), 3), "countryside": round(float(c[3]), 3)}
+            o["scenery"]["landcover_method"] = method + "+mer250_front50"
             o["scenery"]["landcover_seq"] = g.landcover_seq(cls)
-            o["exit_city_km"] = g.exit_city_km(cls, o["distance_km"])
+            o["exit_city_km"] = g.exit_city_km(np.where(mask, 0, 3), o["distance_km"])   # sortie de ville : bâti seul
             n += 1
         f.write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
         compares[f.stem] = g.compare_block(d["options"])

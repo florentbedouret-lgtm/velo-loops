@@ -257,24 +257,43 @@ class LandscapeIndex:
 
     def landcover(self, pts) -> dict | None:
         """Répartition du tracé (points tous les 100 m), UNE catégorie par point, par priorité : ville (au moins
-        LANDCOVER_BLD_MIN bâtiments à moins de ~75 m) > eau (< ~100 m) > forêt (dans ou au bord) > espaces ouverts.
-        Les 4 parts font 100 % : barre de terrain de la charte (O-9.4). Sans bâtiments chargés : None."""
+        LANDCOVER_BLD_MIN bâtiments à moins de ~75 m) > eau (< ~100 m ; mer < ~250 m) > forêt > espaces ouverts ; à moins
+        de ~50 m de la mer, bord d'eau avant ville (front de mer). Les 4 parts font 100 % : barre de terrain (O-9.4).
+        « city » (point par point) = bâti seul : sortie de ville. Sans bâtiments chargés : None."""
         import numpy as np
         if self.trees["buildings"] is None:
             return None
-        n = len(pts)
-        cls = np.full(n, 3)                                   # 3 = espaces ouverts
-        for code, key in ((2, "forest"), (1, "water")):       # du moins au plus prioritaire
-            tree = self.trees[key]
-            if tree is not None:
-                dist = SCENERY_FOREST_DEG if key == "forest" else SCENERY_WATER_DEG
-                cls[np.unique(tree.query(pts, predicate="dwithin", distance=dist)[0])] = code
         hit = self.trees["buildings"].query(pts, predicate="dwithin", distance=LANDCOVER_BLD_DEG)[0]
-        cls[np.bincount(hit, minlength=n) >= LANDCOVER_BLD_MIN] = 0
-        counts = np.bincount(cls, minlength=4) / max(n, 1)
+        city = np.bincount(hit, minlength=len(pts)) >= LANDCOVER_BLD_MIN
+        cls = landcover_classes(self.trees, pts, city)
+        counts = np.bincount(cls, minlength=4) / max(len(pts), 1)
         return {"city": round(float(counts[0]), 3), "water": round(float(counts[1]), 3),
                 "forest": round(float(counts[2]), 3), "countryside": round(float(counts[3]), 3),
-                "cls": cls.tolist()}                  # catégorie par point : retirée à l'export (to_json)
+                "cls": cls.tolist(), "citymask": city.tolist()}   # par point : retirés à l'export (to_json)
+
+
+# « bord d'eau » (diagnostic landcover_check « water », 27/09/2026 ; Garraf-Sitges 2 h : 19 -> 30 %, autres départs témoins
+# presque inchangés) : la mer se voit de plus loin qu'une rivière ; sur un front de mer, le bord d'eau passe avant la ville
+SEA_DEG = 0.0027              # ~225 m en longitude, ~300 m en latitude (rivières et lacs : SCENERY_WATER_DEG, ~100 m)
+SEA_NEAR_DEG = 0.0006         # ~50 m
+
+
+def landcover_classes(trees, pts, city):
+    """Catégorie de chaque point (0 ville, 1 bord d'eau, 2 forêt, 3 espaces ouverts) ; city : masque du bâti dense.
+    Partagée par le générateur et scripts/landcover.py (mode landcover, sans GraphHopper)."""
+    import numpy as np
+    cls = np.full(len(pts), 3)
+    near = lambda key, dist: np.unique(trees[key].query(pts, predicate="dwithin", distance=dist)[0])  # noqa: E731
+    if trees.get("forest") is not None:
+        cls[near("forest", SCENERY_FOREST_DEG)] = 2
+    if trees.get("water") is not None:
+        cls[near("water", SCENERY_WATER_DEG)] = 1
+    if trees.get("sea") is not None:
+        cls[near("sea", SEA_DEG)] = 1
+    cls[np.asarray(city, dtype=bool)] = 0
+    if trees.get("sea") is not None:
+        cls[near("sea", SEA_NEAR_DEG)] = 1
+    return cls
 
 
 LANDCOVER_CODES = "vefo"     # une lettre par point tous les 100 m : ville, eau (bord d'eau), forêt, espaces ouverts
@@ -1119,11 +1138,12 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
             "score": l.scenery["score"],
-            "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k != "cls"}
+            "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k not in ("cls", "citymask")}
                           if l.scenery.get("landcover") else None),
             **({"landcover_seq": landcover_seq(l.scenery["landcover"]["cls"])} if l.scenery.get("landcover") else {})}),
         "exit_dense_km": None if l.exit_dense_m is None else round(l.exit_dense_m / 1000.0, 1),
-        **({"exit_city_km": exit_city_km(l.scenery["landcover"]["cls"], round(l.distance_m / 1000.0, 1))}
+        **({"exit_city_km": exit_city_km([0 if c else 3 for c in l.scenery["landcover"]["citymask"]],
+                                         round(l.distance_m / 1000.0, 1))}   # sortie de ville : bâti seul
            if l.scenery and l.scenery.get("landcover") else {}),
         "score": l.score,
         **({"same_as": l.same_as} if getattr(l, "same_as", None) else {}),   # même parcours qu'à l'allure inférieure
