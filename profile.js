@@ -68,7 +68,17 @@ function profileSvg(o) {
     ' L' + x(0).toFixed(1) + ',' + y(lo).toFixed(1) + ' Z';
   // couleurs de brand/oyan-tokens.css : argile (comme le tracé), galet (texte), filet (axe)
   const txt = 'font-size="10" fill="#625D55" font-family="Hanken Grotesk, system-ui, sans-serif"';
-  pfLast = { coords: o.coords, p, W, mL, mR, x, y };
+  // montées dans l'ordre de passage, numérotées comme dans « Tous les chiffres » ; repère au sommet, touchable
+  const climbs = ((o.terrain && o.terrain.climbs) || []).map((c, k) => [c, k]).sort((a, b) => a[0].start_km - b[0].start_km);
+  const marks = climbs.map(([c, k], n) => {
+    const d = Math.min(p.total, c.start_km + c.length_km);
+    const cx = x(d), cy = Math.max(mT + 7, y(p.alt[Math.min(p.alt.length - 1, Math.round(d / p.step))]) - 10);
+    return `<g class="pf-mk" data-hl="climb:${k}" role="button" tabindex="0" style="cursor:pointer">` +
+      `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7" fill="#FFFFFF" stroke="#625D55"/>` +
+      `<text x="${cx.toFixed(1)}" y="${(cy + 3.2).toFixed(1)}" font-size="9" text-anchor="middle" fill="#24221F" ` +
+      `font-family="IBM Plex Mono, ui-monospace, monospace">${n + 1}</text></g>`;
+  }).join('');
+  pfLast = { coords: o.coords, p, W, mL, mR, x, y, suffix: climbs.length ? tn('pf_climbs', climbs.length) : '' };
   // bande de terrain : points tous les 100 m recalés sur la distance officielle, segments de même milieu regroupés
   let band = '';
   for (let i = 0; i < seq.length;) {
@@ -89,6 +99,7 @@ function profileSvg(o) {
     <text x="${mL - 4}" y="${H - mB}" text-anchor="end" ${txt}>${lo} m</text>
     <text x="${mL}" y="${H - 6}" ${txt}>0</text>
     <text x="${W - mR}" y="${H - 6}" text-anchor="end" ${txt}>${pfKm(p.total)} km</text>
+    ${marks}
     <g class="pf-cursor" visibility="hidden">
       <line y1="${mT}" y2="${H - mB}" stroke="#24221F" stroke-width="1"/>
       <circle r="3.5" fill="#24221F" stroke="#FFFFFF" stroke-width="1.5"/>
@@ -112,14 +123,15 @@ function bindProfile(svg, onMove, readout) {
     line.setAttribute('x1', cx); line.setAttribute('x2', cx);
     dot.setAttribute('cx', cx); dot.setAttribute('cy', g.y(a));
     const txt = 'km ' + pfKm(d) + ' · ' + Math.round(a) + ' m';
-    if (readout) readout.textContent = txt; else label.textContent = txt;
+    if (readout) readout.textContent = txt + (g.suffix ? ' · ' + g.suffix : ''); else label.textContent = txt;
     const right = cx > g.W / 2;                                     // étiquette du côté où il reste de la place
     label.setAttribute('x', right ? cx - 5 : cx + 5);
     label.setAttribute('text-anchor', right ? 'end' : 'start');
     cur.setAttribute('visibility', 'visible');
     onMove(profilePoint(g.coords, g.p.dist, d));
   };
-  const hide = () => { cur.setAttribute('visibility', 'hidden'); if (readout) readout.textContent = ''; onMove(null); };
+  const hide = () => { cur.setAttribute('visibility', 'hidden'); if (readout) readout.textContent = g.suffix; onMove(null); };
+  if (readout) readout.textContent = g.suffix;              // affichée en permanence au-dessus de la courbe (brief v2)
   svg.addEventListener('pointerdown', show);
   svg.addEventListener('pointermove', show);
   // au doigt, le point reste affiché après avoir levé le doigt ; à la souris, il disparaît en sortant du profil

@@ -5,7 +5,7 @@ const xmlEsc = s => String(s).replace(/[&<>"']/g,
 
 function buildGpx(start, o, levelLabel) {
   const title = start.name + ' · ' + (levelLabel || o.level) + ' · ' +
-    (I18N['opt_' + o.label] ? t('opt_' + o.label).toLowerCase() : o.label) + ' · ' + Math.round(o.distance_km) + ' km';
+    (typeof optName === 'function' ? optName(o) : t('opt_' + o.label)).toLowerCase() + ' · ' + Math.round(o.distance_km) + ' km';
   const pts = o.coords.map(c =>
     '      <trkpt lat="' + c[1].toFixed(6) + '" lon="' + c[0].toFixed(6) + '">' +
     (c.length > 2 ? '<ele>' + c[2].toFixed(1) + '</ele>' : '') + '</trkpt>').join('\n');

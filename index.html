@@ -2,12 +2,16 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Oyan</title>
   <meta name="theme-color" content="#F6F4F0">
   <link rel="icon" href="brand/svg/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="brand/png/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="brand/png/apple-touch-icon.png">
+  <!-- app installable (PWA, brief v2) : icône officielle, déjà dans la zone sûre des icônes « maskable » -->
+  <link rel="manifest" href="brand/oyan.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Oyan">
   <link href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" rel="stylesheet">
   <link href="brand/oyan-tokens.css" rel="stylesheet">
   <link href="fonts/oyan-fonts.css" rel="stylesheet">
@@ -44,7 +48,6 @@
               border: 0; padding: 0; background: var(--color-surface); box-shadow: 0 2px 10px rgba(36, 34, 31, .15); cursor: pointer;
               display: flex; align-items: center; justify-content: center; transition: bottom .25s ease; }
     html:not([data-sheet]) #locate, html[data-sheet=high] #locate, html[data-sheet=mid] #locate, html[data-sheet=peek] #locate { display: none; }
-    .maplibregl-ctrl-bottom-right { right: 64px; }         /* crédits de la carte à côté du bouton de position */
 
     /* ---------- réglages : carte flottante en haut, repliée en une barre « Gràcia · Modéré · 2 h 00 » */
     #top { position: fixed; z-index: 3; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px;
@@ -96,6 +99,11 @@
     /* ligne du départ */
     #startRow { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--color-border); margin-top: 16px; padding-top: 14px; }
     #startRow > svg { flex: none; }
+    #startRow.empty .dot-on, #startRow:not(.empty) .dot-off { display: none; }
+    #startRow.empty #where { font-size: 15px; color: var(--color-text-2); }
+    #change { white-space: nowrap; }
+    #top:not(.open) .lang-wrap { display: none; }          /* langue : seulement dans les réglages dépliés (brief v2) */
+    .empty-msg { font-size: 15px; color: var(--color-text-2); padding: 2px 0 6px; }
     #change { font: inherit; font-size: 14px; color: var(--color-accent); background: none; border: 0; padding: 4px 0; cursor: pointer;
               text-decoration: underline; text-underline-offset: 3px; flex: none; }
     #where .w2 { font-size: 13px; color: var(--color-text-2); }
@@ -114,23 +122,40 @@
              background: var(--color-surface); border-radius: 24px 24px 0 0; box-shadow: 0 -6px 24px rgba(36, 34, 31, .10);
              display: flex; flex-direction: column; transition: height .25s ease; }
     #sheet[hidden] { display: none; }
-    #grip { flex: none; padding: 10px 20px 12px; touch-action: none; cursor: grab; }
+    #grip { flex: none; padding: 10px 20px 12px; touch-action: none; cursor: grab; position: relative; z-index: 1;
+            background: var(--color-surface); border-radius: 24px 24px 0 0; }
+    #sheet[data-state=high] #sheetHead { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+    #sheet[data-state=high] .head-row { min-height: 0; flex: none; }
+    #sheet[data-state=high] .sum-line { margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #sheet[data-state=high] #grip { border-bottom: 1px solid var(--color-border); }
     .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--color-border); margin: 0 auto 12px; }
     .head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+    .optseg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; width: 100%;
+              background: var(--color-bg); border-radius: 12px; }
+    .optseg .alt { font: inherit; font-size: 14px; height: 36px; min-width: 0; padding: 0 8px; border: 0; border-radius: 10px;
+                   background: transparent; color: var(--color-text-2); display: flex; align-items: center; justify-content: center;
+                   gap: 8px; cursor: pointer; }
+    .optseg .alt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .optseg .alt[aria-pressed=true] { background: var(--color-surface); color: var(--color-text); box-shadow: 0 1px 3px rgba(36, 34, 31, .12); }
+    .optseg .sw { flex: none; width: 14px; border-top: 2px dashed var(--color-text-2); }
+    .optseg .sw.on { border-top: 3px solid var(--color-accent); }
+    .head-row.has-seg .opt-label { display: none; }
+    #sheet[data-state=high] .head-row.has-seg .opt-label { display: inline; }
+    #sheet[data-state=high] .optseg { display: none; }
     .opt-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--color-accent); }
-    .alts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-    .alt { font: inherit; font-size: 13px; height: 28px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 14px;
-            background: var(--color-surface); color: var(--color-text); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-    .alt::before { content: ''; width: 14px; border-top: 2px dashed var(--color-text-2); }
     .sum-line { font-size: 22px; font-weight: var(--fw-light); margin-top: 10px; }
     #sheet[data-state=high] .sum-line { font-size: 16px; font-weight: var(--fw-regular); margin-top: 8px; }
-    .figs { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; align-items: end; margin-top: 14px; }
+    .figs { display: grid; grid-template-columns: 1.3fr 1fr 1fr; column-gap: 12px; row-gap: 2px; align-items: baseline; margin-top: 14px; }
     .figs .k { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-2); }
     .figs .big { font-size: 40px; font-weight: var(--fw-light); line-height: 1; }
     .figs .big span { font-size: 18px; }
     .figs .v { font-size: 24px; font-weight: var(--fw-light); line-height: 1.2; }
     #sheet[data-state=peek] .figs, #sheet[data-state=high] .figs { display: none; }
+    /* alerte routes principales dès le panneau replié (même seuil que le point clé : 10 %) */
+    .roadwarn { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 12px; }
+    .roadwarn svg { flex: none; }
+    .roadwarn b { font-family: var(--font-mono); font-size: 13px; font-weight: var(--fw-regular); color: var(--color-accent); }
+    #sheet[data-state=peek] .roadwarn, #sheet[data-state=high] .roadwarn { display: none; }
     #sheet[data-state=low] .sum-line, #sheet[data-state=mid] .sum-line { display: none; }
     #sheetBody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 20px 16px; line-height: 1.5; }
     #sheet[data-state=peek] #sheetBody, #sheet[data-state=peek] #sheetFoot { display: none; }
@@ -153,9 +178,12 @@
     .keys div:last-child { border-bottom: 0; }
     /* point clé ou montée qui surligne son tronçon sur la carte (maquette 5c) */
     [data-hl] { cursor: pointer; }
-    .keys div[data-hl] .txt { text-decoration: underline dotted var(--color-text-2); text-underline-offset: 4px; }
-    .keys div.hl-on, .facts li.hl-on { background: var(--color-bg); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
-    .facts .climbs li[data-hl] { text-decoration: underline dotted var(--color-text-2); text-underline-offset: 4px; }
+    .keys div[data-hl] { margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 10px; }
+    .keys div.hl-on, .facts li.hl-on { background: var(--color-bg); }
+    .facts li[data-hl] { border-radius: 10px; }
+    .keys .onmap { flex: none; font-size: 12px; color: var(--color-text-2); display: flex; align-items: center; gap: 4px; }
+    .keys .onmap span { display: none; }
+    .keys .hl-on .onmap span { display: inline; }
     .keys .fig { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); width: 56px; flex: none; }
     .keys .warn-row .fig { color: var(--color-accent); }
     .keys .txt { flex: 1; }
@@ -181,7 +209,9 @@
                            border-right: 1.6px solid var(--color-text-2); border-bottom: 1.6px solid var(--color-text-2); transform: rotate(-45deg); transition: transform .2s; }
     .rows details[open] summary::after { transform: rotate(45deg); }
     .rows details > :not(summary) { margin-bottom: 12px; }
-    .facts { font-size: 14px; margin: 0 0 8px; padding-left: 18px; }
+    .facts { margin: 0 0 8px; }
+    .facts .keys { margin-top: 4px; border-top: 0; }
+    .facts-h { margin-top: 14px; }
     .facts .climbs { list-style: none; margin: 2px 0 0; padding-left: 0; }   /* détail des montées, sous leur ligne */
     .other-dur { font-size: 15px; padding: 6px 10px; margin: 6px 6px 0 0; }
     .notes { display: block; margin-top: 16px; }
@@ -231,10 +261,11 @@
       <!-- sélecteurs d'origine, masqués : ils gardent l'état (allure, durée) lu par le reste du code -->
       <select id="level" hidden></select>
       <select id="duration" hidden></select>
-      <div id="startRow">
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="#A8522F" stroke="#FFFFFF" stroke-width="2"/></svg>
-        <div id="where">Tape une adresse, touche la carte ou utilise ta position.</div>
-        <button type="button" id="change" aria-expanded="false" aria-controls="adv" data-i18n="change">Changer</button>
+      <div id="startRow" class="empty">
+        <svg class="dot-on" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="#A8522F" stroke="#FFFFFF" stroke-width="2"/></svg>
+        <svg class="dot-off" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="#625D55" stroke-width="1.5" stroke-dasharray="3 3"/></svg>
+        <div id="where">Tape une adresse, touche un point sur la carte ou utilise ta position.</div>
+        <button type="button" id="change" aria-expanded="false" aria-controls="adv">Choisir dans la liste</button>
       </div>
       <div id="adv" hidden>
         <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off" data-i18n-ph="filter_ph" data-i18n-aria="filter_aria">
@@ -262,6 +293,30 @@
   <script src="feedback.js"></script>
   <script>
     const optLabel = l => I18N['opt_' + l] ? t('opt_' + l) : l;   // nom d'une option (équilibrée, variante…)
+    // brief v2 : jamais « Variante » seul. Nom = différence mesurée la plus nette avec la boucle principale (moins de ville,
+    // plus de forêt…), sinon la direction prise (« Par le nord »)
+    function optName(o) {
+      if (o.label !== 'variante') return optLabel(o.label);
+      const m = shown.find(x => x.label === 'equilibre') || shown[0];
+      if (!m || m === o) return optLabel(o.label);
+      const lc = x => (x.scenery && x.scenery.landcover) || null, a = lc(o), b = lc(m);
+      const lpk = x => (x.traffic_lights_per_km == null ? null : x.traffic_lights_per_km);
+      const gains = [];                                    // [clé, gain rapporté à son seuil]
+      if (a && b) {
+        gains.push(['vn_city', (b.city - a.city) / 0.10], ['vn_forest', (a.forest - b.forest) / 0.10],
+                   ['vn_water', (a.water - b.water) / 0.08]);
+      }
+      gains.push(['vn_cycle', (o.shares.dedicated_cycleway - m.shares.dedicated_cycleway) / 0.10],
+                 ['vn_main', (m.shares.main_roads - o.shares.main_roads) / 0.10]);
+      if (lpk(o) != null && lpk(m) != null) gains.push(['vn_lights', (lpk(m) - lpk(o)) / 0.5]);
+      const best = gains.filter(g => g[1] >= 1).sort((x, y) => y[1] - x[1])[0];
+      if (best) return t(best[0]);
+      // direction : cap du départ vers le centre de la variante, en 8 secteurs
+      const c = o.coords, s = c[0];
+      const cx = c.reduce((acc, p) => acc + p[0], 0) / c.length, cy = c.reduce((acc, p) => acc + p[1], 0) / c.length;
+      const ang = (Math.atan2((cx - s[0]) * Math.cos(s[1] * Math.PI / 180), cy - s[1]) * 180 / Math.PI + 360) % 360;
+      return t('vd_' + ['n', 'ne', 'e', 'se', 's', 'so', 'o', 'no'][Math.round(ang / 45) % 8]);
+    }
     const EMPTY = { type: 'FeatureCollection', features: [] };
     // couleurs de la carte, reprises de brand/oyan-tokens.css (MapLibre ne lit pas les variables CSS) ;
     // autre boucle = pointillé galet sur liseré blanc, sous la boucle choisie (maquette 5b)
@@ -329,6 +384,7 @@
       setSheetHeight(sheetHeights()[state]);
       if (state !== 'peek' && topCard.classList.contains('open')) setSettings(false);
       if (state === 'low' || state === 'mid') sheetBody.scrollTop = 0;
+      fitRoute();                                           // brief v2 : recadrer à chaque changement de cran
     }
     function setSettings(open) {
       topCard.classList.toggle('open', open);
@@ -346,7 +402,7 @@
       const grip = document.getElementById('grip');
       let drag = null, justDragged = false;
       grip.addEventListener('pointerdown', e => {
-        if (e.target.closest('button')) return;                // les pastilles restent de simples boutons
+        if (e.target.closest('button') || !startData) return;  // pastilles = boutons ; sans départ, rien à ouvrir
         drag = { y: e.clientY, h: sheet.getBoundingClientRect().height, moved: false, t: Date.now() };
         grip.setPointerCapture(e.pointerId);                   // le doigt peut sortir de l'en-tête sans perdre le panneau
       });
@@ -378,7 +434,7 @@
       grip.addEventListener('pointerup', end);
       grip.addEventListener('pointercancel', end);
       grip.addEventListener('click', e => {
-        if (justDragged || e.target.closest('button')) return;
+        if (justDragged || e.target.closest('button') || !startData) return;
         const next = { peek: 'low', low: 'mid', mid: 'high', high: 'low' }[sheet.dataset.state];
         setSheet(next);
         fitRoute();
@@ -390,8 +446,11 @@
       container: 'map',
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: [2.19, 41.42],
-      zoom: 10
+      zoom: 10,
+      attributionControl: false
     });
+    // crédits compacts (bouton ⓘ, dépliés au chargement puis repliés dès qu'on touche la carte), en bas à gauche (brief v2)
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
 
     let startData = null;
     let shown = [];
@@ -629,6 +688,13 @@
       map.addSource('routes', { type: 'geojson', data: EMPTY });
       const labels = map.getStyle().layers.find(l => l.type === 'symbol');
       const beforeId = labels ? labels.id : undefined;
+      // départs disponibles : points galet à contour blanc (9 px au zoom de quartier), plus petits en vue d'ensemble
+      map.addSource('starts', { type: 'geojson', data: { type: 'FeatureCollection', features: index.starts.map(s =>
+        ({ type: 'Feature', properties: { id: s.id }, geometry: { type: 'Point', coordinates: [s.lon, s.lat] } })) } });
+      map.addLayer({ id: 'starts-pts', type: 'circle', source: 'starts', paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 1.8, 11, 3, 13, 4.5, 16, 6],
+        'circle-color': ROUTE.other, 'circle-stroke-color': '#FFFFFF',
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 12, 1.5] } }, beforeId);
       const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
       const isSel = ['get', 'selected'];
       soberBasemap();
@@ -652,9 +718,9 @@
       // tronçon surligné depuis un point clé : couleur de la barre de terrain (montées : basalte), sur liseré blanc
       map.addSource('hl', { type: 'geojson', data: EMPTY });
       map.addLayer({ id: 'hl-casing', type: 'line', source: 'hl', layout: lineLayout,
-        paint: { 'line-color': ROUTE.casing, 'line-width': 11 } });
+        paint: { 'line-color': ROUTE.casing, 'line-width': 13 } });
       map.addLayer({ id: 'hl', type: 'line', source: 'hl', layout: lineLayout,
-        paint: { 'line-color': ['get', 'color'], 'line-width': 7 } });
+        paint: { 'line-color': ROUTE.color, 'line-width': 8 } });
       map.addLayer({ id: 'routes-arrows', type: 'symbol', source: 'routes', filter: isSel,
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 160, 'icon-image': 'oyan-arrow',
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
@@ -704,14 +770,36 @@
       document.getElementById('me').onclick = locate;
       document.getElementById('locate').onclick = locate;
       map.on('click', e => {
-        const p = e.point, hit = map.queryRenderedFeatures([[p.x - 6, p.y - 6], [p.x + 6, p.y + 6]], { layers: ['routes-hit'] });
+        if (hlKey) { clearHighlight(); return; }              // premier toucher : efface le tronçon surligné, rien d'autre
+        const p = e.point, box = [[p.x - 8, p.y - 8], [p.x + 8, p.y + 8]];
+        const hit = map.queryRenderedFeatures(box, { layers: ['routes-hit'] });
         if (hit.length) { select(hit[0].properties.k); return; }   // toucher l'autre boucle : échange
+        const st = map.queryRenderedFeatures(box, { layers: ['starts-pts'] });
+        if (st.length) {                                      // toucher un point de départ : il devient le départ
+          const s = indexData.starts.find(x => x.id === st[0].properties.id);
+          addr.value = ''; approachMin = null;
+          setWhere(() => startLine(s, esc(t('chosen_map'))));
+          chooseStart(s.id);
+          return;
+        }
         addr.value = ''; setPosition(e.lngLat.lng, e.lngLat.lat);
       });
+      map.on('mouseenter', 'starts-pts', () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', 'starts-pts', () => { map.getCanvas().style.cursor = ''; });
       map.on('mouseenter', 'routes-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'routes-hit', () => { map.getCanvas().style.cursor = ''; });
       const b = coverageBox(0.02);
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
+      showEmptySheet();
+      setAdv(false);
+    }
+    // panneau sans départ choisi (brief v2) : « Choisis un départ pour voir la boucle. »
+    function showEmptySheet() {
+      sheetHead.innerHTML = '<div class="empty-msg">' + esc(t('empty_sheet')) + '</div>';
+      sheetBody.textContent = '';
+      sheetFoot.hidden = true;
+      sheet.hidden = false;
+      setSheet(topCard.classList.contains('open') ? 'peek' : 'low');
     }
 
     // libellés triés de la liste des départs (dans la langue choisie)
@@ -762,7 +850,7 @@
       resultsEl.textContent = '';
       setAdv(!document.getElementById('adv').hidden);
       mapLang();
-      if (shown.length) select(current); else if (startData) showLevel();
+      if (shown.length) select(current); else if (startData) showLevel(); else showEmptySheet();
       updatePill();
     });
     // noms de lieux de la carte dans la langue choisie (OpenStreetMap « name:xx »), sinon le nom local
@@ -777,7 +865,8 @@
     function setAdv(open) {
       document.getElementById('adv').hidden = !open;
       document.getElementById('change').setAttribute('aria-expanded', String(open));
-      document.getElementById('change').textContent = t(open ? 'close' : 'change');
+      document.getElementById('change').textContent = t(open ? 'close' : startData ? 'change' : 'pick_list');
+      document.getElementById('startRow').classList.toggle('empty', !startData);
       if (open) startFilter.focus();
     }
 
@@ -802,7 +891,7 @@
       const res = await fetch('web/data/starts/' + startSel.value + '.json');
       if (!res.ok) {                                        // on n'affiche pas la boucle du départ précédent
         sheetBody.textContent = t('load_error', { s: res.status });
-        startData = null; shown = []; sheetFoot.hidden = true; updatePill();
+        startData = null; shown = []; sheetFoot.hidden = true; updatePill(); setAdv(false);
         map.getSource('routes').setData(EMPTY);
         altMarkers.forEach(m => m.remove()); altMarkers = [];
         return;
@@ -812,6 +901,7 @@
       marker = new maplibregl.Marker({ element: dotEl('mk-start') })
         .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
       setSettings(false);                                   // départ trouvé : on replie les réglages et on montre la boucle
+      setAdv(false);
       showLevel();
     }
 
@@ -945,45 +1035,56 @@
       return out;
     }
     const WARN_ICON_ = () => '<svg width="16" height="16" viewBox="0 0 16 16" aria-label="' + t('warn') + '"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="#A8522F" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2" stroke="#A8522F" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="#A8522F"/></svg>';
+    // petit tracé : la ligne a un tronçon sur la carte
+    const MAP_ICON = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 11c2-6 4 0 6-5s3-3 4-4" fill="none" stroke="#A8522F" stroke-width="1.6" stroke-linecap="round"/></svg>';
     function keysHtml(o) {
-      return '<div class="keys">' + keyPoints(o).map(([fig, txt, warn, hl]) =>
+      return keyRowsHtml(keyPoints(o).map(([fig, txt, warn, hl]) => [fig, txt, hl, warn]));
+    }
+    function keyRowsHtml(rows) {
+      return '<div class="keys">' + rows.map(([fig, txt, hl, warn]) =>
         '<div' + (warn ? ' class="warn-row"' : '') + (hl ? ' data-hl="' + hl + '" role="button" tabindex="0"' : '') +
         '><span class="fig">' + esc(fig) + '</span><span class="txt">' + esc(txt) +
-        '</span>' + (warn ? WARN_ICON_() : '') + '</div>').join('') + '</div>';
+        '</span>' + (warn ? WARN_ICON_() : '') + (hl ? '<span class="onmap"><span>' + esc(t('on_map')) + '</span>' + MAP_ICON + '</span>' : '') +
+        '</div>').join('') + '</div>';
     }
-    function allFacts(o) {                                  // tous les chiffres mesurés, sans pourcentage de pente (D17)
-      const L = [];
+    // « Tous les chiffres » (brief v2) : trois blocs, chaque ligne = [repère chiffré, phrase, tronçon à surligner, alerte ?] ;
+    // ville, forêt et bord d'eau : mêmes pourcentages que la barre de terrain ; jamais de pourcentage de pente (D17)
+    function allFacts(o) {
+      const R = [], E = [], C = [];
       const per100 = o.ascend_m / Math.max(o.distance_km, 0.1) * 100;
-      L.push(t('f_dist', { km: km1(o.distance_km), d: Math.round(o.ascend_m), relief: reliefCategory(per100), p: Math.round(per100) }));
-      L.push(t('f_city', { p: pc(o.shares.urban.city) }));
-      if (o.traffic_lights != null) {
-        L.push(o.traffic_lights === 0 ? t('f_nolights') : tn('f_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) }));
-      }
-      // montées : une ligne de synthèse, puis chaque montée dans l'ordre de passage ({ text, sub })
+      R.push([km1(o.distance_km) + ' km', t('fr_profile', { d: Math.round(o.ascend_m), relief: reliefCategory(per100),
+        m: Math.max(1, Math.round(per100 / 100)) })]);
       const tr = o.terrain;
-      const climbs = (tr.climbs || []).map((c, k) => [c, k]).sort((a, b) => a[0].start_km - b[0].start_km)
-        .map(([c, k]) => ({ t: t('f_climb_item', { a: km(c.start_km), l: km(c.length_km), g: Math.round(c.gain_m) }),
-                            hl: 'climb:' + k }));
-      L.push(tr.n_climbs ? { text: tn('f_climbs', tr.n_climbs) +
-        (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct) : '') +
-        (climbs.length ? (climbs.length < tr.n_climbs ? t('f_biggest', { k: climbs.length }) : t('f_colon')) : '.'),
-        sub: climbs }                                         // le pipeline ne garde que les 5 plus grosses montées
-        : t('f_noclimb'));
+      const climbs = (tr.climbs || []).map((c, k) => [c, k]).sort((x, y) => x[0].start_km - y[0].start_km);
+      if (tr.n_climbs) {
+        R.push([String(tr.n_climbs), tn('fr_climbs', tr.n_climbs) + (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct) : '') +
+          (climbs.length && climbs.length < tr.n_climbs ? t('fr_biggest', { k: climbs.length }) : '') + '.']);
+        climbs.forEach(([c, k], n) => R.push(['n° ' + (n + 1), t('fr_climb', { a: km(c.start_km), l: km(c.length_km), g: Math.round(c.gain_m) }),
+          'climb:' + k]));
+      } else R.push(['0', t('fr_noclimb')]);
+      const lcF = LANDCOVER_OK && o.scenery && o.scenery.landcover, seq = !!(o.scenery && o.scenery.landcover_seq);
       const sc = o.scenery;
       if (sc) {
-        if (sc.forest >= 0.05) L.push(t('f_forest', { p: pc(sc.forest) }));
-        if (sc.protected >= 0.05) L.push(t('f_protected', { p: pc(sc.protected) }));
-        if (sc.water >= 0.05) L.push(t('f_water', { p: pc(sc.water) }));
-        if (sc.viewpoints >= 1) L.push(tn('f_views', sc.viewpoints));
+        const fo = lcF ? lcF.forest : sc.forest, wa = lcF ? lcF.water : sc.water;
+        if (fo >= 0.05) E.push([pc(fo), t('fr_forest'), seq ? 'forest' : null]);
+        if (sc.protected >= 0.05) E.push([pc(sc.protected), t('fr_protected')]);
+        if (wa >= 0.05) E.push([pc(wa), t('fr_water'), seq ? 'water' : null]);
+        if (sc.viewpoints >= 1) E.push([String(sc.viewpoints), tn('fr_views', sc.viewpoints)]);
       }
+      C.push([pc(cityShare(o)), t('fr_city'), seq ? 'town' : null]);
+      if (o.traffic_lights != null) C.push(o.traffic_lights === 0 ? ['0', t('fr_nolights')]
+        : [String(o.traffic_lights), tn('fr_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) })]);
       const sh = o.shares;
-      L.push(t('f_cycle', { p: pc(sh.dedicated_cycleway) }));
-      L.push(sh.main_roads < 0.01 ? t('f_nomain') : t('f_main', { p: pc(sh.main_roads) }));
-      if (sh.unpaved > 0.05) L.push(t('f_unpaved', { p: pc(sh.unpaved) }));
-      if (o.surface && o.surface.unknown >= 0.3) L.push(t('f_surface_unknown', { p: pc(o.surface.unknown) }));
-      if (o.overlap > 0.10) L.push(t('f_overlap', { p: pc(o.overlap) }));
-      if (o.u_turns) L.push(tn('f_uturns', o.u_turns));
-      return L;
+      C.push([pc(sh.dedicated_cycleway), t('k_cycle')]);
+      C.push([pc(sh.main_roads), t('k_main_short') + '.', null, sh.main_roads > 0.10]);
+      if (sh.unpaved > 0.05) C.push([pc(sh.unpaved), t('fr_unpaved')]);
+      if (o.surface && o.surface.unknown >= 0.3) C.push([pc(o.surface.unknown), t('fr_surface')]);
+      if (o.overlap > 0.10) C.push([pc(o.overlap), t('fr_overlap')]);
+      if (o.u_turns) C.push([String(o.u_turns), tn('fr_uturns', o.u_turns)]);
+      return [['grp_relief', R], ['grp_env', E], ['grp_circ', C]].filter(([, rows]) => rows.length);
+    }
+    function factsHtml(o) {
+      return allFacts(o).map(([g, rows]) => '<div class="sec-label facts-h">' + esc(t(g)) + '</div>' + keyRowsHtml(rows)).join('');
     }
 
     // ---------- O-9.4 : barre de terrain (répartition ville / eau / forêt / espaces ouverts calculée par le pipeline, 100 %) ;
@@ -1017,9 +1118,7 @@
 
     // contenu du panneau (maquette 5c / 5d) : terrain, points clés, profil, suggestion, dépliants, autres boucles, notes
     function detailHtml(o) {
-      const facts = allFacts(o).map(p => typeof p === 'string' ? '<li>' + esc(p) + '</li>'
-        : '<li>' + esc(p.text) + (p.sub.length ? '<ul class="climbs">' + p.sub.map(x => '<li data-hl="' + x.hl + '" role="button" tabindex="0">' + esc(x.t) + '</li>').join('') + '</ul>' : '') +
-          '</li>').join('');
+      const facts = factsHtml(o);
       // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
       let longer = '';
       if (exitKm(o) == null) {
@@ -1030,7 +1129,7 @@
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       const others = shown.map((x, k) => k === current ? '' :
         '<button type="button" class="vcard" data-i="' + k + '"><span class="vc"><span class="sec-label">' +
-        esc((optLabel(x.label)).toUpperCase()) + '</span><span class="vs">' + km(x.distance_km) + ' km · ' +
+        esc(optName(x).toUpperCase()) + '</span><span class="vs">' + km(x.distance_km) + ' km · ' +
         esc(t('dplus_inline', { m: Math.round(x.ascend_m) })) + ' · ≈ ' + hm(x.time_est_min) + '</span><span class="vd">' + deltas(x, o) + '</span></span>' +
         '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" fill="none" stroke="#625D55" stroke-width="1.6" stroke-linecap="round"/></svg></button>').join('');
       const pf = profileSvg(o);
@@ -1038,14 +1137,14 @@
       return `
         ${lc ? terrainBar(o) : '<div class="sub">' + esc(t('city_pct', { p: pctStr(Math.round(cityShare(o) * 100)) })) + '</div>'}
         ${keysHtml(o)}
-        ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead"></span></div>' + pf + '</div>' : ''}
-        ${longer}${natureNeighbour(o)}
+        ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead">' + (o.terrain.climbs && o.terrain.climbs.length ? esc(tn('pf_climbs', o.terrain.climbs.length)) : '') + '</span></div>' + pf + '</div>' : ''}
         <div class="rows">
           <details><summary>${esc(t('all_figures'))}</summary>
-            <ul class="facts">${facts}</ul>
+            <div class="facts">${facts}</div>
           </details>
           ${feedbackHtml(o)}
         </div>
+        ${longer}${natureNeighbour(o)}
         ${others}
         <small class="notes">${esc(t('notes'))}</small>
         <div id="legal">${esc(t('legal_line'))} · <a href="mentions.html" target="_blank" rel="noopener">${esc(t('legal_link'))}</a></div>`;
@@ -1053,15 +1152,16 @@
 
     // en-tête du panneau : nom de la boucle, pastilles des autres boucles, chiffres (colonnes ou ligne selon la hauteur)
     function headHtml(o) {
-      const alts = shown.map((x, k) => k === current ? '' :
-        '<button type="button" class="alt" data-i="' + k + '">' + esc(optLabel(x.label)) + '</button>').join('');
-      return `<div class="head-row"><span class="opt-label">${esc(optLabel(o.label))}</span><span class="alts">${alts}</span></div>
+      const seg = shown.length > 1 ? '<div class="optseg" role="group">' + shown.map((x, k) =>
+        '<button type="button" class="alt" data-i="' + k + '" aria-pressed="' + (k === current) + '"><i class="sw' +
+        (k === current ? ' on' : '') + '"></i><span>' + esc(optName(x)) + '</span></button>').join('') + '</div>' : '';
+      return `<div class="head-row${seg ? ' has-seg' : ''}"><span class="opt-label">${esc(optName(o))}</span>${seg}</div>
         <div class="sum-line">${km(o.distance_km)} km · ${esc(t('dplus_inline', { m: Math.round(o.ascend_m) }))} · ≈ ${hm(o.time_est_min)}</div>
         <div class="figs">
-          <div><div class="k">${esc(t('fig_distance'))}</div><div class="big">${km(o.distance_km)}<span> km</span></div></div>
-          <div><div class="k">${esc(t('fig_dplus'))}</div><div class="v">${Math.round(o.ascend_m)} m</div></div>
-          <div><div class="k">${esc(t('fig_duration'))}</div><div class="v">≈ ${hm(o.time_est_min)}</div></div>
-        </div>`;
+          <div class="k">${esc(t('fig_distance'))}</div><div class="k">${esc(t('fig_dplus'))}</div><div class="k">${esc(t('fig_duration'))}</div>
+          <div class="big">${km(o.distance_km)}<span> km</span></div><div class="v">${Math.round(o.ascend_m)} m</div><div class="v">≈ ${hm(o.time_est_min)}</div>
+        </div>${o.shares.main_roads > 0.10 ? '<div class="roadwarn">' + WARN_ICON_() + '<span><b>' + pc(o.shares.main_roads) +
+          '</b> ' + esc(t('k_main_short')) + '</span></div>' : ''}`;
     }
 
     function select(i) {
@@ -1118,14 +1218,13 @@
         }
         const el = document.createElement('div');
         el.className = 'mk-alt';
-        el.textContent = optLabel(x.label) + ' · ' + km(x.distance_km) + ' km';
+        el.textContent = optName(x) + ' · ' + km(x.distance_km) + ' km';
         el.onclick = e => { e.stopPropagation(); select(k); };
         altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] }).setLngLat([best[0], best[1]]).addTo(map));
       });
     }
 
     // ---------- surlignage d'un tronçon (maquette 5c) : sortie de ville, forêt ou bord d'eau (bande de terrain), montées
-    const HL_COLORS = { city: '#3A3F3B', exit: '#3A3F3B', water: '#8FA3AB', forest: '#6E7A5A', climb: '#24221F' };
     function hlRanges(o, kind) {                           // tronçons [km début, km fin]
       if (kind === 'exit') return [[0, exitKm(o)]];
       if (kind === 'city') return [[0, o.distance_km]];
@@ -1133,7 +1232,7 @@
         const c = (o.terrain.climbs || [])[Number(kind.slice(6))];
         return c ? [[c.start_km, c.start_km + c.length_km]] : [];
       }
-      const seq = (o.scenery && o.scenery.landcover_seq) || '', ch = kind === 'water' ? 'e' : 'f';
+      const seq = (o.scenery && o.scenery.landcover_seq) || '', ch = { water: 'e', forest: 'f', town: 'v' }[kind];
       const step = o.distance_km / Math.max(seq.length, 1), out = [];
       for (let i = 0; i < seq.length;) {                   // suites de points du milieu, trous de 100 m ignorés
         if (seq[i] !== ch) { i++; continue; }
@@ -1154,6 +1253,7 @@
     function clearHighlight() {
       hlKey = null;
       if (map.getSource('hl')) map.getSource('hl').setData(EMPTY);
+      if (map.getLayer('routes')) { map.setPaintProperty('routes', 'line-opacity', 1); map.setPaintProperty('routes-casing', 'line-opacity', 1); }
       sheetBody.querySelectorAll('.hl-on').forEach(x => x.classList.remove('hl-on'));
     }
     function toggleHighlight(el) {
@@ -1165,7 +1265,9 @@
       if (!lines.length) return;
       hlKey = kind;
       el.classList.add('hl-on');
-      const color = HL_COLORS[kind.split(':')[0]];
+      const color = ROUTE.color;
+      map.setPaintProperty('routes', 'line-opacity', 0.4);        // boucle atténuée sous le tronçon surligné (brief v2)
+      map.setPaintProperty('routes-casing', 'line-opacity', 0.4);
       map.getSource('hl').setData({ type: 'FeatureCollection', features: lines.map(c =>
         ({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: c } })) });
       // pas de zoom sur le tronçon (demande de Florent) : toute la boucle reste cadrée pour situer l'endroit exact
@@ -1178,9 +1280,10 @@
       if (!shown.length || !shown[current]) return;
       const bounds = new maplibregl.LngLatBounds();
       shown.forEach(x => x.coords.forEach(c => bounds.extend([c[0], c[1]])));   // la boucle et ses variantes (maquette 5b)
+      if (startData) bounds.extend([startData.start.lon, startData.start.lat]);  // le départ ne passe jamais sous le panneau
       const hs = sheetHeights(), H = window.innerHeight;
-      let top = topCard.getBoundingClientRect().bottom + 16;
-      let bottom = (sheet.dataset.state === 'high' ? hs.low : hs[sheet.dataset.state]) + 16;
+      let top = (getComputedStyle(topCard).display !== 'none' ? topCard.getBoundingClientRect().bottom : 0) + 16;
+      let bottom = hs[sheet.dataset.state] + 36;              // hauteur du panneau + bouton des crédits (ⓘ)
       if (top + bottom > H - 80) { const k = (H - 80) / (top + bottom); top *= k; bottom *= k; }  // écran trop petit
       map.fitBounds(bounds, { padding: { top, bottom, left: 30, right: shown.length > 1 ? 70 : 30 }, duration: 500 });
     }
