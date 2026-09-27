@@ -1095,7 +1095,7 @@
     function toggleHighlight(el) {
       const kind = el.dataset.hl, again = hlKey === kind;
       clearHighlight();
-      if (again) { fitRoute(); return; }                   // second toucher : on efface et on recadre la boucle
+      if (again) return;                                   // second toucher : on efface le surlignage
       const o = shown[current];
       const lines = hlRanges(o, kind).filter(([a, b]) => b > a).map(([a, b]) => hlLine(o, a, b));
       if (!lines.length) return;
@@ -1104,13 +1104,9 @@
       const color = HL_COLORS[kind.split(':')[0]];
       map.getSource('hl').setData({ type: 'FeatureCollection', features: lines.map(c =>
         ({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: c } })) });
+      // pas de zoom sur le tronçon (demande de Florent) : toute la boucle reste cadrée pour situer l'endroit exact
       if (sheet.dataset.state === 'high') setSheet('mid');  // laisser voir la carte
-      const bounds = new maplibregl.LngLatBounds();
-      lines.forEach(l => l.forEach(c => bounds.extend(c)));
-      const H = window.innerHeight;
-      let top = topCard.getBoundingClientRect().bottom + 24, bottom = sheetHeights()[sheet.dataset.state] + 24;
-      if (top + bottom > H - 80) { const k = (H - 80) / (top + bottom); top *= k; bottom *= k; }
-      map.fitBounds(bounds, { padding: { top, bottom, left: 40, right: 40 }, maxZoom: 15, duration: 500 });
+      fitRoute();
     }
 
     // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)
