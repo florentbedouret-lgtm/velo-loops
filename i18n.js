@@ -45,6 +45,14 @@ const I18N = {
   link_here: ['Copie ce lien :', 'Copy this link:', 'Copia este enlace:', 'Copia aquest enllaç:'],
   last_start: ['Ton dernier départ', 'Your last start', 'Tu última salida', 'La teva última sortida'],
   from_link: ['Boucle partagée', 'Shared loop', 'Ruta compartida', 'Ruta compartida'],
+  climb_soft: ['douce', 'gentle', 'suave', 'suau'],
+  climb_steady: ['soutenue', 'steady', 'sostenida', 'sostinguda'],
+  climb_steep: ['raide', 'steep', 'dura', 'dura'],
+  history: ['Mes boucles ({n})', 'My loops ({n})', 'Mis rutas ({n})', 'Les meves rutes ({n})'],
+  h_gpx: ['GPX le {date}', 'GPX on {date}', 'GPX el {date}', 'GPX el {date}'],
+  h_shared: ['partagée le {date}', 'shared on {date}', 'compartida el {date}', 'compartida el {date}'],
+  h_clear: ["Effacer l'historique", 'Clear history', 'Borrar el historial', "Esborra l'historial"],
+  from_history: ['Depuis Mes boucles', 'From My loops', 'Desde Mis rutas', 'Des de Les meves rutes'],
   choose_start: ['Choisir un départ', 'Choose a start', 'Elige una salida', 'Tria una sortida'],
 
   // ---------- allures et options
@@ -62,12 +70,7 @@ const I18N = {
   vn_cycle: ['Plus de pistes', 'More cycle paths', 'Más carriles bici', 'Més carrils bici'],
   vn_main: ['Moins de grands axes', 'Fewer main roads', 'Menos carreteras principales', 'Menys carreteres principals'],
   vn_lights: ['Moins de feux', 'Fewer traffic lights', 'Menos semáforos', 'Menys semàfors'],
-  vd_n: ['Par le nord', 'Via the north', 'Por el norte', 'Pel nord'], vd_s: ['Par le sud', 'Via the south', 'Por el sur', 'Pel sud'],
-  vd_e: ["Par l'est", 'Via the east', 'Por el este', "Per l'est"], vd_o: ["Par l'ouest", 'Via the west', 'Por el oeste', "Per l'oest"],
-  vd_ne: ['Par le nord-est', 'Via the north-east', 'Por el noreste', 'Pel nord-est'],
-  vd_no: ['Par le nord-ouest', 'Via the north-west', 'Por el noroeste', 'Pel nord-oest'],
-  vd_se: ['Par le sud-est', 'Via the south-east', 'Por el sureste', 'Pel sud-est'],
-  vd_so: ['Par le sud-ouest', 'Via the south-west', 'Por el suroeste', 'Pel sud-oest'],
+  vd_other: ['Autre direction : {d}', 'Other direction: {d}', 'Otra dirección: {d}', 'Una altra direcció: {d}'],
 
   // ---------- noms des départs (morceaux en français venus du pipeline)
   station: ['Gare', 'Station', 'Estación', 'Estació'],

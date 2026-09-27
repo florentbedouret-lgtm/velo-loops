@@ -81,7 +81,8 @@ function profileSvg(o) {
     let top = Infinity;
     p.alt.forEach((a, k) => { if (Math.abs(x(Math.min(k * p.step, p.total)) - cx) <= 11) top = Math.min(top, y(a)); });
     const cy = Math.max(8, (top === Infinity ? y(p.alt[Math.min(p.alt.length - 1, Math.round(d / p.step))]) : top) - 11);
-    return `<g class="pf-mk" data-hl="climb:${k}" role="button" tabindex="0" style="cursor:pointer">` +
+    const cat = c.avg_grade_pct == null || typeof climbCategory !== 'function' ? '' : ', ' + climbCategory(c.avg_grade_pct);
+    return `<g class="pf-mk" data-hl="climb:${k}" role="button" tabindex="0" style="cursor:pointer"><title>${n + 1}${cat}</title>` +
       `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7" fill="#FFFFFF" stroke="#625D55"/>` +
       `<text x="${cx.toFixed(1)}" y="${(cy + 3.2).toFixed(1)}" font-size="9" text-anchor="middle" fill="#24221F" ` +
       `font-family="IBM Plex Mono, ui-monospace, monospace">${n + 1}</text></g>`;

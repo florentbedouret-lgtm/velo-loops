@@ -103,6 +103,14 @@
     #startRow.empty #where { font-size: 15px; color: var(--color-text-2); }
     #change { white-space: nowrap; }
     #top:not(.open) .lang-wrap { display: none; }          /* langue : seulement dans les réglages dépliés (brief v2) */
+    #history { margin-top: 12px; border-top: 1px solid var(--color-border); padding-top: 10px; }
+    #history summary { cursor: pointer; font-size: 15px; }
+    #historyList { display: flex; flex-direction: column; margin-top: 6px; }
+    #historyList button.h-item { font: inherit; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--color-border);
+                                 padding: 9px 0; cursor: pointer; color: var(--color-text); display: flex; flex-direction: column; gap: 2px; }
+    #historyList .h-sub { font-size: 13px; color: var(--color-text-2); }
+    #historyList .h-clear { font: inherit; font-size: 13px; background: none; border: 0; padding: 8px 0 0; color: var(--color-text-2);
+                            text-decoration: underline; cursor: pointer; align-self: flex-start; }
     .empty-msg { font-size: 15px; color: var(--color-text-2); padding: 2px 0 6px; }
     #change { font: inherit; font-size: 14px; color: var(--color-accent); background: none; border: 0; padding: 4px 0; cursor: pointer;
               text-decoration: underline; text-underline-offset: 3px; flex: none; }
@@ -279,6 +287,7 @@
         <div id="where">Tape une adresse, touche un point sur la carte ou utilise ta position.</div>
         <button type="button" id="change" aria-expanded="false" aria-controls="adv">Choisir dans la liste</button>
       </div>
+      <details id="history" hidden><summary id="historySum"></summary><div id="historyList"></div></details>
       <div id="adv" hidden>
         <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off" data-i18n-ph="filter_ph" data-i18n-aria="filter_aria">
         <select id="start" aria-label="Départ" data-i18n-aria="start_aria"></select>
@@ -333,7 +342,8 @@
       const c = o.coords, s = c[0];
       const cx = c.reduce((acc, p) => acc + p[0], 0) / c.length, cy = c.reduce((acc, p) => acc + p[1], 0) / c.length;
       const ang = (Math.atan2((cx - s[0]) * Math.cos(s[1] * Math.PI / 180), cy - s[1]) * 180 / Math.PI + 360) % 360;
-      return t('vd_' + ['n', 'ne', 'e', 'se', 's', 'so', 'o', 'no'][Math.round(ang / 45) % 8]);
+      const dir = ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ouest', 'ouest', 'nord-ouest'][Math.round(ang / 45) % 8];
+      return t('vd_other', { d: t('dir_' + dir) });
     }
     const EMPTY = { type: 'FeatureCollection', features: [] };
     // couleurs de la carte, reprises de brand/oyan-tokens.css (MapLibre ne lit pas les variables CSS) ;
@@ -507,6 +517,8 @@
       ? ' <span class="badge">' + esc(t('station_note')) + '</span>' : '';
 
     // ---------- pente : catégories qualitatives (jamais de pourcentage affiché)
+    // catégorie d'une montée d'après sa pente moyenne (profil lissé à 500 m) ; jamais de pourcentage affiché (D17)
+    function climbCategory(pct) { return t(pct < 3 ? 'climb_soft' : pct < 6 ? 'climb_steady' : 'climb_steep'); }
     function slopeCategory(pct) {                          // en minuscules : placée après une virgule
       return t('slope_' + (pct < 2.5 ? 0 : pct < 4 ? 1 : pct < 6 ? 2 : 3));
     }
@@ -709,7 +721,7 @@
       // départs disponibles : points galet à contour blanc (9 px au zoom de quartier), plus petits en vue d'ensemble
       map.addSource('starts', { type: 'geojson', data: { type: 'FeatureCollection', features: index.starts.map(s =>
         ({ type: 'Feature', properties: { id: s.id }, geometry: { type: 'Point', coordinates: [s.lon, s.lat] } })) } });
-      map.addLayer({ id: 'starts-pts', type: 'circle', source: 'starts', paint: {
+      map.addLayer({ id: 'starts-pts', type: 'circle', source: 'starts', minzoom: 10, paint: {   // panel : vue large encombrée
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 1.8, 11, 3, 13, 4.5, 16, 6],
         'circle-color': ROUTE.other, 'circle-stroke-color': '#FFFFFF',
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 12, 1.5] } }, beforeId);
@@ -811,6 +823,7 @@
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
       showEmptySheet();
       setAdv(false);
+      renderHistory();
       restoreLoop();                                        // lien partagé ou derniers réglages de l'appareil
     }
     // panneau sans départ choisi (brief v2) : « Choisis un départ pour voir la boucle. »
@@ -870,6 +883,7 @@
       resultsEl.textContent = '';
       setAdv(!document.getElementById('adv').hidden);
       mapLang();
+      renderHistory();
       if (shown.length) select(current); else if (startData) showLevel(); else showEmptySheet();
       updatePill();
     });
@@ -1051,7 +1065,9 @@
       else if (o.traffic_lights === 0) out.push([t('k_nolight_fig'), t('k_nolight')]);
       else if (o.terrain.climbs && o.terrain.climbs.length) {
         const c = o.terrain.climbs[0];
-        out.push([km1(c.length_km) + ' km', t('k_climb', { m: Math.round(c.gain_m) }), false, 'climb:0']);
+        out.push([km1(c.length_km) + ' km', t('k_climb', { m: Math.round(c.gain_m) }) +
+          (c.avg_grade_pct != null ? ' ' + climbCategory(c.avg_grade_pct).charAt(0).toUpperCase() + climbCategory(c.avg_grade_pct).slice(1) + '.' : ''),
+          false, 'climb:0']);
       }
       // pente : badge à seuil unique, jamais de chiffre (D17)
       if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', t('k_steep'), true]);
@@ -1082,8 +1098,8 @@
       if (tr.n_climbs) {
         R.push([String(tr.n_climbs), tn('fr_climbs', tr.n_climbs) + (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct) : '') +
           (climbs.length && climbs.length < tr.n_climbs ? t('fr_biggest', { k: climbs.length }) : '') + '.']);
-        climbs.forEach(([c, k], n) => R.push(['n° ' + (n + 1), t('fr_climb', { a: km(c.start_km), l: km(c.length_km), g: Math.round(c.gain_m) }),
-          'climb:' + k]));
+        climbs.forEach(([c, k], n) => R.push(['n° ' + (n + 1), t('fr_climb', { a: km(c.start_km), l: km(c.length_km), g: Math.round(c.gain_m) }) +
+          (c.avg_grade_pct != null ? ', ' + climbCategory(c.avg_grade_pct) : ''), 'climb:' + k]));
       } else R.push(['0', t('fr_noclimb')]);
       const lcF = LANDCOVER_OK && o.scenery && o.scenery.landcover, seq = !!(o.scenery && o.scenery.landcover_seq);
       const sc = o.scenery;
@@ -1350,8 +1366,48 @@
       approachMin = null;
       chooseStart(r.s);
     }
+    // ---------- historique : boucles téléchargées ou partagées, sur cet appareil (20 au plus, la plus récente en premier)
+    const HIST_KEY = 'oyan-history';
+    function readHistory() { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; } }
+    function addHistory(action) {
+      const o = shown[current];
+      if (!o || !startData) return;
+      const it = { s: startSel.value, d: durSel.value, l: levelSel.value, o: o.label, km: o.distance_km, up: Math.round(o.ascend_m),
+                   a: action, at: new Date().toISOString().slice(0, 10) };
+      const list = readHistory().filter(x => !(x.s === it.s && x.d === it.d && x.l === it.l && x.o === it.o));
+      list.unshift(it);
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(list.slice(0, 20))); } catch (e) { /* stockage bloqué */ }
+      renderHistory();
+    }
+    function renderHistory() {
+      const list = readHistory(), box = document.getElementById('history');
+      box.hidden = !list.length;
+      if (!list.length) return;
+      document.getElementById('historySum').textContent = t('history', { n: list.length });
+      document.getElementById('historyList').innerHTML = list.map((x, i) => {
+        const s = indexData && indexData.starts.find(y => y.id === x.s);
+        if (!s) return '';
+        return '<button type="button" class="h-item" data-h="' + i + '"><span>' + esc(startLabel(s)) + ' · ' + hm(Number(x.d) * 60) + ' · ' +
+          esc(t('lvl_' + x.l)) + '</span><span class="h-sub">' + esc(optLabel(x.o)) + ' · ' + km(x.km) + ' km · ' +
+          esc(t('dplus_inline', { m: x.up })) + ' · ' + esc(t(x.a === 'share' ? 'h_shared' : 'h_gpx', { date: new Date(x.at + 'T12:00:00').toLocaleDateString(LANG, { day: 'numeric', month: 'short' }) })) + '</span></button>';
+      }).join('') + '<button type="button" class="h-clear" data-h="clear">' + esc(t('h_clear')) + '</button>';
+    }
+    document.getElementById('historyList').addEventListener('click', e => {
+      const b = e.target.closest('button[data-h]');
+      if (!b) return;
+      if (b.dataset.h === 'clear') { try { localStorage.removeItem(HIST_KEY); } catch (err) { /* rien */ } renderHistory(); return; }
+      const x = readHistory()[Number(b.dataset.h)];
+      if (!x) return;
+      levelSel.value = x.l; durSel.value = x.d; wantedOption = x.o; approachMin = null;
+      const s = indexData.starts.find(y => y.id === x.s);
+      setWhere(() => startLine(s, esc(t('from_history'))));
+      document.getElementById('history').open = false;
+      chooseStart(x.s);
+    });
+
     async function shareLoop() {
       const url = loopUrl(), o = shown[current];
+      addHistory('share');
       const title = 'Oyan · ' + optName(o) + ' · ' + km(o.distance_km) + ' km';
       try { if (navigator.share) { await navigator.share({ title, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
       try { await navigator.clipboard.writeText(url); showGpxHelp(esc(t('link_copied'))); }
@@ -1364,6 +1420,7 @@
     }
     function getGpx() {                                    // téléchargement, puis « comment suivre la boucle ? »
       downloadGpx(startData.start, shown[current], t('lvl_' + shown[current].level));
+      addHistory('gpx');
       showGpxHelp(t('gpx_help'));
     }
     function toggleDplusHelp(b) {
