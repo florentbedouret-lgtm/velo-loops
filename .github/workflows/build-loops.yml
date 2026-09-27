@@ -88,12 +88,12 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # figé : ubuntu-latest passe à Ubuntu 26 dès le 19/10/2026 (osmium, Java, Python à revalider avant)
     timeout-minutes: 350
     outputs:
       mode: ${{ steps.resolve_mode.outputs.mode }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Déterminer le mode effectif
         id: resolve_mode
@@ -112,12 +112,12 @@ jobs:
           free -g
           df -h . | tail -1
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -130,7 +130,7 @@ jobs:
 
       - name: Cache altitude (tuiles SRTM) et jar GraphHopper
         if: ${{ steps.resolve_mode.outputs.mode != 'site' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             elevation-cache
@@ -179,7 +179,7 @@ jobs:
 
       - name: Publier le plan (départs, couverture, échantillon)
         if: ${{ steps.resolve_mode.outputs.mode != 'generate_names' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: plan-departs
           path: |
@@ -219,7 +219,7 @@ jobs:
 
       - name: Publier le diagnostic pente
         if: ${{ steps.resolve_mode.outputs.mode == 'slope_check' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: diagnostic-pente
           path: |
@@ -254,7 +254,7 @@ jobs:
 
       - name: Publier le diagnostic nature
         if: ${{ always() && steps.resolve_mode.outputs.mode == 'nature_check' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: diagnostic-nature
           path: |
@@ -275,7 +275,7 @@ jobs:
 
       - name: Publier la mesure de détour
         if: ${{ steps.resolve_mode.outputs.mode == 'detour' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: detour-mesure
           path: |
@@ -326,7 +326,7 @@ jobs:
 
       - name: Publier les mesures du pilote (temps de calcul, gain des départs voisins)
         if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full')) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pilote-mesures
           path: |
@@ -337,7 +337,7 @@ jobs:
 
       - name: Archiver les données générées (14 jours)
         if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full')) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: loops-data
           path: web/data
@@ -369,7 +369,7 @@ jobs:
 
       - name: Publier le diagnostic terrain
         if: ${{ always() && steps.resolve_mode.outputs.mode == 'landcover_check' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: diagnostic-terrain
           path: |
@@ -401,7 +401,7 @@ jobs:
 
       - name: Publier le rapport de génération
         if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full')) }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rapport-generation
           path: |
@@ -423,7 +423,7 @@ jobs:
   deploy:
     if: ${{ (startsWith(needs.build.outputs.mode, 'generate') || needs.build.outputs.mode == 'pilot' || startsWith(needs.build.outputs.mode, 'full') || needs.build.outputs.mode == 'site' || needs.build.outputs.mode == 'landcover') }}
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # figé : ubuntu-latest passe à Ubuntu 26 dès le 19/10/2026 (osmium, Java, Python à revalider avant)
     permissions:
       pages: write
       id-token: write
