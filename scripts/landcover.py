@@ -4,8 +4,8 @@ Répartition du terrain (ville / eau / forêt / espaces ouverts) des boucles DÉ
 elle ne dépend que du tracé (coords publiés) et des cartes OSM. Deux usages :
 
   --check          diagnostic (rien n'est publié) : part « ville » selon plusieurs définitions, sur des départs témoins
-  --check-water    diagnostic (rien n'est publié) : part « bord d'eau » selon la distance à la mer (27/09/2026, boucle
-                   Garraf-Sitges : route en corniche à 150-250 m de la mer comptée forêt / espaces ouverts)
+  --check-water    diagnostic (rien n'est publié) : part « bord d'eau » le long des grandes rivières (27/09/2026 ; le
+                   diagnostic précédent, sur la mer, a donné la règle mer ~250 m / front de mer ~50 m, voir D27)
   --apply METHODE  recalcule scenery.landcover de toutes les boucles de --data avec la définition METHODE, ainsi que
                    scenery.landcover_seq (catégorie tous les 100 m : bande sous le profil), exit_city_km (sortie de ville
                    mesurée par le bâti) et le bloc « compare » de l'index (suggestion de départ voisin)
@@ -119,39 +119,21 @@ def partition(pts, land, mask, with_cls: bool = False):
     return (shares, cls) if with_cls else shares
 
 
-# ---------------------------------------------------------------- « bord d'eau » : la mer se voit de plus loin qu'une rivière
-SEA_DEG = 0.0027          # ~225 m en longitude, ~300 m en latitude (rivières et lacs : SCENERY_WATER_DEG, ~100 m)
-SEA_NEAR_DEG = 0.0006     # ~50 m : front de mer (promenade), où « bord d'eau » passerait avant « ville »
-WATER_VARIANTS = ("actuel", "mer250", "mer250_front50")
-WATER_WITNESSES = ("garraf-nord", "sitges", "vilanova-i-la-geltru", "castelldefels", "ciutat-vella", "badalona",
-                   "el-masnou", "sant-adria-de-besos", "molins-de-rei", "gracia")
-
-
-def partition_water(pts, land, mask, variant: str):
-    """Comme partition(), avec la variante « bord d'eau » : mer jusqu'à SEA_DEG ; et, pour mer250_front50, la mer à moins
-    de SEA_NEAR_DEG passe avant la ville. Retourne (parts, catégorie par point)."""
-    n = len(pts)
-    cls = np.full(n, 3)
-    ft = land.trees.get("forest")
-    if ft is not None:
-        cls[np.unique(ft.query(pts, predicate="dwithin", distance=g.SCENERY_FOREST_DEG)[0])] = 2
-    wt = land.trees.get("water")
-    if wt is not None:
-        cls[np.unique(wt.query(pts, predicate="dwithin", distance=g.SCENERY_WATER_DEG)[0])] = 1
-    st_ = land.trees.get("sea")
-    if variant != "actuel" and st_ is not None:
-        cls[np.unique(st_.query(pts, predicate="dwithin", distance=SEA_DEG)[0])] = 1
-    cls[mask] = 0
-    if variant == "mer250_front50" and st_ is not None:
-        cls[np.unique(st_.query(pts, predicate="dwithin", distance=SEA_NEAR_DEG)[0])] = 1
-    c = np.bincount(cls, minlength=4) / max(n, 1)
-    return {"city": round(float(c[0]), 3), "water": round(float(c[1]), 3), "forest": round(float(c[2]), 3),
-            "countryside": round(float(c[3]), 3)}, cls
+# ---------------------------------------------------------------- « bord d'eau » le long des grandes rivières (27/09/2026)
+# Remarque de Florent (Gràcia 2 h, le long du Besòs) : des morceaux qui suivent la rivière ne sont pas « bord d'eau ». Le Besòs
+# n'est dessiné que par sa ligne centrale (lit de plus de 100 m) : la piste passe à 70-90 m de cette ligne, à la limite du
+# seuil de ~100 m ; et la ville (5 bâtiments à ~75 m) passe avant l'eau. Variantes comparées (la mer garde sa règle) :
+RIVER_VARIANTS = {"actuel": (None, None),
+                  "riv150": (0.0016, None),             # grande rivière jusqu'à ~135 m (longitude) / ~180 m (latitude)
+                  "riv150_front60": (0.0016, 0.0007)}   # + à moins de ~60 m de la ligne centrale, bord d'eau avant ville
+RIVER_WITNESSES = ("gracia", "sant-adria-de-besos", "santa-coloma-de-gramenet", "montcada-i-reixac", "ripollet",
+                   "sant-andreu", "molins-de-rei", "sant-boi-de-llobregat", "el-prat-de-llobregat", "martorell",
+                   "ciutat-vella", "badalona", "terrassa", "garraf-nord")
 
 
 def check_water(data: Path, land, bld_tree, out_md: Path, out_json: Path):
     rows = []
-    for sid in WATER_WITNESSES:
+    for sid in RIVER_WITNESSES:
         f = data / "starts" / f"{sid}.json"
         if not f.exists():
             continue
@@ -161,30 +143,30 @@ def check_water(data: Path, land, bld_tree, out_md: Path, out_json: Path):
             mask = city_mask(pts, land, "bld75_5", bld_tree)
             r = {"start": sid, "level": o["level"], "min": round(o["duration_target_min"]), "label": o["label"],
                  "km": o["distance_km"]}
-            for v in WATER_VARIANTS:
-                sh, cls = partition_water(pts, land, mask, v)
-                r[v] = {"water": round(100 * sh["water"]), "city": round(100 * sh["city"])}
-                if v != "actuel":
-                    r[v]["seq"] = g.landcover_seq(cls)
-            r["actuel"]["seq"] = g.landcover_seq(partition_water(pts, land, mask, "actuel")[1])
+            for v, (rd, rn) in RIVER_VARIANTS.items():
+                cls = g.landcover_classes(land.trees, pts, mask, rd, rn)
+                c = np.bincount(cls, minlength=4) / max(len(pts), 1)
+                r[v] = {"water": round(100 * float(c[1])), "city": round(100 * float(c[0])), "seq": g.landcover_seq(cls)}
             rows.append(r)
     out_json.write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
-    L = ["# Diagnostic « bord d'eau » de la barre de terrain (rien n'est publié)",
-         f"\n{len(rows)} boucles publiées de {len({r['start'] for r in rows})} départs témoins (côte, rivière, et Gràcia sans "
-         "eau). Parts médianes par départ, en % : **eau / ville**. actuel = eau à moins de ~100 m, ville prioritaire ; "
-         "mer250 = la mer compte jusqu'à ~250 m ; mer250_front50 = en plus, à moins de ~50 m de la mer, bord d'eau avant ville.",
-         "\n| Départ | " + " | ".join(WATER_VARIANTS) + " |", "|---|" + "---|" * len(WATER_VARIANTS)]
-    for sid in WATER_WITNESSES:
+    L = ["# Diagnostic « bord d'eau » le long des grandes rivières (rien n'est publié)",
+         f"\n{len(rows)} boucles publiées de {len({r['start'] for r in rows})} départs témoins (Besòs, Llobregat, et témoins "
+         "sans grande rivière). Parts médianes par départ, en % : **eau / ville**. actuel = règle en ligne (rivière à ~100 m, "
+         "ville prioritaire) ; riv150 = grande rivière jusqu'à ~150 m de sa ligne centrale ; riv150_front60 = en plus, à moins "
+         "de ~60 m de cette ligne, bord d'eau avant ville.",
+         "\n| Départ | " + " | ".join(RIVER_VARIANTS) + " |", "|---|" + "---|" * len(RIVER_VARIANTS)]
+    for sid in RIVER_WITNESSES:
         rs = [r for r in rows if r["start"] == sid]
         if not rs:
             continue
         cell = lambda v: f"{round(st.median(r[v]['water'] for r in rs))} / {round(st.median(r[v]['city'] for r in rs))}"  # noqa: E731
-        L.append(f"| {sid} | " + " | ".join(cell(v) for v in WATER_VARIANTS) + " |")
-    L.append("\n## Cas signalé : Garraf (nord), 2 h, sportif (par variante : eau / ville, puis bande v/e/f/o)")
+        L.append(f"| {sid} | " + " | ".join(cell(v) for v in RIVER_VARIANTS) + " |")
+    L.append(f"\nGrandes rivières chargées : {land.counts.get('river', 0)} tronçons.")
+    L.append("\n## Cas signalé : Gràcia, 2 h, modéré (par variante : eau / ville, puis bande v/e/f/o)")
     for r in rows:
-        if r["start"] == "garraf-nord" and r["min"] == 120 and r["level"] == "soutenu":
+        if r["start"] == "gracia" and r["min"] == 120 and r["level"] == "modere":
             L.append(f"\n**{r['label']}** ({r['km']} km)")
-            for v in WATER_VARIANTS:
+            for v in RIVER_VARIANTS:
                 L.append(f"- {v} : eau {r[v]['water']} %, ville {r[v]['city']} % — `{r[v]['seq']}`")
     out_md.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L), flush=True)

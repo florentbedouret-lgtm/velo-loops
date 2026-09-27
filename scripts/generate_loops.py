@@ -233,16 +233,18 @@ def load_signals(pbf: Path, workdir: Path):
 class LandscapeIndex:
     """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
 
-    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=()):
+    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=(), rivers=()):
         import numpy as np  # noqa: F401
         from shapely.strtree import STRtree
-        builtup, sea = list(builtup), list(sea)
+        builtup, sea, rivers = list(builtup), list(sea), list(rivers)
         self.trees = {k: (STRtree(v) if v else None)
                       for k, v in (("forest", forests), ("water", waters), ("protected", protected),
                                    ("view", viewpoints), ("builtup", builtup), ("buildings", list(buildings)),
-                                   ("sea", sea))}          # sea : trait de côte et plages (aussi dans water)
+                                   ("sea", sea), ("river", rivers))}   # sea / river : aussi dans water (côte, plages ;
+                                                                      # ligne centrale des grandes rivières)
         self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
-                       "view": len(viewpoints), "builtup": len(builtup), "buildings": len(buildings), "sea": len(sea)}
+                       "view": len(viewpoints), "builtup": len(builtup), "buildings": len(buildings), "sea": len(sea),
+                       "river": len(rivers)}
 
     def measure(self, coords, cum) -> dict:
         import numpy as np
@@ -290,9 +292,11 @@ SEA_DEG = 0.0027              # ~225 m en longitude, ~300 m en latitude (rivièr
 SEA_NEAR_DEG = 0.0006         # ~50 m
 
 
-def landcover_classes(trees, pts, city):
+def landcover_classes(trees, pts, city, river_deg=None, river_near_deg=None):
     """Catégorie de chaque point (0 ville, 1 bord d'eau, 2 forêt, 3 espaces ouverts) ; city : masque du bâti dense.
-    Partagée par le générateur et scripts/landcover.py (mode landcover, sans GraphHopper)."""
+    Partagée par le générateur et scripts/landcover.py (mode landcover, sans GraphHopper).
+    river_deg / river_near_deg (diagnostic « river », 27/09/2026) : grande rivière comptée jusqu'à river_deg de sa ligne
+    centrale ; à moins de river_near_deg, bord d'eau avant ville (front de rivière). None = règle actuelle."""
     import numpy as np
     cls = np.full(len(pts), 3)
     near = lambda key, dist: np.unique(trees[key].query(pts, predicate="dwithin", distance=dist)[0])  # noqa: E731
@@ -302,9 +306,13 @@ def landcover_classes(trees, pts, city):
         cls[near("water", SCENERY_WATER_DEG)] = 1
     if trees.get("sea") is not None:
         cls[near("sea", SEA_DEG)] = 1
+    if river_deg and trees.get("river") is not None:
+        cls[near("river", river_deg)] = 1
     cls[np.asarray(city, dtype=bool)] = 0
     if trees.get("sea") is not None:
         cls[near("sea", SEA_NEAR_DEG)] = 1
+    if river_near_deg and trees.get("river") is not None:
+        cls[near("river", river_near_deg)] = 1
     return cls
 
 
@@ -356,7 +364,7 @@ def load_landscape(pbf: Path, workdir: Path):
     except subprocess.CalledProcessError as e:
         print(f"! extraction du paysage échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
         return None
-    forests, waters, protected, views, builtup, sea = [], [], [], [], [], []
+    forests, waters, protected, views, builtup, sea, rivers = [], [], [], [], [], [], []
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -381,6 +389,8 @@ def load_landscape(pbf: Path, workdir: Path):
                 waters.append(geom)
                 if props.get("natural") in ("coastline", "beach"):
                     sea.append(geom)
+                if props.get("waterway") == "river":
+                    rivers.append(geom)
             elif props.get("landuse") == "forest" or props.get("natural") == "wood":
                 forests.append(geom)
             elif props.get("landuse") in ("residential", "commercial", "industrial", "retail"):
@@ -388,7 +398,7 @@ def load_landscape(pbf: Path, workdir: Path):
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
-    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea)
+    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea, rivers)
 
 
 def load_building_points(pbf: Path, workdir: Path, bbox: str = "") -> list:
