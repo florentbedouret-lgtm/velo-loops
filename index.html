@@ -141,6 +141,11 @@
     .keys { border-top: 1px solid var(--color-border); margin-top: 16px; }
     .keys div { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--color-border); font-size: 15px; line-height: 1.35; }
     .keys div:last-child { border-bottom: 0; }
+    /* point clé ou montée qui surligne son tronçon sur la carte (maquette 5c) */
+    [data-hl] { cursor: pointer; }
+    .keys div[data-hl] .txt { text-decoration: underline dotted var(--color-text-2); text-underline-offset: 4px; }
+    .keys div.hl-on, .facts li.hl-on { background: var(--color-bg); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
+    .facts .climbs li[data-hl] { text-decoration: underline dotted var(--color-text-2); text-underline-offset: 4px; }
     .keys .fig { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); width: 56px; flex: none; }
     .keys .warn-row .fig { color: var(--color-accent); }
     .keys .txt { flex: 1; }
@@ -633,6 +638,12 @@
       ac.strokeStyle = ROUTE.color; ac.lineWidth = 3.6; ac.lineCap = 'round'; ac.lineJoin = 'round';
       ac.beginPath(); ac.moveTo(11, 8); ac.lineTo(18, 14); ac.lineTo(11, 20); ac.stroke();
       map.addImage('oyan-arrow', ac.getImageData(0, 0, 28, 28), { pixelRatio: 2 });
+      // tronçon surligné depuis un point clé : couleur de la barre de terrain (montées : basalte), sur liseré blanc
+      map.addSource('hl', { type: 'geojson', data: EMPTY });
+      map.addLayer({ id: 'hl-casing', type: 'line', source: 'hl', layout: lineLayout,
+        paint: { 'line-color': ROUTE.casing, 'line-width': 11 } });
+      map.addLayer({ id: 'hl', type: 'line', source: 'hl', layout: lineLayout,
+        paint: { 'line-color': ['get', 'color'], 'line-width': 7 } });
       map.addLayer({ id: 'routes-arrows', type: 'symbol', source: 'routes', filter: isSel,
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 160, 'icon-image': 'oyan-arrow',
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
@@ -663,6 +674,12 @@
       sheetBody.addEventListener('click', e => {          // carte d'une autre boucle (bas du panneau) : idem
         const b = e.target.closest('.vcard');
         if (b) select(Number(b.dataset.i));
+        const h = e.target.closest('[data-hl]');             // point clé ou montée : surligner le tronçon
+        if (h) toggleHighlight(h);
+      });
+      sheetBody.addEventListener('keydown', e => {
+        const h = e.target.closest('[data-hl]');
+        if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleHighlight(h); }
       });
       document.getElementById('go').onclick = searchAddress;
       addr.onkeydown = e => { if (e.key === 'Enter') searchAddress(); };
@@ -751,6 +768,7 @@
         map.getSource('routes').setData(EMPTY);
         map.getSource('cursor').setData(EMPTY);
         altMarkers.forEach(m => m.remove()); altMarkers = [];
+        clearHighlight();
         return;
       }
       const i = shown.findIndex(o => o.label === 'equilibre');
@@ -836,8 +854,8 @@
       }
       const ex = exitKm(o);
       if (ex === 0) out.push(['0 km', 'Tu pars directement hors de la ville.']);
-      else if (ex == null) out.push(['', 'Tu restes en ville tout du long.']);
-      else out.push([km1(ex) + ' km', 'Tu sors de la ville.']);
+      else if (ex == null) out.push(['', 'Tu restes en ville tout du long.', false, 'city']);
+      else out.push([km1(ex) + ' km', 'Tu sors de la ville.', false, 'exit']);
       const sc = o.scenery;
       if (sc) {                                             // la nature la plus présente, si elle compte vraiment
         const lc = LANDCOVER_OK && sc.landcover;
@@ -845,7 +863,8 @@
                         ['forest', lc ? lc.forest : sc.forest, 0.15, lc ? 'du parcours en forêt.' : 'du parcours longe la forêt.'],
                         ['water', lc ? lc.water : sc.water, 0.05, 'du parcours au bord de l\'eau.']]
           .filter(([, v, min]) => v >= min).sort((a, b) => b[1] - a[1]);
-        if (nature.length) out.push([pc(nature[0][1]), nature[0][3]]);
+        if (nature.length) out.push([pc(nature[0][1]), nature[0][3], false,
+          lc && sc.landcover_seq && nature[0][0] !== 'protected' ? nature[0][0] : null]);   // forêt / bord d'eau : bande de terrain
       }
       const sh = o.shares;
       if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), 'sur des routes principales : reste vigilant.', true]);
@@ -853,7 +872,7 @@
       else if (o.traffic_lights === 0) out.push(['0 feu', 'Aucun feu tricolore sur le parcours.']);
       else if (o.terrain.climbs && o.terrain.climbs.length) {
         const c = o.terrain.climbs[0];
-        out.push([km1(c.length_km) + ' km', 'Plus longue montée (+' + Math.round(c.gain_m) + ' m).']);
+        out.push([km1(c.length_km) + ' km', 'Plus longue montée (+' + Math.round(c.gain_m) + ' m).', false, 'climb:0']);
       }
       // pente : badge à seuil unique, jamais de chiffre (D17)
       if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', 'Au moins une rampe très raide.', true]);
@@ -861,8 +880,9 @@
     }
     const WARN_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-label="Attention"><path d="M8 2l6.5 11.5h-13z" fill="none" stroke="#A8522F" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2" stroke="#A8522F" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".8" fill="#A8522F"/></svg>';
     function keysHtml(o) {
-      return '<div class="keys">' + keyPoints(o).map(([fig, txt, warn]) =>
-        '<div' + (warn ? ' class="warn-row"' : '') + '><span class="fig">' + esc(fig) + '</span><span class="txt">' + esc(txt) +
+      return '<div class="keys">' + keyPoints(o).map(([fig, txt, warn, hl]) =>
+        '<div' + (warn ? ' class="warn-row"' : '') + (hl ? ' data-hl="' + hl + '" role="button" tabindex="0"' : '') +
+        '><span class="fig">' + esc(fig) + '</span><span class="txt">' + esc(txt) +
         '</span>' + (warn ? WARN_ICON : '') + '</div>').join('') + '</div>';
     }
     function allFacts(o) {                                  // tous les chiffres mesurés, sans pourcentage de pente (D17)
@@ -877,8 +897,9 @@
       }
       // montées : une ligne de synthèse, puis chaque montée dans l'ordre de passage ({ text, sub })
       const tr = o.terrain;
-      const climbs = (tr.climbs || []).slice().sort((a, b) => a.start_km - b.start_km)
-        .map(c => 'Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m');
+      const climbs = (tr.climbs || []).map((c, k) => [c, k]).sort((a, b) => a[0].start_km - b[0].start_km)
+        .map(([c, k]) => ({ t: 'Montée au km ' + km(c.start_km) + ' : ' + km(c.length_km) + ' km, +' + Math.round(c.gain_m) + ' m',
+                            hl: 'climb:' + k }));
       L.push(tr.n_climbs ? { text: tr.n_climbs + ' montée' + (tr.n_climbs > 1 ? 's' : '') + ' de plus de 20 mètres' +
         (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct).toLowerCase() : '') +
         (climbs.length ? (climbs.length < tr.n_climbs ? ', dont les ' + climbs.length + ' plus grosses :' : ' :') : '.'),
@@ -933,7 +954,7 @@
     // contenu du panneau (maquette 5c / 5d) : terrain, points clés, profil, suggestion, dépliants, autres boucles, notes
     function detailHtml(o) {
       const facts = allFacts(o).map(p => typeof p === 'string' ? '<li>' + esc(p) + '</li>'
-        : '<li>' + esc(p.text) + (p.sub.length ? '<ul class="climbs">' + p.sub.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>' : '') +
+        : '<li>' + esc(p.text) + (p.sub.length ? '<ul class="climbs">' + p.sub.map(x => '<li data-hl="' + x.hl + '" role="button" tabindex="0">' + esc(x.t) + '</li>').join('') + '</ul>' : '') +
           '</li>').join('');
       // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
       let longer = '';
@@ -981,6 +1002,7 @@
 
     function select(i) {
       current = i;
+      clearHighlight();
       const o = shown[current];
       const totalEl = document.getElementById('totalApproach');
       totalEl.textContent = approachMin != null
@@ -1036,6 +1058,59 @@
         el.onclick = e => { e.stopPropagation(); select(k); };
         altMarkers.push(new maplibregl.Marker({ element: el, anchor: 'left', offset: [8, 0] }).setLngLat([best[0], best[1]]).addTo(map));
       });
+    }
+
+    // ---------- surlignage d'un tronçon (maquette 5c) : sortie de ville, forêt ou bord d'eau (bande de terrain), montées
+    const HL_COLORS = { city: '#3A3F3B', exit: '#3A3F3B', water: '#8FA3AB', forest: '#6E7A5A', climb: '#24221F' };
+    function hlRanges(o, kind) {                           // tronçons [km début, km fin]
+      if (kind === 'exit') return [[0, exitKm(o)]];
+      if (kind === 'city') return [[0, o.distance_km]];
+      if (kind.startsWith('climb:')) {
+        const c = (o.terrain.climbs || [])[Number(kind.slice(6))];
+        return c ? [[c.start_km, c.start_km + c.length_km]] : [];
+      }
+      const seq = (o.scenery && o.scenery.landcover_seq) || '', ch = kind === 'water' ? 'e' : 'f';
+      const step = o.distance_km / Math.max(seq.length, 1), out = [];
+      for (let i = 0; i < seq.length;) {                   // suites de points du milieu, trous de 100 m ignorés
+        if (seq[i] !== ch) { i++; continue; }
+        let j = i;
+        while (j < seq.length && (seq[j] === ch || (seq[j + 1] === ch && j + 1 < seq.length))) j++;
+        out.push([i * step, j * step]);
+        i = j;
+      }
+      return out;
+    }
+    function hlLine(o, a, b) {                             // morceau du tracé entre les km a et b
+      const p = profileData(o.coords, o.distance_km), pts = [profilePoint(o.coords, p.dist, a)];
+      o.coords.forEach((c, k) => { if (p.dist[k] > a && p.dist[k] < b) pts.push([c[0], c[1]]); });
+      pts.push(profilePoint(o.coords, p.dist, b));
+      return pts;
+    }
+    let hlKey = null;
+    function clearHighlight() {
+      hlKey = null;
+      if (map.getSource('hl')) map.getSource('hl').setData(EMPTY);
+      sheetBody.querySelectorAll('.hl-on').forEach(x => x.classList.remove('hl-on'));
+    }
+    function toggleHighlight(el) {
+      const kind = el.dataset.hl, again = hlKey === kind;
+      clearHighlight();
+      if (again) { fitRoute(); return; }                   // second toucher : on efface et on recadre la boucle
+      const o = shown[current];
+      const lines = hlRanges(o, kind).filter(([a, b]) => b > a).map(([a, b]) => hlLine(o, a, b));
+      if (!lines.length) return;
+      hlKey = kind;
+      el.classList.add('hl-on');
+      const color = HL_COLORS[kind.split(':')[0]];
+      map.getSource('hl').setData({ type: 'FeatureCollection', features: lines.map(c =>
+        ({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: c } })) });
+      if (sheet.dataset.state === 'high') setSheet('mid');  // laisser voir la carte
+      const bounds = new maplibregl.LngLatBounds();
+      lines.forEach(l => l.forEach(c => bounds.extend(c)));
+      const H = window.innerHeight;
+      let top = topCard.getBoundingClientRect().bottom + 24, bottom = sheetHeights()[sheet.dataset.state] + 24;
+      if (top + bottom > H - 80) { const k = (H - 80) / (top + bottom); top *= k; bottom *= k; }
+      map.fitBounds(bounds, { padding: { top, bottom, left: 40, right: 40 }, maxZoom: 15, duration: 500 });
     }
 
     // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)
