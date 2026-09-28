@@ -115,8 +115,8 @@ const I18N = {
     'Ubicación denegada. Escribe una dirección o toca el mapa.', 'Ubicació denegada. Escriu una adreça o toca el mapa.'],
   neighbour_where: ['Départ voisin, ≈ {min} min à vélo depuis le précédent', 'Nearby start, ≈ {min} min by bike from the previous one',
     'Salida cercana, a ≈ {min} min en bici de la anterior', "Sortida propera, a ≈ {min} min en bici de l'anterior"],
-  total_approach: ["+ trajet jusqu'au départ : ≈ {t} au total, sans pauses", '+ ride to the start: ≈ {t} in total, excluding breaks',
-    '+ trayecto hasta la salida: ≈ {t} en total, sin pausas', '+ trajecte fins a la sortida: ≈ {t} en total, sense pauses'],
+  total_approach: ["+ trajet aller-retour jusqu'au départ : ≈ {t} au total, sans pauses", '+ ride to the start and back: ≈ {t} in total, excluding breaks',
+    '+ trayecto de ida y vuelta hasta la salida: ≈ {t} en total, sin pausas', "+ trajecte d'anada i tornada fins a la sortida: ≈ {t} en total, sense pauses"],
 
   // ---------- panneau
   loading: ['Chargement…', 'Loading…', 'Cargando…', 'Carregant…'],

@@ -1228,7 +1228,7 @@
       const o = shown[current];
       const totalEl = document.getElementById('totalApproach');
       totalEl.textContent = approachMin != null
-        ? t('total_approach', { t: hm(o.time_est_min + approachMin) })
+        ? t('total_approach', { t: hm(o.time_est_min + 2 * approachMin) })   // aller ET retour (remarque de Florent)
         : '';
       sheetHead.innerHTML = headHtml(o);
       sheetFoot.hidden = false;
