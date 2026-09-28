@@ -13,21 +13,32 @@ function gpxWaypoints(o) {
   if (typeof profileData !== 'function' || !o.coords[0] || o.coords[0].length < 2) return '';
   const p = profileData(o.coords, o.distance_km);
   const on = kmv => profilePoint(o.coords, p.dist, Math.max(0, Math.min(o.distance_km, kmv)));
-  const clip = str => (str.length > GPX_NAME_MAX ? str.slice(0, GPX_NAME_MAX - 1) + '…' : str);
+  const clip = str => (str.length > GPX_NAME_MAX ? str.slice(0, GPX_NAME_MAX - 1).trimEnd() + '…' : str);
   const kmTxt = v => v.toFixed(1).replace('.', LANG === 'en' ? '.' : ',');
   const pts = (o.pois || []).map(x => {
     const q = nearestOnRoute(o.coords, [x.lon, x.lat]);   // point du tracé le plus proche (pas le km : plus exact)
     const off = Math.round(crowM(q, [x.lon, x.lat]));
-    const short = x.t === 'w' ? t('gpx_w') : x.t === 'c' ? (x.n || t('gpx_c')) : t('gpx_g') + ' ' + (x.n || '');
+    const short = x.t === 'w' ? t('gpx_w') : withType(t(x.t === 'c' ? 'gpx_c' : 'gpx_g'), x.n);
     const desc = (x.n ? x.n + ' · ' : '') + t('poi_' + x.t) + ' · km ' + kmTxt(x.km) + (off >= 30 ? ' · ' + t('gpx_off', { m: off }) : '');
     return { lon: q[0], lat: q[1], t: x.t, name: clip(short), desc };
   });
   ((o.terrain && o.terrain.climbs) || []).filter(c => c.name).forEach(c => {
     const q = on(c.start_km + c.length_km);
-    pts.push({ lon: q[0], lat: q[1], t: 'col', name: clip(c.name), desc: c.name + ' · +' + Math.round(c.gain_m) + ' m' });
+    const named = RELIEF_WORD.test(c.name) ? c.name : t('gpx_col') + ' ' + c.name;   // « Turó d'en Gras » se suffit
+    pts.push({ lon: q[0], lat: q[1], t: 'col', name: clip(named), desc: c.name + ' · +' + Math.round(c.gain_m) + ' m' });
   });
   return pts.map(w => '  <wpt lat="' + w.lat.toFixed(6) + '" lon="' + w.lon.toFixed(6) + '"><name>' + xmlEsc(w.name) +
     '</name><desc>' + xmlEsc(w.desc) + '</desc><sym>' + GPX_TYPE[w.t] + '</sym><type>' + GPX_TYPE[w.t] + '</type></wpt>\n').join('');
+}
+// nom court « type + lieu » (15 caractères au plus, Garmin) : le lieu est raccourci au premier séparateur
+// (« Montcada i Reixac-Manresa » -> « Montcada »), sinon coupé ; le détail complet reste dans <desc> (OsmAnd, Organic Maps…)
+const RELIEF_WORD = /^(coll|col|collet|collada|turó|puig|pic|penya|tossal|cim|cima|serra|mola|morro|alto|puerto|mont|montaña|muntanya)(?=[\s'’]|$)/i;
+function withType(type, place) {
+  if (!place) return type;
+  let p = place.split(/\s+-\s+|-|,|\(|\s+(?:i|y|de|del|dels|d')\s+|\s+d'/)[0].trim() || place;
+  p = p.charAt(0).toUpperCase() + p.slice(1);
+  const room = GPX_NAME_MAX - type.length - 1;
+  return type + ' ' + (p.length > room ? p.slice(0, room - 1).trimEnd() + '…' : p);
 }
 function nearestOnRoute(coords, pt) {                    // projection sur le segment le plus proche (repère local en m)
   const k = Math.cos(pt[1] * Math.PI / 180);
