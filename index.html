@@ -1135,7 +1135,8 @@
       if (o.traffic_lights != null) C.push(o.traffic_lights === 0 ? ['0', t('fr_nolights')]
         : [String(o.traffic_lights), tn('fr_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) }) +
           (lightsWaitMin(o) >= 1 ? ' ' + t('fr_lights_wait', { m: lightsWaitMin(o) }) : ''), null, (o.traffic_lights_per_km || 0) >= 2.5]);
-      if (o.scenery && o.scenery.industrial >= 0.05) C.push([pc(o.scenery.industrial), t('fr_industrial'), null, o.scenery.industrial >= 0.10]);
+      if (o.scenery && o.scenery.industrial >= 0.05) C.push([pc(o.scenery.industrial), t('fr_industrial'),
+        o.scenery.industrial_seq ? 'industrial' : null, o.scenery.industrial >= 0.10]);
       const sh = o.shares;
       const rs = !!o.road_seq, dirt = dirtKm(o);
       C.push([pc(sh.dedicated_cycleway), t('k_cycle'), rs && sh.dedicated_cycleway > 0 ? 'cycle' : null]);

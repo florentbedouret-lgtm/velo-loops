@@ -285,10 +285,15 @@ class LandscapeIndex:
         forest = share("forest", SCENERY_FOREST_DEG)
         water = share("water", SCENERY_WATER_DEG)
         protected = share("protected", SCENERY_PROTECTED_DEG)
-        industrial = share("industrial", SCENERY_INDUSTRIAL_DEG) if self.trees.get("industrial") is not None else 0.0
+        ind_mask = np.zeros(len(xy), dtype=bool)          # par point (tous les 100 m) : surlignage dans l'appli
+        if self.trees.get("industrial") is not None:
+            ind_mask[np.unique(self.trees["industrial"].query(pts, predicate="dwithin",
+                                                               distance=SCENERY_INDUSTRIAL_DEG)[0])] = True
+        industrial = float(ind_mask.mean()) if len(xy) else 0.0
         index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
-                "industrial": industrial, "score": round(100 * index), "landcover": self.landcover(pts)}
+                "industrial": industrial, "industrial_mask": ind_mask.tolist(), "score": round(100 * index),
+                "landcover": self.landcover(pts)}
 
     def landcover(self, pts) -> dict | None:
         """Répartition du tracé (points tous les 100 m), UNE catégorie par point, par priorité : ville (au moins
@@ -1445,6 +1450,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
             "industrial": round(l.scenery.get("industrial", 0.0), 3), "score": l.scenery["score"],
+            **({"industrial_seq": "".join("i" if x else "-" for x in l.scenery["industrial_mask"])}
+               if any(l.scenery.get("industrial_mask") or []) else {}),
             **({"protected_seq": "".join("p" if x else "-" for x in l.scenery["landcover"]["park"])}
                if l.scenery.get("landcover") and "park" in l.scenery["landcover"] else {}),
             "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k not in ("cls", "citymask", "park")}

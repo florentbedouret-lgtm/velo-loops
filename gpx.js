@@ -64,7 +64,8 @@ function nearestOnRoute(coords, pt) {                    // projection sur le se
 const SEQ_KINDS = {
   water: [o => o.scenery && o.scenery.landcover_seq, 'e'], forest: [o => o.scenery && o.scenery.landcover_seq, 'f'],
   town: [o => o.scenery && o.scenery.landcover_seq, 'v'], park: [o => o.scenery && o.scenery.protected_seq, 'p'],
-  dirt: [o => o.surface_seq, 'up'], main: [o => o.road_seq, 'm'], cycle: [o => o.road_seq, 'c']
+  dirt: [o => o.surface_seq, 'up'], main: [o => o.road_seq, 'm'], cycle: [o => o.road_seq, 'c'],
+  industrial: [o => o.scenery && o.scenery.industrial_seq, 'i']
 };
 function seqRanges(o, kind) {
   const k = SEQ_KINDS[kind];
