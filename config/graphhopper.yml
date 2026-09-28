@@ -14,6 +14,12 @@ graphhopper:
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json, loop_calm.json]
     - name: sport
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json, loop_sport.json]
+    # repli (v10, choix B) : mêmes profils SANS road_surface.json, utilisés seulement quand aucune boucle propre n'existe
+    # (la terre reste limitée par FALLBACK_UNPAVED_* et signalée)
+    - name: calm_souple
+      custom_model_files: [racingbike.json, bike_elevation.json, loop_calm.json]
+    - name: sport_souple
+      custom_model_files: [racingbike.json, bike_elevation.json, loop_sport.json]
     # trajet d'approche vers un départ : vélo de route sans préférence de paysage ni évitement de la ville
     - name: approach
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json]

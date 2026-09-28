@@ -1172,6 +1172,20 @@ class _ClimbGH:
         return self.gh.round_trip(lon, lat, profile, dist_m, seed, heading, custom_model=CLIMB_MODEL)
 
 
+class _SoftGH:
+    """GraphHopper vu par fit_and_sample, avec le profil « souple » (sans évitement fort de la terre) : repli v10."""
+
+    def __init__(self, gh):
+        self.gh = gh
+
+    @property
+    def last_error(self):
+        return self.gh.last_error
+
+    def round_trip(self, lon, lat, profile, dist_m, seed, heading=None):
+        return self.gh.round_trip(lon, lat, profile + "_souple", dist_m, seed, heading)
+
+
 def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
     """Tous les candidats valides d'un départ pour une durée et un niveau : tirages ordinaires de chaque profil, plus
     les tirages « montée » en niveau sportif. Utilisé par la génération ET par le diagnostic (nature_check --probe)."""
@@ -1186,11 +1200,23 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
         why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
-    if not pool and spare:                                 # repli : aucune boucle sous MAX_UNPAVED
+    if pool:
+        return pool
+    # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre
+    # empêche souvent GraphHopper de boucler (candidats rejetés pour la durée ou les tronçons répétés) : on retente avec
+    # les profils « souples », puis on garde les candidats les moins terreux sous les limites du repli, signalés.
+    for profile in LEVELS[level]["profiles"]:
+        log(f"  {duration:g} h / {level} / {profile} souple (repli)")
+        found, rejects = fit_and_sample(_SoftGH(gh), st, level, profile, duration, candidates, log, fallback=spare)
+        why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
+        log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
+        pool.extend(found)
+    if pool:
+        return pool
+    if spare:
         log(f"    repli : {len(spare)} candidat(s) avec un peu de terre (au plus {FALLBACK_UNPAVED_KM:g} km / "
             f"{FALLBACK_UNPAVED_SHARE:.0%}), signalé(s)")
-        return spare
-    return pool
+    return spare
 
 
 def similarity(a: Loop, b: Loop) -> float:
