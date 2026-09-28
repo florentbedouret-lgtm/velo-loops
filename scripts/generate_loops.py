@@ -78,7 +78,10 @@ CLIMB_MODEL = {
     "speed": [{"if": "average_slope >= 4 && average_slope < 12", "multiply_by": "1.2"}],  # compense bike_elevation
 }
 
-SIGNAL_DELAY_S = 10.0         # attente moyenne attendue par feu tricolore franchi (arrêt 1 fois sur 2 + relance) : à calibrer
+SIGNAL_DELAY_S = 10.0         # attente moyenne par feu tricolore franchi ; sortie de Florent (Gràcia 2 h, 28/09/2026) :
+#                               166 feux franchis, 61 arrêts, 28,8 min -> 10,4 s par feu : confirmé (une seule sortie)
+CITY_SLOWDOWN = 0.30          # en ville, même en roulant (freinages, relances, virages, pistes partagées) : même sortie,
+#                               19,7 km/h en ville contre 26,9 km/h dans le delta (−27 %) ; 0,05 jusqu'au générateur 10
 SIGNAL_RADIUS_M = 15.0        # un feu OSM à moins de 15 m du tracé est considéré comme franchi
 SIGNAL_CLUSTER_M = 60.0       # feux de sens différents d'un même carrefour : comptés une seule fois
 
@@ -101,7 +104,12 @@ WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.
 LANDCOVER_BLD_DEG = 0.0009
 LANDCOVER_BLD_MIN = 5
 FLOW_OVERLAP_FACTOR = 1.0     # pénalité des tronçons répétés (2.0 jusqu'à la v4 ; D21 : diagnostic nature_check v5)
-LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km ou plus, le sous-score "feux" tombe à 0
+LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km, le sous-score "feux" tombe à 0 ; −1 à 5 feux/km
+# zones industrielles et portuaires (OSM landuse=industrial, port) : sortie de Florent, zone franche et port de Barcelone
+# « au milieu des entrepôts, travaux et camions : pas agréable, un peu dangereux, pollué » ; 14 % du parcours -> −7 points
+INDUSTRIAL_PENALTY = 0.5
+INDUSTRIAL_MAX_PENALTY = 0.15
+SCENERY_INDUSTRIAL_DEG = 0.0001   # ~10 m : voie dans (ou au bord immédiat d') une zone industrielle ou portuaire
 SIGNALS = None                  # SignalIndex des feux tricolores, chargé dans main()
 STOPS = None                    # SignalIndex des panneaux stop
 LANDSCAPE = None                # LandscapeIndex (forêts, eau, parcs, points de vue), chargé dans main()
@@ -244,18 +252,19 @@ def load_signals(pbf: Path, workdir: Path):
 class LandscapeIndex:
     """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
 
-    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=(), rivers=()):
+    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=(), rivers=(), industrial=()):
         import numpy as np  # noqa: F401
         from shapely.strtree import STRtree
-        builtup, sea, rivers = list(builtup), list(sea), list(rivers)
+        builtup, sea, rivers, industrial = list(builtup), list(sea), list(rivers), list(industrial)
         self.trees = {k: (STRtree(v) if v else None)
                       for k, v in (("forest", forests), ("water", waters), ("protected", protected),
                                    ("view", viewpoints), ("builtup", builtup), ("buildings", list(buildings)),
-                                   ("sea", sea), ("river", rivers))}   # sea / river : aussi dans water (côte, plages ;
+                                   ("sea", sea), ("river", rivers), ("industrial", industrial))}   # sea / river : aussi
+                                                                      # dans water (côte, plages ;
                                                                       # ligne centrale des grandes rivières)
         self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
                        "view": len(viewpoints), "builtup": len(builtup), "buildings": len(buildings), "sea": len(sea),
-                       "river": len(rivers)}
+                       "river": len(rivers), "industrial": len(industrial)}
 
     def measure(self, coords, cum) -> dict:
         import numpy as np
@@ -276,9 +285,10 @@ class LandscapeIndex:
         forest = share("forest", SCENERY_FOREST_DEG)
         water = share("water", SCENERY_WATER_DEG)
         protected = share("protected", SCENERY_PROTECTED_DEG)
+        industrial = share("industrial", SCENERY_INDUSTRIAL_DEG) if self.trees.get("industrial") is not None else 0.0
         index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
-                "score": round(100 * index), "landcover": self.landcover(pts)}
+                "industrial": industrial, "score": round(100 * index), "landcover": self.landcover(pts)}
 
     def landcover(self, pts) -> dict | None:
         """Répartition du tracé (points tous les 100 m), UNE catégorie par point, par priorité : ville (au moins
@@ -370,7 +380,7 @@ def load_landscape(pbf: Path, workdir: Path):
         print(f"! paysage non chargé (fichier {pbf} ou osmium introuvable)", file=sys.stderr)
         return None
     filt, out = workdir / "landscape.osm.pbf", workdir / "landscape.geojsonseq"
-    filters = ["nwr/landuse=forest,residential,commercial,industrial,retail", "nwr/natural=wood",
+    filters = ["nwr/landuse=forest,residential,commercial,industrial,retail,port", "nwr/natural=wood",
                "nwr/natural=water", "nwr/waterway=river",
                "w/natural=coastline", "nwr/natural=beach", "nwr/leisure=park", "nwr/leisure=nature_reserve",
                "nwr/boundary=protected_area", "nwr/boundary=national_park", "n/tourism=viewpoint"]
@@ -382,7 +392,7 @@ def load_landscape(pbf: Path, workdir: Path):
     except subprocess.CalledProcessError as e:
         print(f"! extraction du paysage échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
         return None
-    forests, waters, protected, views, builtup, sea, rivers = [], [], [], [], [], [], []
+    forests, waters, protected, views, builtup, sea, rivers, industrial = [], [], [], [], [], [], [], []
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -411,12 +421,15 @@ def load_landscape(pbf: Path, workdir: Path):
                     rivers.append(geom)
             elif props.get("landuse") == "forest" or props.get("natural") == "wood":
                 forests.append(geom)
-            elif props.get("landuse") in ("residential", "commercial", "industrial", "retail"):
+            elif props.get("landuse") in ("residential", "commercial", "industrial", "retail", "port"):
                 builtup.append(geom)                       # zones bâties : « ville » de la répartition du terrain
+                if props.get("landuse") in ("industrial", "port"):
+                    industrial.append(geom)
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
-    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea, rivers)
+    return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea, rivers,
+                          industrial)
 
 
 def protected_mask(trees, pts):
@@ -738,8 +751,8 @@ def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_s
         grade = max(-0.20, min(0.20, (profile[k] - profile[k - 1]) / ds))
         t += ds / (speed_from_power(watts, grade) * REAL_WORLD_FACTOR)
     if n_signals is None:
-        return t * (1.0 + 0.15 * city_share + 0.06 * resid_share)
-    return t * (1.0 + 0.05 * city_share + 0.03 * resid_share) + n_signals * SIGNAL_DELAY_S
+        return t * (1.0 + 0.40 * city_share + 0.06 * resid_share)
+    return t * (1.0 + CITY_SLOWDOWN * city_share + 0.03 * resid_share) + n_signals * SIGNAL_DELAY_S
 
 
 # --------------------------------------------------------------------------- client GraphHopper
@@ -1058,7 +1071,8 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
     weights = dict(WEIGHTS)
     if l.signals is not None:
         per_km = l.signals / max(l.distance_m / 1000.0, 0.1)
-        parts["lights"] = 1.0 - min(1.0, per_km / LIGHTS_PER_KM_ZERO_SCORE)
+        parts["lights"] = 1.0 - min(2.0, per_km / LIGHTS_PER_KM_ZERO_SCORE)   # jusqu'à −1 à 5 feux/km (28/09/2026 :
+        # au-delà de 2,5 feux/km, toutes les boucles avaient la même note ; en dessous, notes inchangées)
     else:
         weights.pop("lights")
     if l.scenery is not None:
@@ -1081,6 +1095,8 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
         weights["relief"] = relief_weight
     total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
     total -= min(0.3, max(0.0, l.shares["unpaved"] - 0.03) * 2.0)
+    if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
+        total -= min(INDUSTRIAL_MAX_PENALTY, INDUSTRIAL_PENALTY * l.scenery.get("industrial", 0.0))
     return round(100 * max(0.0, total), 1)
 
 
@@ -1428,7 +1444,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "scenery": (None if l.scenery is None else {
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
-            "score": l.scenery["score"],
+            "industrial": round(l.scenery.get("industrial", 0.0), 3), "score": l.scenery["score"],
             **({"protected_seq": "".join("p" if x else "-" for x in l.scenery["landcover"]["park"])}
                if l.scenery.get("landcover") and "park" in l.scenery["landcover"] else {}),
             "landcover": ({k: v for k, v in l.scenery["landcover"].items() if k not in ("cls", "citymask", "park")}

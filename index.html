@@ -1085,6 +1085,9 @@
       const G = P.filter(x => x.t === 'g');
       if (P.length) out.push(['', [nW ? tn('p_water', nW) : '', nC ? tn('p_cafe', nC) : '',
         G.length ? t('p_station', { km: G.map(x => km1(x.km)).join(', ') }) : ''].filter(Boolean).join(' · ') + '.']);
+      // feux : beaucoup de feux = beaucoup d'arrêts (sortie de Florent, 28/09/2026 : 28 min sur 2 h 23)
+      if ((o.traffic_lights_per_km || 0) >= 2.5 && lightsWaitMin(o) >= 5)
+        out.push(['≈ ' + lightsWaitMin(o) + ' min', t('k_lights_wait', { n: o.traffic_lights }), true]);
       // pente : badge à seuil unique, jamais de chiffre (D17)
       if (o.terrain.max_grade_pct != null && o.terrain.max_grade_pct >= 20) out.push(['', t('k_steep'), true]);
       return out;
@@ -1104,6 +1107,8 @@
     }
     // « Tous les chiffres » (brief v2) : trois blocs, chaque ligne = [repère chiffré, phrase, tronçon à surligner, alerte ?] ;
     // ville, forêt et bord d'eau : mêmes pourcentages que la barre de terrain ; jamais de pourcentage de pente (D17)
+    // temps probable perdu aux feux : SIGNAL_DELAY_S (10 s) par feu franchi, comme le calcul de la durée
+    const lightsWaitMin = o => Math.round((o.traffic_lights || 0) * 10 / 60);
     function allFacts(o) {
       const R = [], E = [], C = [];
       const per100 = o.ascend_m / Math.max(o.distance_km, 0.1) * 100;
@@ -1128,7 +1133,9 @@
       }
       C.push([pc(cityShare(o)), t('fr_city'), seq ? 'town' : null]);
       if (o.traffic_lights != null) C.push(o.traffic_lights === 0 ? ['0', t('fr_nolights')]
-        : [String(o.traffic_lights), tn('fr_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) })]);
+        : [String(o.traffic_lights), tn('fr_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) }) +
+          (lightsWaitMin(o) >= 1 ? ' ' + t('fr_lights_wait', { m: lightsWaitMin(o) }) : ''), null, (o.traffic_lights_per_km || 0) >= 2.5]);
+      if (o.scenery && o.scenery.industrial >= 0.05) C.push([pc(o.scenery.industrial), t('fr_industrial'), null, o.scenery.industrial >= 0.10]);
       const sh = o.shares;
       const rs = !!o.road_seq, dirt = dirtKm(o);
       C.push([pc(sh.dedicated_cycleway), t('k_cycle'), rs && sh.dedicated_cycleway > 0 ? 'cycle' : null]);
