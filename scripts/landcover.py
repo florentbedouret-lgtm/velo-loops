@@ -183,6 +183,7 @@ SURF_PAVED = {"asphalt", "concrete", "concrete:plates", "concrete:lanes", "pavin
               "cobblestone", "unhewn_cobblestone", "metal", "wood", "bricks"}
 SURF_CLASSES = ("goudron", "terre", "piste_g1", "piste_g2plus", "piste_sans", "sentier_sans", "route_sans", "aucune")
 SURF_NEAR_DEG = 0.00018          # ~15 m : au-delà, pas de voie OSM retenue pour ce point (« aucune »)
+DOUBT_CLASSES = ("piste_g1", "piste_g2plus", "piste_sans", "sentier_sans")   # revêtement non noté : à vérifier
 
 
 def surface_class(tags: dict) -> str:
@@ -265,10 +266,19 @@ def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path)
     print(f"Voies OSM chargées : {len(cls_arr)} en {time.time() - t0:.0f} s", flush=True)
     step = 50.0
     rows, case = [], []
+    ways = {}                    # voies au revêtement incertain empruntées par les boucles : à vérifier dans OSM (Florent)
     for f in sorted((data / "starts").glob("*.json")):
         d = json.loads(f.read_text(encoding="utf-8"))
         for o in d["options"]:
             km, lab, (pi, wi), scale = classify_loop(tree, cls_arr, o["coords"], o["distance_km"], step)
+            doubt = np.isin(cls_arr[wi], DOUBT_CLASSES)
+            if doubt.any():
+                w_u, n_u = np.unique(wi[doubt], return_counts=True)
+                for w, n in zip(w_u.tolist(), n_u.tolist()):
+                    e = ways.setdefault(w, {"loops": 0, "km": 0.0, "starts": set()})
+                    e["loops"] += 1
+                    e["km"] += n * scale
+                    e["starts"].add(f.stem)
             su = o.get("surface") or {}
             rows.append({"start": f.stem, "level": o["level"], "min": round(o["duration_target_min"]),
                          "label": o["label"], "dist": o["distance_km"], "km": km,
@@ -289,6 +299,20 @@ def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path)
                 case = [f"- km {a:.1f} à {b:.1f} : {c} (voies {', '.join(str(i) for i in sorted(s, key=str))})"
                         for a, b, c, s in segs if b - a >= 0.1]
     out_json.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+    geoms = tree.geometries
+    listing = []
+    for w, e in ways.items():
+        c = geoms[w].interpolate(0.5, normalized=True)
+        listing.append({"osm": f"https://www.openstreetmap.org/way/{ids[w]}", "id": ids[w], "classe": str(cls_arr[w]),
+                        "boucles": e["loops"], "departs": len(e["starts"]), "km_parcourus": round(e["km"], 1),
+                        "longueur_km": round(geoms[w].length * 90.0, 2), "lat": round(c.y, 5), "lon": round(c.x, 5),
+                        "exemple_depart": sorted(e["starts"])[0]})
+    listing.sort(key=lambda x: (-x["boucles"], -x["km_parcourus"]))
+    import csv
+    with (out_json.parent / "surface_ways.csv").open("w", encoding="utf-8", newline="") as fh:
+        wr = csv.DictWriter(fh, fieldnames=list(listing[0]) if listing else ["osm"])
+        wr.writeheader()
+        wr.writerows(listing)
 
     def doubtful(r, with_g1=True):          # km de chemins probablement non goudronnés, non signalés aujourd'hui
         k = r["km"]
@@ -339,6 +363,16 @@ def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path)
                  f"{r['km']['terre']:.1f} | {100 * r['gh_unknown']:.0f} % |")
     L.append("\n## Cas signalé : Sant Andreu, 3 h, modéré, 54,3 km (tronçons de piste, de terre ou de sentier)")
     L += case or ["- (boucle non trouvée)"]
+    L.append("\n## Voies au revêtement incertain les plus empruntées (liste complète : surface_ways.csv)")
+    L.append("\n| Classe | voies | dont empruntées par ≥ 10 boucles |")
+    L.append("|---|---|---|")
+    for c in DOUBT_CLASSES:
+        xs = [x for x in listing if x["classe"] == c]
+        L.append(f"| {c} | {len(xs)} | {sum(x['boucles'] >= 10 for x in xs)} |")
+    for c in DOUBT_CLASSES:
+        L.append(f"\n**{c}** (30 premières)")
+        L += [f"- [{x['id']}]({x['osm']}) : {x['boucles']} boucles, {x['departs']} départs (ex. {x['exemple_depart']})"
+              for x in [x for x in listing if x["classe"] == c][:30]]
     L.append(f"\nDurée du diagnostic : {time.time() - t0:.0f} s.")
     out_md.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L), flush=True)

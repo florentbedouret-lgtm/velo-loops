@@ -377,6 +377,7 @@ jobs:
           path: |
             data/landcover_check.json
             data/landcover_check.md
+            data/surface_ways.csv
           if-no-files-found: ignore
           retention-days: 30
 
