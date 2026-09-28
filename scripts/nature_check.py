@@ -382,6 +382,8 @@ def run_probe(sid, site, gh_url, durations, levels):
             pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
             picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
             prior += [l for _, l in picks]
+            for _, l in picks:
+                g.record_ways(sid, l)
             new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(picks, start=1)]
             old = [option_row(o) for o in pub["options"]
                    if o["level"] == level and round(o["duration_target_min"]) == round(d * 60)]
@@ -539,7 +541,10 @@ def report_probe(results, out_json, out_md, note, t0):
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
          "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",
-         *probe_summary(results), *surface_summary(results)]
+         *probe_summary(results), *surface_summary(results),
+         f"\nVoies OSM au revêtement incertain identifiées par GraphHopper (osm_way_id) : {len(g.WAYS_LOG)} ; par classe : "
+         + ", ".join(f"{c} {sum(1 for e in g.WAYS_LOG.values() if e['classe'] == c)}"
+                     for c in ("piste_q1", "piste_terre_probable", "sentier_hors_ville", "sentier_ville"))]
     for res in results:
         L.append(f"\n## {res.get('name', res['id'])}")
         if res.get("skipped"):
@@ -602,6 +607,7 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             results = list(ex.map(lambda sid: run_probe(sid, args.site, args.gh, durations, args.levels.split()), ids))
         report_probe(results, args.out, args.out_md, args.note, t0)
+        g.write_ways(str(Path(args.out).parent / "surface_ways_probe.csv"))
         return 0
     if args.references:
         refs = json.loads(Path(args.references).read_text(encoding="utf-8"))["loops"]

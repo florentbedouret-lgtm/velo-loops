@@ -106,7 +106,7 @@ SCENERY_FOREST_DEG, SCENERY_WATER_DEG, SCENERY_PROTECTED_DEG, SCENERY_VIEW_DEG =
 UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand"}
 COBBLES = {"cobblestone", "sett", "paving_stones"}
 ASPHALT = {"asphalt", "concrete", "paved"}
-DETAILS = ["road_class", "surface", "urban_density", "bike_network", "bike_road_access", "track_type"]
+DETAILS = ["road_class", "surface", "urban_density", "bike_network", "bike_road_access", "track_type", "osm_way_id"]
 # Revêtement « probablement non goudronné » (28/09/2026, diagnostic landcover_check « surface » : 877 départs) : quand le
 # revêtement d'une piste OSM est noté, les pistes de qualité 2 à 5 sont en terre à 99-100 %, celles sans qualité à 91 %,
 # celles de qualité 1 à 13 % seulement. Sans revêtement noté, on compte donc comme non goudronnés : les pistes (track) de
@@ -812,6 +812,7 @@ class Loop:
     surface_mix: dict = field(default_factory=dict)
     surface_seq: str = ""
     road_seq: str = ""
+    doubt_ways: dict = field(default_factory=dict)
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
     longest_repeat_m: float = 0.0
@@ -867,6 +868,55 @@ def unpaved_edges(det, n) -> list:
         else:
             out.append("-")
     return out
+
+
+# Voies OSM au revêtement incertain empruntées par les boucles retenues (28/09/2026) : liste à vérifier et corriger dans
+# OSM par Florent (diagnostic précédent fait par proximité : trottoirs le long des routes comptés à tort). Clé = identifiant
+# de voie OSM (détail GraphHopper osm_way_id) ; artefact du run, jamais publié.
+WAYS_LOG: dict = {}
+WAYS_LOCK = __import__("threading").Lock()
+
+
+def doubt_ways(det, coords, cum) -> dict:
+    """{id de voie OSM: [classe, mètres, lon, lat]} pour les tronçons sans revêtement noté : piste_q1 (piste de qualité 1,
+    goudronnée à 87 %), piste_terre_probable, sentier_hors_ville, sentier_ville."""
+    n = len(cum) - 1
+    rc, sf, tt, ud, wid = (per_edge(det.get(k), n) for k in ("road_class", "surface", "track_type", "urban_density",
+                                                               "osm_way_id"))
+    out: dict = {}
+    for i in range(n):
+        if wid[i] is None or sf[i] not in (None, "missing"):
+            continue
+        if rc[i] == "track":
+            c = "piste_q1" if tt[i] == "grade1" else "piste_terre_probable"
+        elif rc[i] in PROBABLE_UNPAVED_PATHS:
+            c = "sentier_hors_ville" if ud[i] == "rural" else "sentier_ville"
+        else:
+            continue
+        e = out.setdefault(wid[i], [c, 0.0, round(coords[i][0], 5), round(coords[i][1], 5)])
+        e[1] += cum[i + 1] - cum[i]
+    return out
+
+
+def record_ways(sid: str, loop) -> None:
+    with WAYS_LOCK:
+        for w, (c, m, lon, lat) in (loop.doubt_ways or {}).items():
+            e = WAYS_LOG.setdefault(w, {"classe": c, "boucles": 0, "m": 0.0, "departs": set(), "lon": lon, "lat": lat})
+            e["boucles"] += 1
+            e["m"] += m
+            e["departs"].add(sid)
+
+
+def write_ways(path: str) -> int:
+    import csv
+    rows = sorted(WAYS_LOG.items(), key=lambda kv: (-kv[1]["boucles"], -kv[1]["m"]))
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        wr = csv.writer(fh)
+        wr.writerow(["osm", "id", "classe", "boucles", "departs", "km_parcourus", "lat", "lon", "exemple_depart"])
+        for w, e in rows:
+            wr.writerow([f"https://www.openstreetmap.org/way/{w}", w, e["classe"], e["boucles"], len(e["departs"]),
+                         round(e["m"] / 1000.0, 1), e["lat"], e["lon"], sorted(e["departs"])[0]])
+    return len(rows)
 
 
 def road_edges(det, n) -> list:
@@ -984,6 +1034,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.surface_seq = surface_seq(edges, cum)
     loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
+    loop.doubt_ways = doubt_ways(det, coords, cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
     loop.score = score(loop)
     return loop
@@ -1605,6 +1656,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
             prior += [l for _, l in picks]
             for i, (label, loop) in enumerate(picks, start=1):
                 options.append(enrich_option(to_json(loop, label, sid, i), POIS))
+                record_ways(sid, loop)
         dur_seconds[f"{duration:g}"] = round(time.time() - t_dur, 1)
     if not options:
         log("  aucune option valide, départ ignoré")
@@ -1807,6 +1859,7 @@ def main() -> int:
     ap.add_argument("--pilot-box", default=None, help="pilote : « lon0,lat0,lon1,lat1:N » = N départs ruraux imposés dans cette emprise (relief)")
     ap.add_argument("--time-budget-min", type=float, default=0.0, help="ne démarre plus de nouveau départ après ce nombre de minutes de calcul "
                                                                         "(0 = illimité) ; le site est alors publié incomplet et signalé")
+    ap.add_argument("--ways-out", default="", help="CSV des voies OSM au revêtement incertain (à vérifier)")
     ap.add_argument("--skipped-out", default=None, help="JSON des départs ignorés avec leur motif")
     ap.add_argument("--timings-out", default=None, help="JSON des temps de calcul par départ (zone, durée) : diagnostic, non publié")
     ap.add_argument("--neighbour-pilot", type=int, default=0, help="pilote : N départs denses avec leur voisin hors zone dense à moins de 2,2 km "
@@ -1951,6 +2004,8 @@ def main() -> int:
             results.append(process_start(st, sid, args.gh, durations, levels, candidates, out))
             print("\n".join(results[-1][1]), flush=True)
     index = [r[0] for r in results if r[0]]
+    if args.ways_out:
+        print(f"Voies au revêtement incertain empruntées : {write_ways(args.ways_out)} -> {args.ways_out}", flush=True)
     carried = sum(1 for e in index if e.get("stale"))
     skipped = [st["name"] for st, r in zip(starts, results) if not r[0]]
 

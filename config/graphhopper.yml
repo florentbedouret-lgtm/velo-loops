@@ -17,7 +17,7 @@ graphhopper:
     - name: approach
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json]
 
-  graph.encoded_values: racingbike_priority, racingbike_access, roundabout, racingbike_average_speed, bike_road_access, average_slope, mtb_rating, hike_rating, country, road_class, road_environment, surface, track_type, bike_network, urban_density
+  graph.encoded_values: racingbike_priority, racingbike_access, roundabout, racingbike_average_speed, bike_road_access, average_slope, mtb_rating, hike_rating, country, road_class, road_environment, surface, track_type, bike_network, urban_density, osm_way_id
 
   # % en zone bâtie (rural / résidentiel / ville) calculé à l import
   graph.urban_density.threads: 2
