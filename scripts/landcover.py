@@ -238,6 +238,25 @@ def load_ways(pbf: Path, workdir: Path):
     return shapely.STRtree(geoms), np.array(cls), ids, prior
 
 
+def classify_loop(tree, cls_arr, coords, dist_km: float, step: float = 50.0):
+    """(km par classe de SURF_CLASSES, classe de chaque point tous les `step` m, (indices points, indices voies))."""
+    import shapely
+    cum = [0.0]
+    for i in range(1, len(coords)):
+        cum.append(cum[-1] + g.haversine(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]))
+    pts = shapely.points(np.array(g.sample_points(coords, cum, step)))
+    pi, wi = tree.query_nearest(pts, max_distance=SURF_NEAR_DEG, all_matches=False)
+    lab = np.full(len(pts), "aucune", dtype=object)
+    lab[pi] = cls_arr[wi]
+    scale = step / 1000.0 * dist_km / max(cum[-1] / 1000.0, 1e-9)
+    return {c: round(float((lab == c).sum()) * scale, 2) for c in SURF_CLASSES}, lab, (pi, wi), scale
+
+
+def dirt_km(km: dict) -> float:
+    """Terre notée + pistes de qualité 2 à 5 ou non notée, sans revêtement noté (méthode du diagnostic, sur OSM)."""
+    return km["terre"] + km["piste_g2plus"] + km["piste_sans"]
+
+
 def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path):
     import shapely
     import time
@@ -249,16 +268,7 @@ def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path)
     for f in sorted((data / "starts").glob("*.json")):
         d = json.loads(f.read_text(encoding="utf-8"))
         for o in d["options"]:
-            coords = o["coords"]
-            cum = [0.0]
-            for i in range(1, len(coords)):
-                cum.append(cum[-1] + g.haversine(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]))
-            pts = shapely.points(np.array(g.sample_points(coords, cum, step)))
-            pi, wi = tree.query_nearest(pts, max_distance=SURF_NEAR_DEG, all_matches=False)
-            lab = np.full(len(pts), "aucune", dtype=object)
-            lab[pi] = cls_arr[wi]
-            km = {c: round(float((lab == c).sum()) * step / 1000.0 * o["distance_km"] / max(cum[-1] / 1000.0, 1e-9), 2)
-                  for c in SURF_CLASSES}
+            km, lab, (pi, wi), scale = classify_loop(tree, cls_arr, o["coords"], o["distance_km"], step)
             su = o.get("surface") or {}
             rows.append({"start": f.stem, "level": o["level"], "min": round(o["duration_target_min"]),
                          "label": o["label"], "dist": o["distance_km"], "km": km,
@@ -266,7 +276,7 @@ def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path)
             if f.stem == "sant-andreu" and abs(o["distance_km"] - 54.3) < 0.2:          # cas signalé par Florent
                 segs, cur = [], None
                 for k, c in enumerate(lab):
-                    x = k * step / 1000.0 * o["distance_km"] / max(cum[-1] / 1000.0, 1e-9)
+                    x = k * scale
                     if c.startswith("piste") or c in ("terre", "sentier_sans"):
                         if cur and cur[2] == c and x - cur[1] <= 0.11:
                             cur[1] = x

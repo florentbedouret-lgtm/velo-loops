@@ -1,0 +1,6 @@
+{
+  "priority": [
+    { "if": "road_class == TRACK && track_type != GRADE1 && surface == MISSING", "multiply_by": "0.1" },
+    { "if": "(road_class == PATH || road_class == FOOTWAY || road_class == BRIDLEWAY) && surface == MISSING && urban_density == RURAL", "multiply_by": "0.3" }
+  ]
+}

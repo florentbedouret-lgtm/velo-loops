@@ -345,11 +345,20 @@ def report_references(results, path_json, path_md, note, t0):
 
 
 # ----------------------------------------------------------------------------- sonde : boucles de production avant/après
+WAYS = None                     # sonde « revêtement » : voies OSM classées (landcover.load_ways), chargées dans main()
+
+
 def option_row(o) -> dict:
     """Résumé d'une option publiée (fichier starts/<id>.json) ou fraîchement générée (to_json)."""
     sc = o.get("scenery") or {}
     lc = sc.get("landcover") or {}
-    return {"cells": sorted({(round(c[0] / 0.006), round(c[1] / 0.005)) for c in o["coords"]}),   # doublons (O-18)
+    dirt = None
+    if WAYS is not None:            # même mesure (sur OSM) pour les boucles publiées et les nouvelles : comparable
+        import landcover
+        km = landcover.classify_loop(WAYS[0], WAYS[1], o["coords"], o["distance_km"])[0]
+        dirt = {"dirt_km": round(landcover.dirt_km(km), 1), "g1_km": round(km["piste_g1"], 1),
+                "sentier_km": round(km["sentier_sans"], 1)}
+    return {**({"surface": dirt} if dirt else {}),"cells": sorted({(round(c[0] / 0.006), round(c[1] / 0.005)) for c in o["coords"]}),   # doublons (O-18)
             "main_roads_pct": round(100 * o["shares"]["main_roads"]), "same_as": o.get("same_as"),
             "label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
@@ -498,14 +507,39 @@ def probe_summary(results) -> list:
     return L
 
 
+def surface_summary(results) -> list:
+    """Sonde « revêtement » (28/09/2026) : km de terre (notée ou pistes douteuses), publié contre nouveau, par durée."""
+    import statistics as stt
+    rows = [r for res in results if not res.get("skipped") for r in res["rows"]]
+    if not rows or not any(o.get("surface") for r in rows for o in r["new"]):
+        return []
+    L = ["\n## Chemins de terre (méthode du diagnostic sur OSM, boucle principale ; publié -> nouveau)",
+         "\n| Durée | km de terre médian | boucles ≥ 1 km | boucles ≥ 12 % de la distance | km médian | boucles sans option |",
+         "|---|---|---|---|---|---|"]
+    for d in sorted({r["duration_h"] for r in rows}):
+        rs = [r for r in rows if r["duration_h"] == d]
+        cell = {}
+        for k in ("published", "new"):
+            mains = [r[k][0] for r in rs if r[k] and r[k][0].get("surface")]
+            dk = [m["surface"]["dirt_km"] for m in mains]
+            cell[k] = (stt.median(dk) if dk else 0, sum(x >= 1 for x in dk), sum(m["surface"]["dirt_km"] >= 0.12 * m["km"] for m in mains),
+                       stt.median([m["km"] for m in mains]) if mains else 0, len(mains))
+        p, n = cell["published"], cell["new"]
+        L.append(f"| {d:g} h | {p[0]:.1f} -> {n[0]:.1f} | {p[1]}/{p[4]} -> {n[1]}/{n[4]} | {p[2]} -> {n[2]} | "
+                 f"{p[3]:.1f} -> {n[3]:.1f} | {sum(1 for r in rs if not r['new'])} |")
+    return L
+
+
 def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
     f = lambda o: (f"{o['label']}{' (= ' + o['same_as']['level'] + ')' if o.get('same_as') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
-                   f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}")
+                   f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}"
+                   + (f", terre {o['surface']['dirt_km']} km (+ piste qualité 1 {o['surface']['g1_km']} km, sentiers "
+                      f"{o['surface']['sentier_km']} km)" if o.get("surface") else ""))
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
          "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",
-         *probe_summary(results)]
+         *probe_summary(results), *surface_summary(results)]
     for res in results:
         L.append(f"\n## {res.get('name', res['id'])}")
         if res.get("skipped"):
@@ -559,6 +593,10 @@ def main() -> int:
         report_relief(results, args.out, args.out_md, args.note, t0)
         return 0
     if args.probe:
+        global WAYS
+        import landcover
+        WAYS = landcover.load_ways(pbf, wd)[:2]
+        print(f"Voies OSM chargées (sonde revêtement) : {len(WAYS[1])}", flush=True)
         ids = [x.strip() for x in args.probe.split(";") if x.strip()]
         durations = [float(x) for x in args.durations.split()]
         with ThreadPoolExecutor(max_workers=args.workers) as ex:

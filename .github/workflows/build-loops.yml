@@ -234,7 +234,7 @@ jobs:
           # NATURE_RELIEF non vide : sonde « relief » en sportif (O-18 B), prioritaire ; sinon NATURE_PROBE non vide : sonde
           # avant / après sur ces départs ; les deux vides : calibrage v5
           NATURE_RELIEF=""
-          NATURE_PROBE="gracia;sarria-sant-gervasi;horta-guinardo;badalona;sabadell;terrassa;molins-de-rei;castelldefels;el-coll-est;sant-cugat-sesgarrigues;gare-montcada-ripollet;manresa"
+          NATURE_PROBE="sant-andreu;gracia;badalona;terrassa;granollers;sant-cugat-del-valles;manresa;vic;igualada;les-serres-est;les-anoves-est;el-querforadat-est;lleto-est;santa-creu-d-horta-est;fuirosos-est;sallent-est;oliana;la-molina-sud-est;sant-marti-sesgueioles;pinos;gaia;castellgali"
           if [ -n "$NATURE_RELIEF" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --relief "$NATURE_RELIEF" --durations "1 2 3" \
@@ -242,9 +242,9 @@ jobs:
               --note "sonde relief : poids 0 / 0,10 / 0,20 / 0,30 dans la note du niveau sportif (0 = réglage actuel)"
           elif [ -n "$NATURE_PROBE" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "1 2 3" \
+              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "0.75 1 2 3 6" \
               --levels "facile modere soutenu" --out data/nature_check.json --out-md data/nature_check.md \
-              --note "sonde O-18 : relief 0,10 en sportif + options sans doublon d'allure, doublon gardé et signalé s'il n'y a rien d'autre (générateur v7)"
+              --note "sonde revêtement : pistes sans revêtement noté (qualité 2 à 5 ou non notée) et sentiers hors ville évités (road_surface.json) et comptés non goudronnés"
           else
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \

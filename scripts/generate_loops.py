@@ -106,7 +106,12 @@ SCENERY_FOREST_DEG, SCENERY_WATER_DEG, SCENERY_PROTECTED_DEG, SCENERY_VIEW_DEG =
 UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand"}
 COBBLES = {"cobblestone", "sett", "paving_stones"}
 ASPHALT = {"asphalt", "concrete", "paved"}
-DETAILS = ["road_class", "surface", "urban_density", "bike_network", "bike_road_access"]
+DETAILS = ["road_class", "surface", "urban_density", "bike_network", "bike_road_access", "track_type"]
+# Revêtement « probablement non goudronné » (28/09/2026, diagnostic landcover_check « surface » : 877 départs) : quand le
+# revêtement d'une piste OSM est noté, les pistes de qualité 2 à 5 sont en terre à 99-100 %, celles sans qualité à 91 %,
+# celles de qualité 1 à 13 % seulement. Sans revêtement noté, on compte donc comme non goudronnés : les pistes (track) de
+# qualité autre que 1, et les sentiers (path, footway, bridleway) hors de la ville. Même règle que road_surface.json.
+PROBABLE_UNPAVED_PATHS = {"path", "footway", "bridleway"}
 
 
 # --------------------------------------------------------------------------- géométrie
@@ -802,6 +807,7 @@ class Loop:
     exit_dense_m: float | None = None
     stops: int | None = None
     surface_mix: dict = field(default_factory=dict)
+    surface_seq: str = ""
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
     longest_repeat_m: float = 0.0
@@ -833,6 +839,40 @@ def joint_meters(det_a, det_b, cum) -> dict:
     for i in range(n):
         out[(va[i], vb[i])] = out.get((va[i], vb[i]), 0.0) + (cum[i + 1] - cum[i])
     return out
+
+
+def per_edge(det, n) -> list:
+    """Valeur d'un détail GraphHopper pour chacun des n tronçons du tracé (None si absente)."""
+    arr = [None] * n
+    for a, b, val in det or []:
+        for i in range(max(0, a), min(b, n)):
+            arr[i] = str(val).lower()
+    return arr
+
+
+def unpaved_edges(det, n) -> list:
+    """Par tronçon : 'u' non goudronné noté, 'p' probablement non goudronné (voir PROBABLE_UNPAVED_PATHS), '-' sinon."""
+    rc, sf, tt, ud = (per_edge(det.get(k), n) for k in ("road_class", "surface", "track_type", "urban_density"))
+    out = []
+    for i in range(n):
+        if sf[i] in UNPAVED:
+            out.append("u")
+        elif sf[i] in (None, "missing") and ((rc[i] == "track" and tt[i] != "grade1")
+                                              or (rc[i] in PROBABLE_UNPAVED_PATHS and ud[i] == "rural")):
+            out.append("p")
+        else:
+            out.append("-")
+    return out
+
+
+def surface_seq(edges, cum, step: float = PROFILE_STEP_M) -> str:
+    """Une lettre tous les 100 m (même pas que landcover_seq) : 'u', 'p' ou '-' du tronçon sous le point."""
+    import bisect
+    total, out = cum[-1], []
+    for k in range(max(1, int(total // step)) + 1):
+        i = min(len(edges) - 1, max(0, bisect.bisect_right(cum, min(total, k * step)) - 1))
+        out.append(edges[i])
+    return "".join(out)
 
 
 def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, heading) -> Loop | None:
@@ -886,8 +926,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                                / total),
         "bike_network": 1.0 - frac(net, ["missing"]) if net else 0.0,
         "main_roads": frac(rclass, ["primary", "trunk", "secondary"]),
-        "unpaved": frac(surf, list(UNPAVED)),
     }
+    edges = unpaved_edges(det, len(cum) - 1)
+    probable = sum(cum[i + 1] - cum[i] for i, e in enumerate(edges) if e == "p") / total
+    shares["unpaved"] = frac(surf, list(UNPAVED)) + probable          # noté + probable : seuil MAX_UNPAVED et note
     # grandes routes par densité urbaine (diagnostic O-12 ; n'entre pas dans score() ni dans les fichiers publiés)
     joint = joint_meters(det.get("road_class"), det.get("urban_density"), cum)
     shares["main_roads_by_urban"] = {
@@ -900,7 +942,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     n_stops = STOPS.count_along(coords, cum) if STOPS is not None else None
     surface_mix = {
         "asphalt": frac(surf, list(ASPHALT)), "cobbles": frac(surf, list(COBBLES)),
-        "unpaved": frac(surf, list(UNPAVED)),
+        "unpaved": frac(surf, list(UNPAVED)), "unpaved_probable": probable,
     }
     surface_mix["unknown"] = max(0.0, 1.0 - sum(surface_mix.values()))
     terrain = slope_stats(ds, prof)
@@ -926,6 +968,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         scenery=scenery,
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
+    loop.surface_seq = surface_seq(edges, cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
     loop.score = score(loop)
     return loop
@@ -1265,6 +1308,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "stop_signs": l.stops,
         "stop_signs_per_km": (None if l.stops is None else round(l.stops / max(l.distance_m / 1000.0, 0.1), 2)),
         "surface": {k: round(v, 3) for k, v in l.surface_mix.items()},
+        **({"surface_seq": l.surface_seq} if "u" in l.surface_seq or "p" in l.surface_seq else {}),
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
                     "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},
