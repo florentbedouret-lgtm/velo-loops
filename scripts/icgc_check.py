@@ -34,6 +34,7 @@ import landcover as lc      # noqa: E402
 
 ICGC_URL = ("https://datacloud.icgc.cat/datacloud/topografia-territorial/gpkg_unzip/"
             "topografia-territorial-v1r0-2024.gpkg")
+ICGC_LAYER = "_35_transports_l"   # nom réel de la couche des voies dans le GeoPackage 2024 (pas « transports_l » de la doc)
 ICGC_PAVED = {"aut", "vcd", "vcu", "vnc", "vpd", "vpu", "bir"}      # revêtues
 ICGC_UNPAVED = {"vca", "cor", "bin"}                                 # camí, corriol, piste cyclable non revêtue
 ICGC_NEAR_DEG = 0.00012         # ~10 m : voie ICGC retenue pour un point OSM
@@ -50,17 +51,16 @@ def load_icgc(workdir: Path, bbox: str):
     from shapely.geometry import shape
     out = workdir / "icgc_vials.geojsonseq"
     w, s, e, n = bbox.split(",")
-    types = sorted(ICGC_PAVED | ICGC_UNPAVED)
-    cmd = ["ogr2ogr", "-f", "GeoJSONSeq", str(out), "/vsicurl/" + ICGC_URL, "transports_l",
-           "-spat", w, s, e, n, "-spat_srs", "EPSG:4326", "-t_srs", "EPSG:4326", "-select", "tipus",
-           "-where", "tipus IN (" + ",".join(f"'{t}'" for t in types) + ")", "-overwrite"]
+    cmd = ["ogr2ogr", "-f", "GeoJSONSeq", str(out), "/vsicurl/" + ICGC_URL, ICGC_LAYER,   # tous les types : filtrés
+           "-spat", w, s, e, n, "-spat_srs", "EPSG:4326", "-t_srs", "EPSG:4326", "-select", "tipus",   # ci-dessous
+           "-overwrite"]
     env = {"CPL_VSIL_CURL_CHUNK_SIZE": "4194304", "CPL_VSIL_CURL_CACHE_SIZE": "268435456",
            "GDAL_HTTP_MULTIRANGE": "YES", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "3"}
     import os
     t0 = time.time()
     subprocess.run(cmd, check=True, env={**os.environ, **env})
     print(f"Voies ICGC lues en {time.time() - t0:.0f} s", flush=True)
-    geoms, cls, typ = [], [], []
+    geoms, cls, typ, seen = [], [], [], {}
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -72,13 +72,17 @@ def load_icgc(workdir: Path, bbox: str):
             except (ValueError, KeyError, TypeError):
                 continue
             t = (feat.get("properties") or {}).get("tipus")
+            seen[t] = seen.get(t, 0) + 1
             if geom.is_empty or t not in ICGC_PAVED | ICGC_UNPAVED:
                 continue
             geoms.append(geom)
             cls.append("revetu" if t in ICGC_PAVED else "non_revetu")
             typ.append(t)
     from collections import Counter
-    print("Voies ICGC par type : " + ", ".join(f"{k} {v}" for k, v in Counter(typ).most_common()), flush=True)
+    print("Types lus (tous) : " + ", ".join(f"{k} {v}" for k, v in sorted(seen.items(), key=lambda kv: -kv[1])), flush=True)
+    print("Voies ICGC retenues par type : " + ", ".join(f"{k} {v}" for k, v in Counter(typ).most_common()), flush=True)
+    if not geoms:
+        sys.exit("aucune voie ICGC d'un type attendu : codes « tipus » différents de la documentation (voir ci-dessus)")
     return shapely.STRtree(geoms), np.array(cls)
 
 
