@@ -8,8 +8,8 @@ revêtement ; ce cas n'est pas détectable par OSM seul. L'ICGC classe ses voies
 (autoroute, voies conventionnelles, voies préférentielles, voie non cataloguée, piste cyclable revêtue) et non revêtues
 (camí, corriol, piste cyclable non revêtue) — hypothèse vérifiée ici contre les voies OSM dont le revêtement EST noté.
 
-Méthode : les voies ICGC de la province sont lues à distance (GDAL /vsicurl/, lecture partielle du GeoPackage de
-~10 Go) ; chaque voie OSM est échantillonnée tous les ~20 m et prend la classe ICGC majoritaire de ses points (voie ICGC
+Méthode : les voies ICGC de la province sont extraites sur un PC (scripts/icgc_extract.py : le serveur de l'ICGC ne
+répond pas aux machines GitHub) et déposées dans une « release » du dépôt ; chaque voie OSM est échantillonnée tous les ~20 m et prend la classe ICGC majoritaire de ses points (voie ICGC
 la plus proche à ~10 m au plus). Le rapport donne :
   1. l'accord ICGC / OSM là où OSM note le revêtement (fiabilité de l'ICGC) ;
   2. ce que dit l'ICGC des voies OSM sans revêtement noté (pistes de qualité 1, autres pistes, sentiers, routes) ;
@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -32,9 +31,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 import generate_loops as g  # noqa: E402
 import landcover as lc      # noqa: E402
 
-ICGC_URL = ("https://datacloud.icgc.cat/datacloud/topografia-territorial/gpkg_unzip/"
-            "topografia-territorial-v1r0-2024.gpkg")
-ICGC_LAYER = "_35_transports_l"   # nom réel de la couche des voies dans le GeoPackage 2024 (pas « transports_l » de la doc)
 ICGC_PAVED = {"aut", "vcd", "vcu", "vnc", "vpd", "vpu", "bir"}      # revêtues
 ICGC_UNPAVED = {"vca", "cor", "bin"}                                 # camí, corriol, piste cyclable non revêtue
 ICGC_NEAR_DEG = 0.00012         # ~10 m : voie ICGC retenue pour un point OSM
@@ -45,33 +41,14 @@ WITNESS_WAYS = {"173062090": "Vallromanes (photo de Florent : terre tassée)",
                 "105516805": "Sant Martí Sesgueioles (piste qualité 1)"}
 
 
-def load_icgc(workdir: Path, bbox: str):
-    """Voies ICGC (axes) de l'emprise, lues à distance -> (STRtree, classes 'revetu'/'non_revetu', types)."""
+def load_icgc(path: Path):
+    """Voies ICGC extraites sur un PC (scripts/icgc_extract.py, GeoJSONSeq gzip) -> (STRtree, classes)."""
+    import gzip
     import shapely
     from shapely.geometry import shape
-    out = workdir / "icgc_vials.geojsonseq"
-    w, s, e, n = bbox.split(",")
-    cmd = ["ogr2ogr", "-f", "GeoJSONSeq", str(out), "/vsicurl/" + ICGC_URL, ICGC_LAYER,   # tous les types : filtrés
-           "-spat", w, s, e, n, "-spat_srs", "EPSG:4326", "-t_srs", "EPSG:4326", "-select", "tipus",   # ci-dessous
-           "-overwrite"]
-    # run #132 : « HTTP response code 0 » (connexion refusée ou coupée) alors que le serveur répond depuis un PC :
-    # agent HTTP de GDAL filtré ? requêtes multi-plages ? -> agent HTTP explicite, une plage par requête, HTTP/1.1,
-    # et test préalable avec curl (affiché dans le journal) pour savoir d'où vient le blocage.
-    ua = "Oyan-velo-loops/1.0 (+https://github.com/florentbedouret-lgtm/velo-loops)"
-    env = {"CPL_VSIL_CURL_CHUNK_SIZE": "4194304", "CPL_VSIL_CURL_CACHE_SIZE": "268435456",
-           "GDAL_HTTP_MULTIRANGE": "SERIAL", "GDAL_HTTP_VERSION": "1.1", "GDAL_HTTP_USERAGENT": ua,
-           "GDAL_HTTP_TIMEOUT": "120", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "5"}
-    import os
-    for label, extra in (("HEAD", ["-I"]), ("plage 0-99", ["-r", "0-99", "-o", "/dev/null"]),
-                         ("plage, agent GDAL", ["-r", "0-99", "-o", "/dev/null", "-A", "GDAL/3.8"])):
-        r = subprocess.run(["curl", "-sS", "-m", "30", "-A", ua, *extra, "-w", "code %{http_code} en %{time_total} s\n",
-                            ICGC_URL], capture_output=True, text=True)
-        print(f"Test curl ({label}) : {(r.stdout.strip().splitlines() or [''])[-1]} {r.stderr.strip()}", flush=True)
     t0 = time.time()
-    subprocess.run(cmd, check=True, env={**os.environ, **env})
-    print(f"Voies ICGC lues en {time.time() - t0:.0f} s", flush=True)
     geoms, cls, typ, seen = [], [], [], {}
-    with out.open(encoding="utf-8") as fh:
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
             if not line:
@@ -124,13 +101,14 @@ def main() -> int:
     ap.add_argument("--data", required=True, help="web/data (boucles publiées)")
     ap.add_argument("--pbf", required=True)
     ap.add_argument("--workdir", required=True)
-    ap.add_argument("--bbox", default="1.35,41.18,2.80,42.33", help="emprise lon/lat (province de Barcelone)")
+    ap.add_argument("--icgc", required=True, help="voies ICGC extraites (icgc_vials_barcelona_2024.geojsonseq.gz)")
     ap.add_argument("--out", default="data/landcover_check.json")
     ap.add_argument("--out-md", default="data/landcover_check.md")
     args = ap.parse_args()
     t0 = time.time()
     wd = Path(args.workdir)
-    icgc_tree, icgc_cls = load_icgc(wd, args.bbox)
+    icgc_tree, icgc_cls = load_icgc(Path(args.icgc))
+    print(f"Voies ICGC chargées en {time.time() - t0:.0f} s", flush=True)
     osm_tree, osm_cls, ids, _ = lc.load_ways(Path(args.pbf), wd)
     print(f"Voies OSM : {len(osm_cls)}", flush=True)
     lab, share = label_ways(osm_tree, icgc_tree, icgc_cls)

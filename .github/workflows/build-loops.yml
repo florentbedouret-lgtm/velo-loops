@@ -366,9 +366,12 @@ jobs:
             LANDCOVER_CHECK="icgc"        # icgc : revêtement selon la base topographique ICGC (28/09/2026) ; surface : chemins
                                           # de terre non signalés ; water : « bord d'eau » ; city : « ville »
             if [ "$LANDCOVER_CHECK" = "icgc" ]; then
-              sudo apt-get install -y -qq gdal-bin > /dev/null
+              # voies ICGC extraites sur un PC (scripts/icgc_extract.py) : le serveur de l'ICGC ne répond pas aux machines
+              # GitHub (run #133) ; fichier déposé dans la release « icgc-2024 » du dépôt
+              curl -fsSL -o data/icgc_vials.geojsonseq.gz \
+                "https://github.com/${GITHUB_REPOSITORY}/releases/download/icgc-2024/icgc_vials_barcelona_2024.geojsonseq.gz"
               python scripts/icgc_check.py --data web/data --pbf data/region.osm.pbf --workdir data \
-                --out data/landcover_check.json --out-md data/landcover_check.md
+                --icgc data/icgc_vials.geojsonseq.gz --out data/landcover_check.json --out-md data/landcover_check.md
             else
               python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check-$LANDCOVER_CHECK \
                 --out data/landcover_check.json --out-md data/landcover_check.md
