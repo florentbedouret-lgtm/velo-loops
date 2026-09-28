@@ -363,10 +363,16 @@ jobs:
                                           # grandes rivières ~150 m, front de rivière ~60 m (diagnostic « river », 28/09/2026)
         run: |
           if [ "$MODE" = "landcover_check" ]; then
-            LANDCOVER_CHECK="surface"     # surface : chemins de terre non signalés (28/09/2026) ; water : « bord d'eau » ;
-                                          # city : « ville »
-            python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check-$LANDCOVER_CHECK \
-              --out data/landcover_check.json --out-md data/landcover_check.md
+            LANDCOVER_CHECK="icgc"        # icgc : revêtement selon la base topographique ICGC (28/09/2026) ; surface : chemins
+                                          # de terre non signalés ; water : « bord d'eau » ; city : « ville »
+            if [ "$LANDCOVER_CHECK" = "icgc" ]; then
+              sudo apt-get install -y -qq gdal-bin > /dev/null
+              python scripts/icgc_check.py --data web/data --pbf data/region.osm.pbf --workdir data \
+                --out data/landcover_check.json --out-md data/landcover_check.md
+            else
+              python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check-$LANDCOVER_CHECK \
+                --out data/landcover_check.json --out-md data/landcover_check.md
+            fi
             cat data/landcover_check.md >> "$GITHUB_STEP_SUMMARY"
           else
             python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --apply "$LANDCOVER_METHOD"
@@ -381,6 +387,7 @@ jobs:
             data/landcover_check.json
             data/landcover_check.md
             data/surface_ways.csv
+            data/icgc_hidden_dirt.csv
           if-no-files-found: ignore
           retention-days: 30
 
