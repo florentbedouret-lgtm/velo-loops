@@ -289,6 +289,9 @@ class LandscapeIndex:
         if self.trees.get("industrial") is not None:
             ind_mask[np.unique(self.trees["industrial"].query(pts, predicate="dwithin",
                                                                distance=SCENERY_INDUSTRIAL_DEG)[0])] = True
+            # dans un parc (ex. Parc Fluvial del Besòs, voie verte longée par des zones industrielles) : pas l'ambiance
+            # entrepôts et camions de la zone portuaire ; sonde #141 : boucles de Sant Andreu à 18-32 % « industriel »
+            ind_mask &= ~protected_mask(self.trees, pts)
         industrial = float(ind_mask.mean()) if len(xy) else 0.0
         index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
