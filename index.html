@@ -1066,9 +1066,12 @@
         if (nature.length) out.push([pc(nature[0][1]), nature[0][3], false,
           nature[0][0] === 'protected' ? (sc.protected_seq ? 'park' : null) : (lc && sc.landcover_seq ? nature[0][0] : null)]);
       }
-      const sh = o.shares;
-      if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), t('k_main'), true]);
-      else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), t('k_cycle')]);
+      const sh = o.shares, rs = !!o.road_seq;
+      // chemins de terre (v9) : prévenir AVANT de partir, dès 500 m
+      const dirt = dirtKm(o);
+      if (dirt != null && dirt >= 0.5) out.push([km1(dirt) + ' km', t('k_dirt'), true, o.surface_seq ? 'dirt' : null]);
+      if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), t('k_main'), true, rs ? 'main' : null]);
+      else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), t('k_cycle'), false, rs ? 'cycle' : null]);
       else if (o.traffic_lights === 0) out.push([t('k_nolight_fig'), t('k_nolight')]);
       else if (o.terrain.climbs && o.terrain.climbs.length) {
         const c = o.terrain.climbs[0];
@@ -1126,9 +1129,11 @@
       if (o.traffic_lights != null) C.push(o.traffic_lights === 0 ? ['0', t('fr_nolights')]
         : [String(o.traffic_lights), tn('fr_lights', o.traffic_lights, { x: km1(o.traffic_lights_per_km || 0) })]);
       const sh = o.shares;
-      C.push([pc(sh.dedicated_cycleway), t('k_cycle')]);
-      C.push([pc(sh.main_roads), t('k_main_short') + '.', null, sh.main_roads > 0.10]);
-      if (sh.unpaved > 0.05) C.push([pc(sh.unpaved), t('fr_unpaved')]);
+      const rs = !!o.road_seq, dirt = dirtKm(o);
+      C.push([pc(sh.dedicated_cycleway), t('k_cycle'), rs && sh.dedicated_cycleway > 0 ? 'cycle' : null]);
+      C.push([pc(sh.main_roads), t('k_main_short') + '.', rs && sh.main_roads > 0 ? 'main' : null, sh.main_roads > 0.10]);
+      if (dirt != null) { if (dirt >= 0.1) C.push([km1(dirt) + ' km', t('fr_dirt'), o.surface_seq ? 'dirt' : null, dirt >= 0.5]); }
+      else if (sh.unpaved > 0.05) C.push([pc(sh.unpaved), t('fr_unpaved')]);          // données v8 et avant
       if (o.surface && o.surface.unknown >= 0.3) C.push([pc(o.surface.unknown), t('fr_surface')]);
       if (o.overlap > 0.10) C.push([pc(o.overlap), t('fr_overlap')]);
       if (o.u_turns) C.push([String(o.u_turns), tn('fr_uturns', o.u_turns)]);
@@ -1332,17 +1337,7 @@
         const c = (o.terrain.climbs || [])[Number(kind.slice(6))];
         return c ? [[c.start_km, c.start_km + c.length_km]] : [];
       }
-      const seq = (o.scenery && (kind === 'park' ? o.scenery.protected_seq : o.scenery.landcover_seq)) || '';
-      const ch = { water: 'e', forest: 'f', town: 'v', park: 'p' }[kind];
-      const step = o.distance_km / Math.max(seq.length, 1), out = [];
-      for (let i = 0; i < seq.length;) {                   // suites de points du milieu, trous de 100 m ignorés
-        if (seq[i] !== ch) { i++; continue; }
-        let j = i;
-        while (j < seq.length && (seq[j] === ch || (seq[j + 1] === ch && j + 1 < seq.length))) j++;
-        out.push([i * step, j * step]);
-        i = j;
-      }
-      return out;
+      return seqRanges(o, kind);
     }
     function hlLine(o, a, b) {                             // morceau du tracé entre les km a et b
       const p = profileData(o.coords, o.distance_km), pts = [profilePoint(o.coords, p.dist, a)];

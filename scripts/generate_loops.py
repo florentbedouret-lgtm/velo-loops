@@ -431,6 +431,7 @@ POI_OUT_OF_TOWN = ("w", "c")  # eau et cafés : seulement hors de la ville (Barc
 #                               28/09/2026, les 12 points d'eau d'une boucle de Gràcia tombaient tous dans les 7 premiers km)
 POI_CAFE_DEG = 0.0006         # ~50 m : café ou boulangerie, seulement hors de la ville (en ville, il y en a partout)
 POI_STATION_DEG = 0.0036      # ~300 m : gare, pour rentrer en train en cas de pépin
+POI_STATION_END_KM = 1.0      # gares à moins de 1 km du départ ou de l'arrivée (sur le tracé) : ignorées
 POI_PASS_DEG = 0.0024         # ~200 m du sommet d'une montée : col nommé
 POI_PEAK_DEG = 0.003          # ~250 m : sinon, sommet nommé
 POI_RULES = {"w": (POI_WATER_DEG, 2.0, 12), "c": (POI_CAFE_DEG, 1.0, 10), "g": (POI_STATION_DEG, 2.0, 6)}   # (distance,
@@ -499,6 +500,8 @@ def enrich_option(o: dict, pois) -> dict:
                 continue                                  # en ville il y en a partout : sans intérêt comme échappatoire
             if km - last < gap or (kind == "g" and name in names):
                 continue
+            if kind == "g" and (km < POI_STATION_END_KM or km > dist - POI_STATION_END_KM):
+                continue                                  # gare du départ ou de l'arrivée : pas une échappatoire
             kept.append({"t": kind, "km": round(km, 1), "lon": round(pt.x, 5), "lat": round(pt.y, 5),
                          **({"n": name} if name else {})})
             last = km
@@ -808,6 +811,7 @@ class Loop:
     stops: int | None = None
     surface_mix: dict = field(default_factory=dict)
     surface_seq: str = ""
+    road_seq: str = ""
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
     longest_repeat_m: float = 0.0
@@ -865,8 +869,18 @@ def unpaved_edges(det, n) -> list:
     return out
 
 
+def road_edges(det, n) -> list:
+    """Par tronçon : 'm' route principale, 'c' piste cyclable ou voie verte (même définition que dedicated_cycleway),
+    '-' sinon (surlignage dans l'appli)."""
+    rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
+    return ["m" if rc[i] in ("primary", "trunk", "secondary") else
+            "c" if rc[i] == "cycleway" or (rc[i] in ("footway", "path") and ba[i] in ("yes", "designated")) else "-"
+            for i in range(n)]
+
+
 def surface_seq(edges, cum, step: float = PROFILE_STEP_M) -> str:
-    """Une lettre tous les 100 m (même pas que landcover_seq) : 'u', 'p' ou '-' du tronçon sous le point."""
+    """Une lettre tous les 100 m (même pas que landcover_seq) : lettre du tronçon sous le point (unpaved_edges,
+    road_edges)."""
     import bisect
     total, out = cum[-1], []
     for k in range(max(1, int(total // step)) + 1):
@@ -969,6 +983,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.surface_seq = surface_seq(edges, cum)
+    loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
     loop.score = score(loop)
     return loop
@@ -1309,6 +1324,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "stop_signs_per_km": (None if l.stops is None else round(l.stops / max(l.distance_m / 1000.0, 0.1), 2)),
         "surface": {k: round(v, 3) for k, v in l.surface_mix.items()},
         **({"surface_seq": l.surface_seq} if "u" in l.surface_seq or "p" in l.surface_seq else {}),
+        **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
                     "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},
@@ -1377,7 +1393,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "8"   # 8 : allures définies par la FTP (2,3 / 3,0 / 3,8 W/kg), moins d'intensité dès 3 h (27/09/2026)
+GENERATOR_VERSION = "9"   # 9 : pistes sans revêtement noté et sentiers hors ville évités, comptés non goudronnés ;
+#                           surface_seq et road_seq pour le surlignage (28/09/2026). 8 : allures définies par la FTP
 
 
 def compare_block(options: list) -> dict:

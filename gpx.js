@@ -7,7 +7,8 @@ const xmlEsc = s => String(s).replace(/[&<>"']/g,
 // Test de Florent sur Garmin (28/09/2026) : Garmin Connect en fait des « points de parcours » ; il écarte les points loin
 // du tracé (gares) et coupe les noms vers 15 caractères. Donc : chaque point est POSÉ SUR LE TRACÉ au km de passage, nom
 // court, détail dans <desc>, et <type> / <sym> = types de points de parcours Garmin (Water, Food, Summit, Transport).
-const GPX_TYPE = { w: 'Water', c: 'Food', g: 'Transport', col: 'Summit' };
+const GPX_TYPE = { w: 'Water', c: 'Food', g: 'Transport', col: 'Summit', dirt: 'Danger' };
+const GPX_DIRT_MIN_KM = 0.3;     // chemin de terre signalé au compteur à partir de 300 m
 const GPX_NAME_MAX = 15;
 function gpxWaypoints(o) {
   if (typeof profileData !== 'function' || !o.coords[0] || o.coords[0].length < 2) return '';
@@ -26,6 +27,11 @@ function gpxWaypoints(o) {
     const q = on(c.start_km + c.length_km);
     const named = RELIEF_WORD.test(c.name) ? c.name : t('gpx_col') + ' ' + c.name;   // « Turó d'en Gras » se suffit
     pts.push({ lon: q[0], lat: q[1], t: 'col', name: clip(named), desc: c.name + ' · +' + Math.round(c.gain_m) + ' m' });
+  });
+  seqRanges(o, 'dirt').filter(([a, b]) => b - a >= GPX_DIRT_MIN_KM).forEach(([a, b]) => {   // début de chaque chemin de terre
+    const q = on(a);
+    pts.push({ lon: q[0], lat: q[1], t: 'dirt', name: clip(t('gpx_dirt') + ' ' + kmTxt(b - a) + ' km'),
+      desc: t('gpx_dirt_desc', { a: kmTxt(a), b: kmTxt(b), l: kmTxt(b - a) }) });
   });
   return pts.map(w => '  <wpt lat="' + w.lat.toFixed(6) + '" lon="' + w.lon.toFixed(6) + '"><name>' + xmlEsc(w.name) +
     '</name><desc>' + xmlEsc(w.desc) + '</desc><sym>' + GPX_TYPE[w.t] + '</sym><type>' + GPX_TYPE[w.t] + '</type></wpt>\n').join('');
@@ -52,6 +58,30 @@ function nearestOnRoute(coords, pt) {                    // projection sur le se
     if (d < bd) { bd = d; best = [pt[0] + qx / k, pt[1] + qy]; }
   }
   return best || [pt[0], pt[1]];
+}
+// tronçons [km début, km fin] d'une séquence « une lettre tous les 100 m » publiée par le pipeline ; partagé par le
+// surlignage de la carte (index.html) et les points du GPX. Suites de points, trous de 100 m ignorés.
+const SEQ_KINDS = {
+  water: [o => o.scenery && o.scenery.landcover_seq, 'e'], forest: [o => o.scenery && o.scenery.landcover_seq, 'f'],
+  town: [o => o.scenery && o.scenery.landcover_seq, 'v'], park: [o => o.scenery && o.scenery.protected_seq, 'p'],
+  dirt: [o => o.surface_seq, 'up'], main: [o => o.road_seq, 'm'], cycle: [o => o.road_seq, 'c']
+};
+function seqRanges(o, kind) {
+  const k = SEQ_KINDS[kind];
+  const seq = (k && k[0](o)) || '', has = c => c !== undefined && k[1].includes(c);
+  const step = o.distance_km / Math.max(seq.length, 1), out = [];
+  for (let i = 0; i < seq.length;) {
+    if (!has(seq[i])) { i++; continue; }
+    let j = i;
+    while (j < seq.length && (has(seq[j]) || (j + 1 < seq.length && has(seq[j + 1])))) j++;
+    out.push([i * step, j * step]);
+    i = j;
+  }
+  return out;
+}
+// km de chemins de terre (noté ou probable, générateur v9) ; null pour les données plus anciennes (part « non goudronné »)
+function dirtKm(o) {
+  return o.surface && o.surface.unpaved_probable != null ? o.shares.unpaved * o.distance_km : null;
 }
 function crowM(a, b) {                                   // distance en mètres entre deux [lon, lat]
   const r = d => d * Math.PI / 180, dLat = r(b[1] - a[1]), dLon = r(b[0] - a[0]);
