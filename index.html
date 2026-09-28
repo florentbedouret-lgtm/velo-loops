@@ -1069,7 +1069,8 @@
       const sh = o.shares, rs = !!o.road_seq;
       // chemins de terre (v9) : prévenir AVANT de partir, dès 500 m
       const dirt = dirtKm(o);
-      if (dirt != null && dirt >= 0.5) out.push([km1(dirt) + ' km', t('k_dirt'), true, o.surface_seq ? 'dirt' : null]);
+      if (dirt != null && (dirt >= 0.5 || o.unpaved_fallback)) out.push([km1(dirt) + ' km',
+        t(o.unpaved_fallback ? 'k_dirt_fallback' : 'k_dirt'), true, o.surface_seq ? 'dirt' : null]);
       if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), t('k_main'), true, rs ? 'main' : null]);
       else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), t('k_cycle'), false, rs ? 'cycle' : null]);
       else if (o.traffic_lights === 0) out.push([t('k_nolight_fig'), t('k_nolight')]);

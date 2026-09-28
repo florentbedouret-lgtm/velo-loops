@@ -88,6 +88,11 @@ ASCENT_THRESHOLD_M = 3.0      # une variation < 3 m n'est pas comptée comme mon
 TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
+# Repli (choix B de Florent, 28/09/2026, test v10 : Castellgalí, Gaià perdaient leurs boucles courtes) : s'il n'existe AUCUN
+# candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
+# FALLBACK_UNPAVED_KM et FALLBACK_UNPAVED_SHARE, signalés dans l'appli (unpaved_fallback).
+FALLBACK_UNPAVED_KM = 3.0
+FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
 WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}
 # « ville » de la répartition du terrain (O-9.4) : au moins LANDCOVER_BLD_MIN bâtiments OSM à moins de ~75 m du point.
@@ -812,6 +817,7 @@ class Loop:
     surface_mix: dict = field(default_factory=dict)
     surface_seq: str = ""
     road_seq: str = ""
+    unpaved_fallback: bool = False
     doubt_ways: dict = field(default_factory=dict)
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
@@ -1079,8 +1085,10 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
 
 
 # --------------------------------------------------------------------------- génération
-def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h: float, candidates, log):
-    """Retourne (candidats valides, compteur des raisons de rejet)."""
+def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h: float, candidates, log,
+                   fallback: list | None = None):
+    """Retourne (candidats valides, compteur des raisons de rejet). fallback : reçoit les candidats rejetés pour la
+    seule terre mais sous les limites du repli (FALLBACK_UNPAVED_*)."""
     lon, lat = start["lon"], start["lat"]
     watts = level_watts(level, duration_h)
     target_s = duration_h * 3600.0
@@ -1141,6 +1149,10 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
             continue
         if cand.shares["unpaved"] > MAX_UNPAVED:
             rejects["non goudronné"] += 1
+            if (fallback is not None and cand.shares["unpaved"] <= FALLBACK_UNPAVED_SHARE
+                    and cand.shares["unpaved"] * cand.distance_m / 1000.0 <= FALLBACK_UNPAVED_KM):
+                cand.unpaved_fallback = True
+                fallback.append(cand)
             continue
         pool.append(cand)
     return pool, rejects
@@ -1167,12 +1179,17 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
     runs = [(profile, gh, candidates, profile) for profile in LEVELS[level]["profiles"]]
     if level in CLIMB_LEVELS:
         runs.append(("sport", _ClimbGH(gh), CLIMB_CANDIDATES, "sport + montée"))
+    spare: list = []
     for profile, client, cands, label in runs:
         log(f"  {duration:g} h / {level} / {label}")
-        found, rejects = fit_and_sample(client, st, level, profile, duration, cands, log)
+        found, rejects = fit_and_sample(client, st, level, profile, duration, cands, log, fallback=spare)
         why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
+    if not pool and spare:                                 # repli : aucune boucle sous MAX_UNPAVED
+        log(f"    repli : {len(spare)} candidat(s) avec un peu de terre (au plus {FALLBACK_UNPAVED_KM:g} km / "
+            f"{FALLBACK_UNPAVED_SHARE:.0%}), signalé(s)")
+        return spare
     return pool
 
 
@@ -1376,6 +1393,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "surface": {k: round(v, 3) for k, v in l.surface_mix.items()},
         **({"surface_seq": l.surface_seq} if "u" in l.surface_seq or "p" in l.surface_seq else {}),
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
+        **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
                     "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},

@@ -362,7 +362,8 @@ def option_row(o) -> dict:
             "main_roads_pct": round(100 * o["shares"]["main_roads"]), "same_as": o.get("same_as"),
             "label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
-            "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"]}
+            "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"],
+            "fallback": bool(o.get("unpaved_fallback"))}
 
 
 def run_probe(sid, site, gh_url, durations, levels):
@@ -536,6 +537,7 @@ def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
     f = lambda o: (f"{o['label']}{' (= ' + o['same_as']['level'] + ')' if o.get('same_as') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
                    f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}"
+                   + (" [REPLI]" if o.get("fallback") else "")
                    + (f", terre {o['surface']['dirt_km']} km (+ piste qualité 1 {o['surface']['g1_km']} km, sentiers "
                       f"{o['surface']['sentier_km']} km)" if o.get("surface") else ""))
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
