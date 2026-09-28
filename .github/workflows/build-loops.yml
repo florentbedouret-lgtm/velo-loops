@@ -31,6 +31,7 @@ name: Générer les boucles vélo
 #                       pondérations du score. Province entière. Artefact `diagnostic-nature` à envoyer pour analyse.
 #  - landcover_check  : diagnostic (rien n'est publié) : part « ville » de la barre de terrain selon plusieurs définitions,
 #                       sur des départs témoins, à partir des boucles publiées (sans GraphHopper). Artefact `diagnostic-terrain`.
+#                       Réglé par LANDCOVER_CHECK (plus bas) : actuellement « surface » = chemins de terre non signalés.
 #  - landcover        : recalcule la barre de terrain (scenery.landcover) de TOUTES les boucles publiées avec la définition
 #                       LANDCOVER_METHOD (ci-dessous), sans GraphHopper ni recalcul des boucles, puis republie (~10 min).
 #  - generate_names   : génère les boucles pour les départs nommés de config/region_barcelona.json, puis publie.
@@ -359,7 +360,8 @@ jobs:
                                           # grandes rivières ~150 m, front de rivière ~60 m (diagnostic « river », 28/09/2026)
         run: |
           if [ "$MODE" = "landcover_check" ]; then
-            LANDCOVER_CHECK="water"       # water : « bord d'eau » selon la distance à la mer (27/09/2026) ; city : « ville »
+            LANDCOVER_CHECK="surface"     # surface : chemins de terre non signalés (28/09/2026) ; water : « bord d'eau » ;
+                                          # city : « ville »
             python scripts/landcover.py --data web/data --pbf data/region.osm.pbf --workdir data --check-$LANDCOVER_CHECK \
               --out data/landcover_check.json --out-md data/landcover_check.md
             cat data/landcover_check.md >> "$GITHUB_STEP_SUMMARY"

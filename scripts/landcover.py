@@ -6,6 +6,8 @@ elle ne dépend que du tracé (coords publiés) et des cartes OSM. Deux usages :
   --check          diagnostic (rien n'est publié) : part « ville » selon plusieurs définitions, sur des départs témoins
   --check-water    diagnostic (rien n'est publié) : part « bord d'eau » le long des grandes rivières (27/09/2026 ; le
                    diagnostic précédent, sur la mer, a donné la règle mer ~250 m / front de mer ~50 m, voir D27)
+  --check-surface  diagnostic (rien n'est publié) : chemins de terre non signalés (pistes OSM sans revêtement noté) sur
+                   TOUTES les boucles publiées (28/09/2026)
   --apply METHODE  recalcule scenery.landcover de toutes les boucles de --data avec la définition METHODE, ainsi que
                    scenery.landcover_seq (catégorie tous les 100 m : bande sous le profil), exit_city_km (sortie de ville
                    mesurée par le bâti) et le bloc « compare » de l'index (suggestion de départ voisin)
@@ -172,6 +174,166 @@ def check_water(data: Path, land, bld_tree, out_md: Path, out_json: Path):
     print("\n".join(L), flush=True)
 
 
+# ---------------------------------------------------------------- chemins de terre non signalés (28/09/2026)
+# Remarque de Florent (Sant Andreu, 3 h, modéré) : au sud de Vallromanes, la boucle emprunte un chemin de terre tassée.
+# OSM : highway=track, tracktype=grade1 (« dur, en général goudronné »), sans surface -> GraphHopper le compte en
+# revêtement « inconnu » : ni pénalisé (non goudronné > 12 %), ni affiché (> 5 %). Le diagnostic mesure, point par point
+# (tous les 50 m), la voie OSM la plus proche du tracé (à ~15 m au plus) et la classe :
+SURF_PAVED = {"asphalt", "concrete", "concrete:plates", "concrete:lanes", "paving_stones", "paved", "chipseal", "sett",
+              "cobblestone", "unhewn_cobblestone", "metal", "wood", "bricks"}
+SURF_CLASSES = ("goudron", "terre", "piste_g1", "piste_g2plus", "piste_sans", "sentier_sans", "route_sans", "aucune")
+SURF_NEAR_DEG = 0.00018          # ~15 m : au-delà, pas de voie OSM retenue pour ce point (« aucune »)
+
+
+def surface_class(tags: dict) -> str:
+    """goudron / terre si le revêtement est noté ; sinon selon le type de voie : piste (qualité 1, 2 à 5, non notée),
+    sentier (path, footway, bridleway), route (le reste : en pratique presque toujours goudronnée)."""
+    s = tags.get("surface")
+    if s in SURF_PAVED:
+        return "goudron"
+    if s in g.UNPAVED or s in ("pebblestone", "earth", "mud", "woodchips", "rock"):
+        return "terre"
+    hw = tags.get("highway")
+    if hw == "track":
+        tt = tags.get("tracktype")
+        return "piste_g1" if tt == "grade1" else ("piste_g2plus" if tt else "piste_sans")
+    if hw in ("path", "footway", "bridleway"):
+        return "sentier_sans"
+    return "route_sans"
+
+
+def load_ways(pbf: Path, workdir: Path):
+    """Voies OSM (osmium) -> (STRtree des lignes, classes, identifiants, stats de longueur des pistes à revêtement noté)."""
+    import shapely
+    from shapely.geometry import shape
+    filt, out = workdir / "ways.osm.pbf", workdir / "ways.geojsonseq"
+    subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway", "-o", str(filt), "--overwrite"], check=True,
+                   capture_output=True)
+    subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "--geometry-types=linestring", "-a", "id",
+                    "-o", str(out), "--overwrite"], check=True, capture_output=True)
+    skip = {"motorway", "motorway_link", "trunk_link", "steps", "construction", "proposed", "platform", "corridor",
+            "elevator", "raceway", "bus_stop", "services", "rest_area"}
+    geoms, cls, ids = [], [], []
+    prior = {}                   # pistes dont le revêtement EST noté : km goudron / terre, par qualité (tracktype)
+    with out.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip("\x1e\n ")
+            if not line:
+                continue
+            try:
+                feat = json.loads(line)
+                geom = shape(feat["geometry"])
+            except (ValueError, KeyError):
+                continue
+            p = feat.get("properties", {})
+            if p.get("highway") in skip or geom.is_empty:
+                continue
+            c = surface_class(p)
+            geoms.append(geom)
+            cls.append(c)
+            ids.append(p.get("@id") or feat.get("id"))
+            if p.get("highway") == "track" and c in ("goudron", "terre"):
+                k = p.get("tracktype") or "non notée"
+                prior.setdefault(k, {"goudron": 0.0, "terre": 0.0})[c] += geom.length * 90.0   # ~km (degrés -> km)
+    return shapely.STRtree(geoms), np.array(cls), ids, prior
+
+
+def check_surface(data: Path, pbf: Path, wd: Path, out_md: Path, out_json: Path):
+    import shapely
+    import time
+    t0 = time.time()
+    tree, cls_arr, ids, prior = load_ways(pbf, wd)
+    print(f"Voies OSM chargées : {len(cls_arr)} en {time.time() - t0:.0f} s", flush=True)
+    step = 50.0
+    rows, case = [], []
+    for f in sorted((data / "starts").glob("*.json")):
+        d = json.loads(f.read_text(encoding="utf-8"))
+        for o in d["options"]:
+            coords = o["coords"]
+            cum = [0.0]
+            for i in range(1, len(coords)):
+                cum.append(cum[-1] + g.haversine(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]))
+            pts = shapely.points(np.array(g.sample_points(coords, cum, step)))
+            pi, wi = tree.query_nearest(pts, max_distance=SURF_NEAR_DEG, all_matches=False)
+            lab = np.full(len(pts), "aucune", dtype=object)
+            lab[pi] = cls_arr[wi]
+            km = {c: round(float((lab == c).sum()) * step / 1000.0 * o["distance_km"] / max(cum[-1] / 1000.0, 1e-9), 2)
+                  for c in SURF_CLASSES}
+            su = o.get("surface") or {}
+            rows.append({"start": f.stem, "level": o["level"], "min": round(o["duration_target_min"]),
+                         "label": o["label"], "dist": o["distance_km"], "km": km,
+                         "gh_unpaved": su.get("unpaved", 0), "gh_unknown": su.get("unknown", 0)})
+            if f.stem == "sant-andreu" and abs(o["distance_km"] - 54.3) < 0.2:          # cas signalé par Florent
+                segs, cur = [], None
+                for k, c in enumerate(lab):
+                    x = k * step / 1000.0 * o["distance_km"] / max(cum[-1] / 1000.0, 1e-9)
+                    if c.startswith("piste") or c in ("terre", "sentier_sans"):
+                        if cur and cur[2] == c and x - cur[1] <= 0.11:
+                            cur[1] = x
+                        else:
+                            cur = [x, x, c, set()]
+                            segs.append(cur)
+                        cur[3].update(ids[w] for p_, w in zip(pi, wi) if p_ == k)
+                    else:
+                        cur = None
+                case = [f"- km {a:.1f} à {b:.1f} : {c} (voies {', '.join(str(i) for i in sorted(s, key=str))})"
+                        for a, b, c, s in segs if b - a >= 0.1]
+    out_json.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+
+    def doubtful(r, with_g1=True):          # km de chemins probablement non goudronnés, non signalés aujourd'hui
+        k = r["km"]
+        return k["piste_sans"] + k["piste_g2plus"] + (k["piste_g1"] if with_g1 else 0.0)
+
+    n = len(rows)
+    pct = lambda x: f"{100 * x / max(n, 1):.0f} %"  # noqa: E731
+    L = ["# Diagnostic « chemins de terre non signalés » (rien n'est publié)",
+         f"\n{n} boucles publiées, {len({r['start'] for r in rows})} départs. Un point tous les {step:.0f} m, classé par la "
+         "voie OSM la plus proche (≤ ~15 m). « Pistes douteuses » = highway=track sans revêtement noté (qualité 2 à 5 ou non "
+         "notée), avec ou sans la qualité 1 (« dur », souvent fausse : cas de Vallromanes).",
+         "\n## Combien de boucles sont touchées ?",
+         "\n| Pistes douteuses sur la boucle | sans qualité 1 | avec qualité 1 |", "|---|---|---|"]
+    for lo, txt in ((0.5, "≥ 0,5 km"), (1, "≥ 1 km"), (2, "≥ 2 km"), (5, "≥ 5 km")):
+        L.append(f"| {txt} | {pct(sum(doubtful(r, False) >= lo for r in rows))} | {pct(sum(doubtful(r) >= lo for r in rows))} |")
+    for share, txt in ((0.05, "≥ 5 % de la distance"), (0.12, "≥ 12 % (seuil d'exclusion)")):
+        L.append(f"| {txt} | {pct(sum(doubtful(r, False) >= share * r['dist'] for r in rows))} | "
+                 f"{pct(sum(doubtful(r) >= share * r['dist'] for r in rows))} |")
+    tot = sum(r["km"]["terre"] + doubtful(r) for r in rows)
+    L.append(f"\nSi on comptait les pistes douteuses (avec qualité 1) comme non goudronnées : "
+             f"{pct(sum(r['km']['terre'] + doubtful(r) > 0.12 * r['dist'] for r in rows))} des boucles dépasseraient le seuil "
+             f"d'exclusion de 12 % (aujourd'hui : {pct(sum(r['gh_unpaved'] > 0.12 for r in rows))}).")
+    L.append("\n## Par niveau et par durée (médiane des km de pistes douteuses, avec qualité 1 ; part des boucles ≥ 1 km)")
+    L.append("\n| | médiane km | ≥ 1 km |")
+    L.append("|---|---|---|")
+    for key, vals in (("level", ("facile", "modere", "soutenu")), ("min", sorted({r["min"] for r in rows}))):
+        for v in vals:
+            rs = [r for r in rows if r[key] == v]
+            if rs:
+                L.append(f"| {v if key == 'level' else f'{v} min'} | {st.median(doubtful(r) for r in rs):.1f} | "
+                         f"{100 * sum(doubtful(r) >= 1 for r in rs) / len(rs):.0f} % |")
+    km_all = {c: sum(r["km"][c] for r in rows) for c in SURF_CLASSES}
+    all_km = max(sum(km_all.values()), 1e-9)
+    L.append("\n## Répartition de tous les km publiés")
+    L.append("\n" + " · ".join(f"{c} {100 * v / all_km:.1f} %" for c, v in km_all.items()))
+    L.append(f"\n(terre notée + pistes douteuses = {100 * tot / all_km:.1f} % des km publiés)")
+    L.append("\n## Pistes OSM dont le revêtement EST noté (province) : part de terre selon la qualité notée")
+    L.append("\n| Qualité (tracktype) | km goudron | km terre | part terre |")
+    L.append("|---|---|---|---|")
+    for k in sorted(prior):
+        a, b = prior[k]["goudron"], prior[k]["terre"]
+        L.append(f"| {k} | {a:.0f} | {b:.0f} | {100 * b / max(a + b, 1e-9):.0f} % |")
+    L.append("\n## Les 25 boucles les plus touchées")
+    L.append("\n| Départ | niveau | durée | km | pistes douteuses (km) | dont qualité 1 | terre notée | GH inconnu |")
+    L.append("|---|---|---|---|---|---|---|---|")
+    for r in sorted(rows, key=doubtful, reverse=True)[:25]:
+        L.append(f"| {r['start']} | {r['level']} | {r['min']} | {r['dist']} | {doubtful(r):.1f} | {r['km']['piste_g1']:.1f} | "
+                 f"{r['km']['terre']:.1f} | {100 * r['gh_unknown']:.0f} % |")
+    L.append("\n## Cas signalé : Sant Andreu, 3 h, modéré, 54,3 km (tronçons de piste, de terre ou de sentier)")
+    L += case or ["- (boucle non trouvée)"]
+    L.append(f"\nDurée du diagnostic : {time.time() - t0:.0f} s.")
+    out_md.write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 def check(data: Path, land, bld_tree, out_md: Path, out_json: Path):
     rows = []
     for sid in WITNESSES:
@@ -249,6 +411,7 @@ def main() -> int:
     ap.add_argument("--workdir", required=True)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--check-water", action="store_true")
+    ap.add_argument("--check-surface", action="store_true")
     ap.add_argument("--check-city", dest="check", action="store_true", help="alias de --check")
     ap.add_argument("--apply", choices=METHODS)
     ap.add_argument("--bld-bbox", default="", help="emprise des bâtiments chargés (vide = tout l'extrait, la province)")
@@ -256,6 +419,9 @@ def main() -> int:
     ap.add_argument("--out-md", default="data/landcover_check.md")
     args = ap.parse_args()
     pbf, wd, data = Path(args.pbf), Path(args.workdir), Path(args.data)
+    if args.check_surface:                             # n'a besoin ni du paysage ni des bâtiments
+        check_surface(data, pbf, wd, Path(args.out_md), Path(args.out))
+        return 0
     land = g.load_landscape(pbf, wd)
     if land is None:
         sys.exit("paysage OSM non chargé")
