@@ -54,9 +54,19 @@ def load_icgc(workdir: Path, bbox: str):
     cmd = ["ogr2ogr", "-f", "GeoJSONSeq", str(out), "/vsicurl/" + ICGC_URL, ICGC_LAYER,   # tous les types : filtrés
            "-spat", w, s, e, n, "-spat_srs", "EPSG:4326", "-t_srs", "EPSG:4326", "-select", "tipus",   # ci-dessous
            "-overwrite"]
+    # run #132 : « HTTP response code 0 » (connexion refusée ou coupée) alors que le serveur répond depuis un PC :
+    # agent HTTP de GDAL filtré ? requêtes multi-plages ? -> agent HTTP explicite, une plage par requête, HTTP/1.1,
+    # et test préalable avec curl (affiché dans le journal) pour savoir d'où vient le blocage.
+    ua = "Oyan-velo-loops/1.0 (+https://github.com/florentbedouret-lgtm/velo-loops)"
     env = {"CPL_VSIL_CURL_CHUNK_SIZE": "4194304", "CPL_VSIL_CURL_CACHE_SIZE": "268435456",
-           "GDAL_HTTP_MULTIRANGE": "YES", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "3"}
+           "GDAL_HTTP_MULTIRANGE": "SERIAL", "GDAL_HTTP_VERSION": "1.1", "GDAL_HTTP_USERAGENT": ua,
+           "GDAL_HTTP_TIMEOUT": "120", "GDAL_HTTP_MAX_RETRY": "5", "GDAL_HTTP_RETRY_DELAY": "5"}
     import os
+    for label, extra in (("HEAD", ["-I"]), ("plage 0-99", ["-r", "0-99", "-o", "/dev/null"]),
+                         ("plage, agent GDAL", ["-r", "0-99", "-o", "/dev/null", "-A", "GDAL/3.8"])):
+        r = subprocess.run(["curl", "-sS", "-m", "30", "-A", ua, *extra, "-w", "code %{http_code} en %{time_total} s\n",
+                            ICGC_URL], capture_output=True, text=True)
+        print(f"Test curl ({label}) : {(r.stdout.strip().splitlines() or [''])[-1]} {r.stderr.strip()}", flush=True)
     t0 = time.time()
     subprocess.run(cmd, check=True, env={**os.environ, **env})
     print(f"Voies ICGC lues en {time.time() - t0:.0f} s", flush=True)
