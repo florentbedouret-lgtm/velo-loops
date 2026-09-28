@@ -3,22 +3,49 @@
 const xmlEsc = s => String(s).replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
-// points de passage (waypoints) : eau, cafés hors ville, gares et cols nommés, lisibles hors ligne sur le compteur
-// (Garmin, Wahoo, OsmAnd…) ; <sym> = symboles Garmin courants, ignorés sans dommage par les autres appareils
-const GPX_SYM = { w: 'Drinking Water', c: 'Restaurant', g: 'Ground Transportation', col: 'Summit' };
+// points de passage (waypoints) : eau, cafés hors ville, gares et cols nommés, lisibles hors ligne sur le compteur.
+// Test de Florent sur Garmin (28/09/2026) : Garmin Connect en fait des « points de parcours » ; il écarte les points loin
+// du tracé (gares) et coupe les noms vers 15 caractères. Donc : chaque point est POSÉ SUR LE TRACÉ au km de passage, nom
+// court, détail dans <desc>, et <type> / <sym> = types de points de parcours Garmin (Water, Food, Summit, Transport).
+const GPX_TYPE = { w: 'Water', c: 'Food', g: 'Transport', col: 'Summit' };
+const GPX_NAME_MAX = 15;
 function gpxWaypoints(o) {
-  const pts = (o.pois || []).map(x => ({ lat: x.lat, lon: x.lon, t: x.t,
-    name: (x.n ? x.n + ' · ' : '') + t('poi_' + x.t) + ' · km ' + x.km.toFixed(1).replace('.', LANG === 'en' ? '.' : ',') }));
-  const climbs = ((o.terrain && o.terrain.climbs) || []).filter(c => c.name);
-  if (climbs.length && typeof profileData === 'function' && o.coords[0] && o.coords[0].length >= 2) {
-    const p = profileData(o.coords, o.distance_km);
-    climbs.forEach(c => {
-      const q = profilePoint(o.coords, p.dist, Math.min(o.distance_km, c.start_km + c.length_km));
-      pts.push({ lat: q[1], lon: q[0], t: 'col', name: c.name + ' · +' + Math.round(c.gain_m) + ' m' });
-    });
-  }
+  if (typeof profileData !== 'function' || !o.coords[0] || o.coords[0].length < 2) return '';
+  const p = profileData(o.coords, o.distance_km);
+  const on = kmv => profilePoint(o.coords, p.dist, Math.max(0, Math.min(o.distance_km, kmv)));
+  const clip = str => (str.length > GPX_NAME_MAX ? str.slice(0, GPX_NAME_MAX - 1) + '…' : str);
+  const kmTxt = v => v.toFixed(1).replace('.', LANG === 'en' ? '.' : ',');
+  const pts = (o.pois || []).map(x => {
+    const q = nearestOnRoute(o.coords, [x.lon, x.lat]);   // point du tracé le plus proche (pas le km : plus exact)
+    const off = Math.round(crowM(q, [x.lon, x.lat]));
+    const short = x.t === 'w' ? t('gpx_w') : x.t === 'c' ? (x.n || t('gpx_c')) : t('gpx_g') + ' ' + (x.n || '');
+    const desc = (x.n ? x.n + ' · ' : '') + t('poi_' + x.t) + ' · km ' + kmTxt(x.km) + (off >= 30 ? ' · ' + t('gpx_off', { m: off }) : '');
+    return { lon: q[0], lat: q[1], t: x.t, name: clip(short), desc };
+  });
+  ((o.terrain && o.terrain.climbs) || []).filter(c => c.name).forEach(c => {
+    const q = on(c.start_km + c.length_km);
+    pts.push({ lon: q[0], lat: q[1], t: 'col', name: clip(c.name), desc: c.name + ' · +' + Math.round(c.gain_m) + ' m' });
+  });
   return pts.map(w => '  <wpt lat="' + w.lat.toFixed(6) + '" lon="' + w.lon.toFixed(6) + '"><name>' + xmlEsc(w.name) +
-    '</name><sym>' + GPX_SYM[w.t] + '</sym><type>' + w.t + '</type></wpt>\n').join('');
+    '</name><desc>' + xmlEsc(w.desc) + '</desc><sym>' + GPX_TYPE[w.t] + '</sym><type>' + GPX_TYPE[w.t] + '</type></wpt>\n').join('');
+}
+function nearestOnRoute(coords, pt) {                    // projection sur le segment le plus proche (repère local en m)
+  const k = Math.cos(pt[1] * Math.PI / 180);
+  let best = null, bd = Infinity;
+  for (let i = 1; i < coords.length; i++) {
+    const ax = (coords[i - 1][0] - pt[0]) * k, ay = coords[i - 1][1] - pt[1];
+    const bx = (coords[i][0] - pt[0]) * k, by = coords[i][1] - pt[1];
+    const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+    const u = L ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0;
+    const qx = ax + u * dx, qy = ay + u * dy, d = qx * qx + qy * qy;
+    if (d < bd) { bd = d; best = [pt[0] + qx / k, pt[1] + qy]; }
+  }
+  return best || [pt[0], pt[1]];
+}
+function crowM(a, b) {                                   // distance en mètres entre deux [lon, lat]
+  const r = d => d * Math.PI / 180, dLat = r(b[1] - a[1]), dLon = r(b[0] - a[0]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a[1])) * Math.cos(r(b[1])) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
 }
 
 function buildGpx(start, o, levelLabel) {
