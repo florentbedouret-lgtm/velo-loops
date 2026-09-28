@@ -189,6 +189,15 @@ jobs:
             data/demand_sample.json
           retention-days: 30
 
+      - name: Revêtement ICGC dans la copie locale de la carte (générateur v10)
+        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
+        run: |
+          # voies ICGC extraites sur un PC (scripts/icgc_extract.py), release « icgc-2024 » ; surface=unpaved ajouté aux
+          # voies OSM sans revêtement noté que l'ICGC dit non revêtues (scripts/icgc_tag.py) ; OSM lui-même n'est pas modifié
+          curl -fsSL -o data/icgc_vials.geojsonseq.gz \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/icgc-2024/icgc_vials_barcelona_2024.geojsonseq.gz"
+          python scripts/icgc_tag.py --pbf data/region.osm.pbf --icgc data/icgc_vials.geojsonseq.gz --workdir data
+
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
         if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
         env:
@@ -242,9 +251,9 @@ jobs:
               --note "sonde relief : poids 0 / 0,10 / 0,20 / 0,30 dans la note du niveau sportif (0 = réglage actuel)"
           elif [ -n "$NATURE_PROBE" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "1" \
+              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "0.75 1 2 3 6" \
               --levels "facile modere soutenu" --out data/nature_check.json --out-md data/nature_check.md \
-              --note "test rapide avant le recalcul v9 : identifiants de voies OSM (osm_way_id), 1 h seulement"
+              --note "sonde v10 : revêtement ICGC ajouté à la copie locale de la carte (terre = notée OSM, ICGC, pistes douteuses)"
           else
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \
@@ -262,6 +271,7 @@ jobs:
             data/nature_check.json
             data/nature_check.md
             data/surface_ways_probe.csv
+            data/icgc_tagged.csv
           if-no-files-found: ignore
           retention-days: 30
 
@@ -307,7 +317,8 @@ jobs:
           if [ "${MODE#full}" != "$MODE" ]; then          # budget épuisé : les départs non recalculés gardent leur version publiée
             OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
             MAX_STARTS=1000; PER_ZONE=""
-            EXTRA="$EXTRA --time-budget-min 320 --carry-over-from https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
+            BUDGET=$(( 328 - ( $(date +%s) - JOB_START ) / 60 ))   # compté depuis le début du job (préparation v10 plus longue)
+            EXTRA="$EXTRA --time-budget-min $BUDGET --carry-over-from https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
           fi
           if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
           if [ -n "$PER_ZONE" ]; then EXTRA="$EXTRA --per-zone $PER_ZONE --pilot-rural 5 --pilot-box 1.30,41.55,2.60,42.35:2 --neighbour-pilot 20 --neighbour-out data/neighbour_gain.json"; fi
@@ -336,6 +347,7 @@ jobs:
             data/timings.json
             data/neighbour_gain.json
             data/surface_ways_v9.csv
+            data/icgc_tagged.csv
           if-no-files-found: ignore
           retention-days: 30
 

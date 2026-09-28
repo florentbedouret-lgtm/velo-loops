@@ -7,7 +7,8 @@ graphhopper:
 
   # road_surface.json (28/09/2026, diagnostic « chemins de terre non signalés ») : pistes agricoles / forestières sans
   # revêtement noté et de qualité autre que 1 (99 % de terre quand le revêtement est noté), et sentiers hors ville sans
-  # revêtement noté, fortement évités : l'appli est faite pour le vélo de route.
+  # revêtement noté, fortement évités : l'appli est faite pour le vélo de route. v10 : terre notée (OSM ou ICGC, ajoutée
+  # par scripts/icgc_tag.py dans la copie locale de la carte) évitée de la même façon.
   profiles:
     - name: calm
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json, loop_calm.json]

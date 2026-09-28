@@ -1444,7 +1444,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "9"   # 9 : pistes sans revêtement noté et sentiers hors ville évités, comptés non goudronnés ;
+GENERATOR_VERSION = "10"  # 10 : revêtement complété par la base topographique ICGC (scripts/icgc_tag.py), terre évitée.
+#                           9 : pistes sans revêtement noté et sentiers hors ville évités, comptés non goudronnés ;
 #                           surface_seq et road_seq pour le surlignage (28/09/2026). 8 : allures définies par la FTP
 
 
@@ -2045,7 +2046,7 @@ def main() -> int:
         "coverage_bbox": ([round(min(e["lon"] for e in index), 4), round(min(e["lat"] for e in index), 4),
                            round(max(e["lon"] for e in index), 4), round(max(e["lat"] for e in index), 4)] if index else None),
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
-        "attribution": "© contributeurs OpenStreetMap (ODbL) ; calculs GraphHopper (Apache 2.0)",
+        "attribution": "© contributeurs OpenStreetMap (ODbL) ; revêtement © ICGC (CC BY 4.0) ; calculs GraphHopper (Apache 2.0)",
         "params_hash": PARAMS_HASH,
         "stats": {"starts_requested": len(starts), "starts_generated": len(index),
                   "starts_reused": sum(1 for e in index if e.get("reused")),

@@ -203,7 +203,7 @@ def surface_class(tags: dict) -> str:
     return "route_sans"
 
 
-def load_ways(pbf: Path, workdir: Path):
+def load_ways(pbf: Path, workdir: Path, with_highway: bool = False):
     """Voies OSM (osmium) -> (STRtree des lignes, classes, identifiants, stats de longueur des pistes à revêtement noté)."""
     import shapely
     from shapely.geometry import shape
@@ -214,7 +214,7 @@ def load_ways(pbf: Path, workdir: Path):
                     "-o", str(out), "--overwrite"], check=True, capture_output=True)
     skip = {"motorway", "motorway_link", "trunk_link", "steps", "construction", "proposed", "platform", "corridor",
             "elevator", "raceway", "bus_stop", "services", "rest_area"}
-    geoms, cls, ids = [], [], []
+    geoms, cls, ids, hws = [], [], [], []
     prior = {}                   # pistes dont le revêtement EST noté : km goudron / terre, par qualité (tracktype)
     with out.open(encoding="utf-8") as fh:
         for line in fh:
@@ -233,9 +233,12 @@ def load_ways(pbf: Path, workdir: Path):
             geoms.append(geom)
             cls.append(c)
             ids.append(p.get("@id") or feat.get("id"))
+            hws.append(p.get("highway"))
             if p.get("highway") == "track" and c in ("goudron", "terre"):
                 k = p.get("tracktype") or "non notée"
                 prior.setdefault(k, {"goudron": 0.0, "terre": 0.0})[c] += geom.length * 90.0   # ~km (degrés -> km)
+    if with_highway:                                   # icgc_tag.py : type de voie OSM
+        return shapely.STRtree(geoms), np.array(cls), ids, prior, hws
     return shapely.STRtree(geoms), np.array(cls), ids, prior
 
 
