@@ -952,6 +952,10 @@
       shown = startData.options.filter(o => o.level === levelSel.value &&
         (o.duration_target_min == null ||
          Math.round(o.duration_target_min) === Math.round(Number(durSel.value) * 60)));
+      // option secondaire trop faible (note < 70 % de la boucle recommandée) : masquée (Gràcia 2 h modéré, 30/09/2026 :
+      // « Plus de pistes » notée 22 contre 52, proposée pour ses pistes cyclables malgré feux, ville et zone portuaire)
+      if (shown.length > 1 && shown[0].score != null)
+        shown = shown.filter((o, k) => k === 0 || o.score == null || o.score >= 0.7 * shown[0].score);
       if (!shown.length) {
         const avail = [...new Set(startData.options.filter(o => o.level === levelSel.value)
           .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);

@@ -158,6 +158,9 @@ def summary(loop):
             "score_v2": score_v2(loop),
             "cycleway_pct": round(100 * loop.shares["dedicated_cycleway"]),
             "main_roads_pct": round(100 * loop.shares["main_roads"]),
+            "industrial_pct": round(100 * loop.scenery.get("industrial", 0.0)) if loop.scenery else None,
+            "dirt_km": round(loop.shares["unpaved"] * loop.distance_m / 1000.0, 1),
+            "water_pct": round(100 * loop.scenery["water"]) if loop.scenery else None,
             "main_roads_rural_pct": round(100 * loop.shares.get("main_roads_by_urban", {}).get("rural", 0.0)),
             # points de note apportés par chaque critère (somme = note hors pénalité non goudronné)
             "points": {k: round(100 * weights[k] * parts[k] / wsum, 1) for k in weights}}
@@ -564,6 +567,58 @@ def report_probe(results, out_json, out_md, note, t0):
     print("\n".join(L[:40]), flush=True)
 
 
+# ----------------------------------------------------------------------------- boucles proposées par Florent (30/09/2026)
+def run_compare(refs_path, site, gh_url, level, duration):
+    """Boucles de référence (points de passage) depuis le départ publié, notées comme la production, face à TOUS les
+    candidats valides que la production tire pour ce départ : la référence est-elle introuvable (génération) ou mal
+    notée (note) ?"""
+    refs = json.loads(Path(refs_path).read_text(encoding="utf-8"))
+    sid = refs["start"]
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next(e for e in idx["starts"] if e["id"] == sid)
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1]}
+    here = [[st_["lon"], st_["lat"]]]
+    out = {"start": sid, "level": level, "duration_h": duration, "refs": [], "pool": [], "picks": []}
+    for ref in refs["loops"]:
+        best = None
+        for profile in g.LEVELS[level]["profiles"]:
+            path = gh.via(here + ref["waypoints"] + here, profile)
+            loop = g.analyse(path, level, profile, duration, 800, None) if path else None
+            if loop is not None and (best is None or loop.score > best.score):
+                best = loop
+        out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle")})
+    pool = g.level_pool(gh, st_, level, duration, g.CANDIDATES, lambda *_: None)
+    picks = g.choose_options(gh, st_, level, duration, pool, [], lambda *_: None)
+    out["pool"] = sorted((summary(l) for l in pool), key=lambda x: -x["score"])
+    out["picks"] = [{"label": lab, **summary(l)} for lab, l in picks]
+    return out
+
+
+def report_compare(res, out_json, out_md, note, t0):
+    Path(out_json).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+    cols = ("score", "km", "min", "dplus_m", "lights_per_km", "city_pct", "water_pct", "forest_pct", "cycleway_pct",
+            "industrial_pct", "dirt_km", "main_roads_pct")
+    head = "| Boucle | " + " | ".join(("note", "km", "min", "D+", "feux/km", "ville %", "eau %", "forêt %", "pistes %",
+                                         "industriel %", "terre km", "routes princ. %")) + " |"
+    row = lambda name, x: "| " + name + " | " + " | ".join(str(x.get(c)) for c in cols) + " |"  # noqa: E731
+    L = [f"# Boucles de Florent contre la production ({res['start']}, {res['level']}, {res['duration_h']:g} h ; "
+         f"{round((time.time() - t0) / 60)} min)", (f"\n**{note}**" if note else ""),
+         "\nNote = note de production v10 (la même que pour choisir les boucles publiées). Les références sont recalculées "
+         "par GraphHopper à partir de leurs points de passage, depuis le départ Oyan.",
+         "\n## Références", "", head, "|---" * (len(cols) + 1) + "|"]
+    for r in res["refs"]:
+        L.append(row(r["name"], r["loop"]) if r["loop"] else f"| {r['name']} | {r['error']} |")
+    L += ["\n## Options choisies par la production", "", head, "|---" * (len(cols) + 1) + "|"]
+    L += [row(p["label"], p) for p in res["picks"]]
+    L += [f"\n## Tous les candidats valides tirés par la production ({len(res['pool'])}), du meilleur au moins bon", "",
+          head, "|---" * (len(cols) + 1) + "|"]
+    L += [row(f"candidat {k + 1}", p) for k, p in enumerate(res["pool"])]
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L[:30]), flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--gh", required=True)
@@ -583,6 +638,7 @@ def main() -> int:
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
     ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
+    ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
@@ -594,6 +650,11 @@ def main() -> int:
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
+    if args.compare_refs:
+        lvl = args.levels.split()[0]
+        res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
+        report_compare(res, args.out, args.out_md, args.note, t0)
+        return 0
     if args.relief:
         ids = [x.strip() for x in args.relief.split(";") if x.strip()]
         durations = [float(x) for x in args.durations.split()]

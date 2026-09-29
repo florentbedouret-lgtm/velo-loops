@@ -1,0 +1,116 @@
+{
+ "_note": "Boucles alternatives proposées par Florent pour Gràcia, modéré, 2 h (30/09/2026) : points de passage (lieux remarquables) seulement, jamais les traces. Utilisées par nature_check.py --compare-refs.",
+ "start": "gracia",
+ "loops": [
+  {
+   "name": "Komoot : Sagrada Família, Besòs, embouchure, Fòrum, plages (23,7 km)",
+   "source": "komoot (itinéraire populaire, points de passage seulement)",
+   "waypoints": [
+    [
+     2.20832,
+     41.44326
+    ],
+    [
+     2.23151,
+     41.41952
+    ],
+    [
+     2.22724,
+     41.41204
+    ],
+    [
+     2.20864,
+     41.39632
+    ],
+    [
+     2.18039,
+     41.39133
+    ]
+   ]
+  },
+  {
+   "name": "Komoot : Collserola, Mundet, Portell de Valldaura, Forat del Vent (25,2 km, D+ 366 m)",
+   "source": "komoot (itinéraire populaire, points de passage seulement)",
+   "waypoints": [
+    [
+     2.16178,
+     41.39489
+    ],
+    [
+     2.15162,
+     41.44156
+    ],
+    [
+     2.14858,
+     41.44622
+    ],
+    [
+     2.13716,
+     41.44777
+    ],
+    [
+     2.13377,
+     41.44711
+    ],
+    [
+     2.13564,
+     41.44735
+    ],
+    [
+     2.1754,
+     41.40395
+    ],
+    [
+     2.17328,
+     41.40352
+    ],
+    [
+     2.16404,
+     41.39811
+    ]
+   ]
+  },
+  {
+   "name": "Komoot : plages, Pont del Petroli, front de mer de Badalona, Diagonal (30,8 km)",
+   "source": "komoot (itinéraire populaire, points de passage seulement)",
+   "waypoints": [
+    [
+     2.20546,
+     41.39353
+    ],
+    [
+     2.20864,
+     41.39632
+    ],
+    [
+     2.21156,
+     41.39865
+    ],
+    [
+     2.24658,
+     41.44134
+    ],
+    [
+     2.25228,
+     41.44792
+    ],
+    [
+     2.25634,
+     41.45217
+    ],
+    [
+     2.27723,
+     41.46448
+    ],
+    [
+     2.23337,
+     41.42715
+    ],
+    [
+     2.20555,
+     41.40801
+    ]
+   ]
+  }
+ ]
+}

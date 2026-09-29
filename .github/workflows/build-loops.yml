@@ -242,9 +242,15 @@ jobs:
         run: |
           # NATURE_RELIEF non vide : sonde « relief » en sportif (O-18 B), prioritaire ; sinon NATURE_PROBE non vide : sonde
           # avant / après sur ces départs ; les deux vides : calibrage v5
+          NATURE_COMPARE="scripts/reference_gracia.json"   # non vide : boucles de Florent contre la production (prioritaire)
           NATURE_RELIEF=""
           NATURE_PROBE="sant-andreu;gracia;badalona;terrassa;granollers;sant-cugat-del-valles;manresa;vic;igualada;les-serres-est;les-anoves-est;el-querforadat-est;lleto-est;santa-creu-d-horta-est;fuirosos-est;sallent-est;oliana;la-molina-sud-est;sant-marti-sesgueioles;pinos;gaia;castellgali"
-          if [ -n "$NATURE_RELIEF" ]; then
+          if [ -n "$NATURE_COMPARE" ]; then
+            python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+              --pbf data/region.osm.pbf --workdir data --compare-refs "$NATURE_COMPARE" --durations "2" --levels "modere" \
+              --out data/nature_check.json --out-md data/nature_check.md \
+              --note "Gràcia, modéré, 2 h : trois boucles Komoot proposées par Florent contre les candidats de la production v10"
+          elif [ -n "$NATURE_RELIEF" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --relief "$NATURE_RELIEF" --durations "1 2 3" \
               --out data/nature_check.json --out-md data/nature_check.md \

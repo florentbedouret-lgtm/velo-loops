@@ -95,6 +95,7 @@ MAX_UNPAVED = 0.12
 # candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
 # FALLBACK_UNPAVED_KM et FALLBACK_UNPAVED_SHARE, signalés dans l'appli (unpaved_fallback).
 FALLBACK_UNPAVED_KM = 3.0
+UNPAVED_PENALTY_PER_KM = 0.03    # note : 3 points par km de terre (notée, probable ou ICGC), 30 au plus
 FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
 WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}
@@ -1133,7 +1134,10 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
         parts["relief"] = min(1.0, l.dplus_per_km / RELIEF_FULL_M_PER_KM)
         weights["relief"] = relief_weight
     total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
-    total -= min(0.3, max(0.0, l.shares["unpaved"] - 0.03) * 2.0)
+    # terre : dès le premier km, 3 points par km (Gràcia 2 h, 30/09/2026 : 1,9 km de piste en terre évitable ne coûtaient
+    # que 4 points, la pénalité ne comptant qu'au-delà de 3 % du parcours) ; la part au-delà de 3 % reste pénalisée
+    dirt_km = l.shares["unpaved"] * l.distance_m / 1000.0
+    total -= min(0.3, max(UNPAVED_PENALTY_PER_KM * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
     if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
         total -= min(INDUSTRIAL_MAX_PENALTY, INDUSTRIAL_PENALTY * l.scenery.get("industrial", 0.0))
     return round(100 * max(0.0, total), 1)
