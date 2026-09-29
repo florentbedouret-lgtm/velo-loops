@@ -95,6 +95,15 @@ MAX_UNPAVED = 0.12
 # candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
 # FALLBACK_UNPAVED_KM et FALLBACK_UNPAVED_SHARE, signalés dans l'appli (unpaved_fallback).
 FALLBACK_UNPAVED_KM = 3.0
+VARIANT_MIN_SCORE_RATIO = 0.7
+# Tirages ciblés (30/09/2026, Gràcia 2 h : 5 candidats valides seulement, aucun vers le front de mer ; idée de Florent :
+# « rejoindre le front de mer via le Besòs ») : en plus des tirages au hasard, boucles passant par les lieux attrayants
+# les plus proches (mer, grande rivière, grand espace vert), seuls (triangle) ou enchaînés (rivière puis mer, etc.).
+TARGET_MIN_KM = 1.0              # lieu déjà au départ : rien à viser
+TARGET_MAX_SHARE = 0.4           # lieu au plus à 40 % de la longueur de la boucle
+TARGET_GREEN_MIN_DEG2 = 5e-5     # grand espace vert (~0,5 km²), comme le diagnostic O-12
+TARGET_OFFSET_DEG = 45.0
+TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement)
 UNPAVED_PENALTY_PER_KM = 0.03    # note : 3 points par km de terre (notée, probable ou ICGC), 30 au plus
 FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
@@ -815,6 +824,21 @@ class GraphHopper:
         d = r.json()
         return d["coordinates"][0], d["coordinates"][1], d.get("distance", 0.0)
 
+    def via(self, points, profile):
+        """Itinéraire passant par des points imposés (tirages ciblés), mêmes détails que round_trip."""
+        body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
+                "elevation": True, "instructions": False, "details": DETAILS}
+        try:
+            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
+        except requests.RequestException as e:
+            self.last_error = f"requête échouée : {e}"
+            return None
+        if r.status_code != 200:
+            self.last_error = f"HTTP {r.status_code} : {r.text[:200]}"
+            return None
+        paths = r.json().get("paths") or []
+        return paths[0] if paths else None
+
     def round_trip(self, lon, lat, profile, dist_m, seed, heading=None, custom_model=None):
         body = {
             "points": [[lon, lat]],
@@ -1053,6 +1077,15 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     edges = unpaved_edges(det, len(cum) - 1)
     probable = sum(cum[i + 1] - cum[i] for i, e in enumerate(edges) if e == "p") / total
     shares["unpaved"] = frac(surf, list(UNPAVED)) + probable          # noté + probable : seuil MAX_UNPAVED et note
+    # « ville » pour la note : seulement là où roulent des voitures (30/09/2026, Gràcia : le front de mer et le Parc Fluvial
+    # del Besòs comptaient comme ville à cause des immeubles ; ce qui gêne en ville, c'est la circulation). La durée garde
+    # le ralentissement sur toute la ville (freinages, piétons, croisements aussi sur les pistes cyclables).
+    n_e = len(cum) - 1
+    rc_e, ba_e, ud_e = (per_edge(det.get(k), n_e) for k in ("road_class", "bike_road_access", "urban_density"))
+    car = [not (rc_e[i] == "cycleway" or (rc_e[i] in ("footway", "path", "pedestrian") and ba_e[i] in ("yes", "designated")))
+           for i in range(n_e)]
+    shares["urban_car"] = {u: sum(cum[i + 1] - cum[i] for i in range(n_e) if car[i] and ud_e[i] == u) / total
+                           for u in ("city", "residential")}
     # grandes routes par densité urbaine (diagnostic O-12 ; n'entre pas dans score() ni dans les fichiers publiés)
     joint = joint_meters(det.get("road_class"), det.get("urban_density"), cum)
     shares["main_roads_by_urban"] = {
@@ -1103,7 +1136,7 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
     """Sous-scores (0 à 1) et poids utilisés par score() : exposés pour les diagnostics (nature_check.py)."""
     s = l.shares
     parts = {
-        "calm": 1.0 - (s["urban"]["city"] + 0.4 * s["urban"]["residential"]),
+        "calm": 1.0 - (s.get("urban_car", s["urban"])["city"] + 0.4 * s.get("urban_car", s["urban"])["residential"]),
         "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
         "infra": min(1.0, 2.0 * s["dedicated_cycleway"]),
         "flow": 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap + 0.15 * l.u_turns),
@@ -1231,6 +1264,90 @@ class _ClimbGH:
         return self.gh.round_trip(lon, lat, profile, dist_m, seed, heading, custom_model=CLIMB_MODEL)
 
 
+def destination(lon, lat, bearing_deg, km):
+    b = math.radians(bearing_deg)
+    return (lon + km * math.sin(b) / (111.32 * math.cos(math.radians(lat))), lat + km * math.cos(b) / 110.54)
+
+
+def attraction_points(lon, lat, max_km):
+    """Point le plus proche de chaque lieu attrayant (mer, grande rivière, grand espace vert) entre TARGET_MIN_KM et
+    max_km : {catégorie: (lon, lat, km)}."""
+    if LANDSCAPE is None:
+        return {}
+    import shapely
+    from shapely.ops import nearest_points
+    pt = shapely.Point(lon, lat)
+    out = {}
+    for cat, keys in (("mer", ("sea",)), ("riviere", ("river",)), ("vert", ("forest", "protected"))):
+        best = None
+        for key in keys:
+            tree = LANDSCAPE.trees.get(key)
+            if tree is None:
+                continue
+            for i in tree.query(pt.buffer(max_km / 90.0)):
+                gm = tree.geometries[int(i)]
+                if cat == "vert" and (gm.geom_type not in ("Polygon", "MultiPolygon") or gm.area < TARGET_GREEN_MIN_DEG2):
+                    continue
+                q = pt if (cat == "vert" and gm.contains(pt)) else nearest_points(gm.boundary if cat == "vert" else gm, pt)[0]
+                km = haversine(lon, lat, q.x, q.y) / 1000.0
+                if TARGET_MIN_KM <= km <= max_km and (best is None or km < best[2]):
+                    best = (q.x, q.y, km)
+        if best:
+            out[cat] = best
+    return out
+
+
+def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
+    """Boucles par les lieux attrayants proches : triangle vers un lieu (décalé de ±TARGET_OFFSET_DEG), ou enchaînement
+    de deux lieux ; taille ajustée sur la durée (jamais plus près que le lieu lui-même). Mêmes filtres que fit_and_sample."""
+    lon, lat = st["lon"], st["lat"]
+    target_s = duration_h * 3600.0
+    flat_ms = speed_from_power(level_watts(level, duration_h), 0.0) * REAL_WORLD_FACTOR
+    loop_km = 0.8 * flat_ms * target_s / 1000.0
+    pts = attraction_points(lon, lat, TARGET_MAX_SHARE * loop_km)
+    plans = []                                               # liste de [(bearing, km)] : points à viser, dans l'ordre
+    cats = sorted(pts, key=lambda c: pts[c][2])
+    for i in range(len(cats)):                               # deux lieux enchaînés (le plus proche d'abord) : prioritaires
+        for j in range(i + 1, len(cats)):
+            a, b = pts[cats[i]], pts[cats[j]]
+            plans.append((cats[i] + "+" + cats[j], [(bearing(lon, lat, a[0], a[1]), a[2]),
+                                                    (bearing(lon, lat, b[0], b[1]), b[2])]))
+    for off in (TARGET_OFFSET_DEG, -TARGET_OFFSET_DEG):       # puis un lieu seul, triangle décalé d'un côté puis de l'autre
+        for cat in cats:
+            x, y, km = pts[cat]
+            th = bearing(lon, lat, x, y)
+            plans.append((cat, [(th, km), (th + off, km)]))
+    plans = plans[:TARGET_MAX_PLANS]                         # coût : ~2,5 requêtes GraphHopper par tirage
+    found, n_ok = [], 0
+    for k, (name, plan) in enumerate(plans):
+        s, loop = max(1.0, loop_km / 4.1 / max(p[1] for p in plan)), None
+        for _ in range(3):                                   # ajustement de la taille sur la durée visée
+            way = [[lon, lat]] + [list(destination(lon, lat, b, d * s)) for b, d in plan] + [[lon, lat]]
+            path = gh.via(way, profile)
+            loop = analyse(path, level, profile, duration_h, 900 + k, None) if path else None
+            if loop is None:
+                break
+            ratio = loop.time_s / target_s
+            if abs(ratio - 1.0) <= 0.05 or (s <= 1.0 and ratio > 1.0):
+                break
+            s = max(1.0, s / ratio)
+        if loop is None or abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
+            continue
+        if loop.overlap > MAX_OVERLAP or loop.u_turns > MAX_UTURNS:
+            continue
+        if loop.shares["unpaved"] > MAX_UNPAVED:
+            if (fallback is not None and loop.shares["unpaved"] <= FALLBACK_UNPAVED_SHARE
+                    and loop.shares["unpaved"] * loop.distance_m / 1000.0 <= FALLBACK_UNPAVED_KM):
+                loop.unpaved_fallback = True
+                fallback.append(loop)
+            continue
+        found.append(loop)
+        n_ok += 1
+    if plans:
+        log(f"    tirages ciblés ({', '.join(f'{c} {v[2]:.1f} km' for c, v in pts.items())}) : {n_ok}/{len(plans)} valides")
+    return found
+
+
 class _SoftGH:
     """GraphHopper vu par fit_and_sample, avec le profil « souple » (sans évitement fort de la terre) : repli v10."""
 
@@ -1259,6 +1376,7 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
         why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
+    pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))  # ciblés
     if pool:
         return pool
     # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre
@@ -1309,8 +1427,9 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
             if hilly.dplus_per_km >= best.dplus_per_km + 3.0:
                 chosen.append(("plus_de_relief", hilly))
     if len(chosen) == 1 and len(pool) > 1:      # pas de contraste de relief : on propose une variante
-        for l in pool[1:]:
-            if similarity(l, best) < 0.6 and not any(same_route(l, a) for a in avoid):
+        for l in pool[1:]:                      # note d'au moins 70 % de la boucle recommandée (comme l'appli, 30/09/2026)
+            if (l.score >= VARIANT_MIN_SCORE_RATIO * best.score and similarity(l, best) < 0.6
+                    and not any(same_route(l, a) for a in avoid)):
                 chosen.append(("variante", l))
                 break
     return chosen

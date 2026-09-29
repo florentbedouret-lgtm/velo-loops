@@ -158,6 +158,8 @@ def summary(loop):
             "score_v2": score_v2(loop),
             "cycleway_pct": round(100 * loop.shares["dedicated_cycleway"]),
             "main_roads_pct": round(100 * loop.shares["main_roads"]),
+            "city_car_pct": round(100 * loop.shares.get("urban_car", loop.shares["urban"])["city"]),
+            "seed": loop.seed,
             "industrial_pct": round(100 * loop.scenery.get("industrial", 0.0)) if loop.scenery else None,
             "dirt_km": round(loop.shares["unpaved"] * loop.distance_m / 1000.0, 1),
             "water_pct": round(100 * loop.scenery["water"]) if loop.scenery else None,
@@ -598,10 +600,11 @@ def run_compare(refs_path, site, gh_url, level, duration):
 
 def report_compare(res, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
-    cols = ("score", "km", "min", "dplus_m", "lights_per_km", "city_pct", "water_pct", "forest_pct", "cycleway_pct",
-            "industrial_pct", "dirt_km", "main_roads_pct")
-    head = "| Boucle | " + " | ".join(("note", "km", "min", "D+", "feux/km", "ville %", "eau %", "forêt %", "pistes %",
-                                         "industriel %", "terre km", "routes princ. %")) + " |"
+    cols = ("score", "km", "min", "dplus_m", "lights_per_km", "city_pct", "city_car_pct", "water_pct", "forest_pct",
+            "cycleway_pct", "industrial_pct", "dirt_km", "main_roads_pct", "seed")
+    head = "| Boucle | " + " | ".join(("note", "km", "min", "D+", "feux/km", "ville %", "ville avec voitures %", "eau %",
+                                         "forêt %", "pistes %", "industriel %", "terre km", "routes princ. %",
+                                         "tirage (≥ 900 : ciblé)")) + " |"
     row = lambda name, x: "| " + name + " | " + " | ".join(str(x.get(c)) for c in cols) + " |"  # noqa: E731
     L = [f"# Boucles de Florent contre la production ({res['start']}, {res['level']}, {res['duration_h']:g} h ; "
          f"{round((time.time() - t0) / 60)} min)", (f"\n**{note}**" if note else ""),

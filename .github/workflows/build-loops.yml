@@ -249,7 +249,7 @@ jobs:
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --compare-refs "$NATURE_COMPARE" --durations "2" --levels "modere" \
               --out data/nature_check.json --out-md data/nature_check.md \
-              --note "Gràcia, modéré, 2 h : trois boucles Komoot proposées par Florent contre les candidats de la production v10"
+              --note "Gràcia, modéré, 2 h : boucles Komoot de Florent contre la production + tirages ciblés (mer, rivière, espace vert) + ville comptée hors pistes sans voitures"
           elif [ -n "$NATURE_RELIEF" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --relief "$NATURE_RELIEF" --durations "1 2 3" \
