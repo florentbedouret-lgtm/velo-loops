@@ -435,6 +435,11 @@ def apply(data: Path, land, bld_tree, method: str, pois=None):
             o["scenery"]["landcover_method"] = method + "+mer250_front50+riv150_front60"
             o["scenery"]["landcover_seq"] = g.landcover_seq(cls)
             o["scenery"]["protected_seq"] = "".join("p" if x else "-" for x in g.protected_mask(land.trees, pts))
+            ind = g.industrial_mask(land.trees, pts)             # zones industrielles et portuaires (règle du 29/09/2026)
+            o["scenery"]["industrial"] = round(float(ind.mean()), 3) if len(ind) else 0.0
+            o["scenery"].pop("industrial_seq", None)
+            if ind.any():
+                o["scenery"]["industrial_seq"] = "".join("i" if x else "-" for x in ind)
             g.enrich_option(o, pois)                           # eau, cafés hors ville, gares ; noms des cols
             o["exit_city_km"] = g.exit_city_km(np.where(mask, 0, 3), o["distance_km"])   # sortie de ville : bâti seul
             n += 1

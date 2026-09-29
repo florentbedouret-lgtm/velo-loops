@@ -109,7 +109,17 @@ LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km, le sous-score "feux" tombe à 
 # « au milieu des entrepôts, travaux et camions : pas agréable, un peu dangereux, pollué » ; 14 % du parcours -> −7 points
 INDUSTRIAL_PENALTY = 0.5
 INDUSTRIAL_MAX_PENALTY = 0.15
-SCENERY_INDUSTRIAL_DEG = 0.0001   # ~10 m : voie dans (ou au bord immédiat d') une zone industrielle ou portuaire
+# Vérification de Florent (29/09/2026, Sant Andreu 2 h : 17 % « industriel », 13 tronçons jugés un par un) : la piste
+# cyclable au bord du fleuve qui longe une zone, un bâtiment isolé, une route en contrebas étaient comptés (règle « à 10 m »).
+# Règle : point DANS une zone industrielle ou portuaire (plus « à 10 m »), hors parc, et seulement sur un passage d'au moins
+# INDUSTRIAL_MIN_RUN_M continus (un trou de 100 m ne coupe pas le passage) : traverser 100 ou 200 m d'une zone passe presque
+# inaperçu (tronçons jugés « peu problématiques »), 3 km entre les entrepôts non (sa zone portuaire : 3,2 puis 1,7 km).
+# Tronçons jugés bons : 6/9 points comptés -> 0/9 ; moyen, « à éviter », « camions possibles » (0,6 / 1,1 / 0,9 km) gardés ;
+# Sant Andreu 2 h : 17 -> ~6 %. Taille de zone en garde-fou léger (parcelle isolée) : un seuil de 0,25 km² perdait le
+# tronçon « à éviter » (zone de 0,21 km²). Seuils calés sur une seule boucle : à confirmer par d'autres retours.
+INDUSTRIAL_MIN_KM2 = 0.1
+INDUSTRIAL_MIN_RUN_M = 500.0
+KM2_PER_DEG2 = 111.32 ** 2 * 0.749          # à la latitude de Barcelone (cos 41,5°)
 SIGNALS = None                  # SignalIndex des feux tricolores, chargé dans main()
 STOPS = None                    # SignalIndex des panneaux stop
 LANDSCAPE = None                # LandscapeIndex (forêts, eau, parcs, points de vue), chargé dans main()
@@ -285,13 +295,7 @@ class LandscapeIndex:
         forest = share("forest", SCENERY_FOREST_DEG)
         water = share("water", SCENERY_WATER_DEG)
         protected = share("protected", SCENERY_PROTECTED_DEG)
-        ind_mask = np.zeros(len(xy), dtype=bool)          # par point (tous les 100 m) : surlignage dans l'appli
-        if self.trees.get("industrial") is not None:
-            ind_mask[np.unique(self.trees["industrial"].query(pts, predicate="dwithin",
-                                                               distance=SCENERY_INDUSTRIAL_DEG)[0])] = True
-            # dans un parc (ex. Parc Fluvial del Besòs, voie verte longée par des zones industrielles) : pas l'ambiance
-            # entrepôts et camions de la zone portuaire ; sonde #141 : boucles de Sant Andreu à 18-32 % « industriel »
-            ind_mask &= ~protected_mask(self.trees, pts)
+        ind_mask = industrial_mask(self.trees, pts)       # par point (tous les 100 m) : surlignage dans l'appli
         industrial = float(ind_mask.mean()) if len(xy) else 0.0
         index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
@@ -431,13 +435,40 @@ def load_landscape(pbf: Path, workdir: Path):
                 forests.append(geom)
             elif props.get("landuse") in ("residential", "commercial", "industrial", "retail", "port"):
                 builtup.append(geom)                       # zones bâties : « ville » de la répartition du terrain
-                if props.get("landuse") in ("industrial", "port"):
+                if props.get("landuse") in ("industrial", "port") and geom.area * KM2_PER_DEG2 >= INDUSTRIAL_MIN_KM2:
                     industrial.append(geom)
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
     return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea, rivers,
                           industrial)
+
+
+def industrial_mask(trees, pts, step_m: float = 100.0):
+    """Point par point (un point tous les step_m) : dans une zone industrielle ou portuaire (taille mini
+    INDUSTRIAL_MIN_KM2), hors parc (ex. Parc Fluvial del Besòs), sur un passage d'au moins INDUSTRIAL_MIN_RUN_M.
+    Partagé avec scripts/landcover.py (mode landcover)."""
+    import numpy as np
+    m = np.zeros(len(pts), dtype=bool)
+    if trees.get("industrial") is None:
+        return m
+    m[np.unique(trees["industrial"].query(pts, predicate="intersects")[0])] = True
+    m &= ~protected_mask(trees, pts)
+    filled = m.copy()                                    # un trou d'un seul point ne coupe pas le passage
+    filled[1:-1] |= m[:-2] & m[2:]
+    out = np.zeros_like(m)
+    i, n = 0, len(filled)
+    while i < n:
+        if not filled[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and filled[j]:
+            j += 1
+        if (j - i) * step_m >= INDUSTRIAL_MIN_RUN_M:
+            out[i:j] = True
+        i = j
+    return out
 
 
 def protected_mask(trees, pts):
