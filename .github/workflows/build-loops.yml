@@ -18,6 +18,8 @@ name: Générer les boucles vélo
 #                       toutes durées, puis publication. À ne lancer qu'après accord ; `reuse` coché reprend les départs identiques du site publié.
 #                       Budget de calcul : 320 min (300 jusqu'au 26/09/2026) ; au-delà, plus aucun nouveau départ n'est démarré, le site est publié INCOMPLET et
 #                       signalé, et un nouveau lancement avec `reuse` coché termine le travail sans rien recalculer.
+#                       ENCHAÎNEMENT AUTOMATIQUE (30/09/2026) : si le site publié est incomplet, le job « chain » relance
+#                       lui-même un `full` avec `reuse` coché, au plus `chain` fois (4 par défaut ; 0 = pas de relance).
 #                       Rapport de fin de génération : résumé de l'exécution + artefact `rapport-generation` (à envoyer).
 #  - full_replan      : comme full, mais REFAIT le plan des départs sur les données OSM du jour (densification voulue).
 #                       Attention : le plan choisit les départs un par un ; une petite évolution d'OSM en déplace des dizaines.
@@ -75,6 +77,9 @@ on:
       workers:
         description: "Départs calculés en parallèle"
         default: "3"
+      chain:
+        description: "full : relances automatiques restantes tant que des départs restent à calculer (0 = aucune)"
+        default: "4"
 
 permissions:
   contents: read
@@ -93,6 +98,7 @@ jobs:
     timeout-minutes: 350
     outputs:
       mode: ${{ steps.resolve_mode.outputs.mode }}
+      incomplete: ${{ steps.left.outputs.incomplete }}
     steps:
       - uses: actions/checkout@v5
 
@@ -344,6 +350,18 @@ jobs:
             $EXTRA \
             --durations $DURATIONS
 
+      - name: Reste-t-il des départs à calculer ?
+        id: left
+        if: ${{ startsWith(steps.resolve_mode.outputs.mode, 'full') }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          d = json.load(open("web/data/index.json", encoding="utf-8"))
+          stale = sum(1 for s in d["starts"] if s.get("stale"))
+          print("incomplete=" + ("true" if d.get("stats", {}).get("incomplete") or stale else "false"))
+          PY
+          grep incomplete "$GITHUB_OUTPUT" || true
+
       - name: Publier les mesures du pilote (temps de calcul, gain des départs voisins)
         if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full')) }}
         uses: actions/upload-artifact@v6
@@ -453,6 +471,28 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  # Relance automatique d'un `full` incomplet, APRÈS la publication (le run suivant reprend le site publié : `reuse`).
+  # Clé interne de GitHub (GITHUB_TOKEN, limitée au dépôt) : aucun jeton personnel. Une mise en ligne en attente dans la
+  # file serait remplacée par ce run, sans perte : il republie lui-même le site avec le dernier code.
+  chain:
+    needs: [build, deploy]
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.build.outputs.mode == 'full' && needs.build.outputs.incomplete == 'true' && inputs.chain != '0' && inputs.chain != '' && needs.deploy.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Relancer le calcul (départs restants)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHAIN: ${{ inputs.chain }}
+          DURATIONS: ${{ inputs.durations }}
+          WORKERS: ${{ inputs.workers }}
+        run: |
+          NEXT=$(( CHAIN - 1 ))
+          echo "Départs restants : relance automatique (encore $NEXT relance(s) possible(s) ensuite)"
+          gh workflow run build-loops.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=full -f reuse=true -f durations="$DURATIONS" -f workers="$WORKERS" -f chain="$NEXT"
 
   deploy:
     if: ${{ (startsWith(needs.build.outputs.mode, 'generate') || needs.build.outputs.mode == 'pilot' || startsWith(needs.build.outputs.mode, 'full') || needs.build.outputs.mode == 'site' || needs.build.outputs.mode == 'landcover') }}
