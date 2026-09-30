@@ -368,7 +368,8 @@ def option_row(o) -> dict:
             "label": o["label"], "km": round(o["distance_km"], 1), "dplus_m": round(o["ascend_m"]),
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"],
-            "fallback": bool(o.get("unpaved_fallback")), "min": o.get("time_est_min"),
+            "fallback": bool(o.get("unpaved_fallback")), "targeted": bool(o.get("targeted")),
+            "water_pct": round(100 * sc.get("water", 0)), "min": o.get("time_est_min"),
             "lights_km": o.get("traffic_lights_per_km"), "industrial_pct": round(100 * sc.get("industrial", 0))}
 
 
@@ -516,6 +517,33 @@ def probe_summary(results) -> list:
     return L
 
 
+def targeted_summary(results) -> list:
+    """Tirages ciblés (30/09/2026) : combien d'options retenues en viennent, et ce qu'elles changent (note, eau)."""
+    import statistics as stt
+    rows = [(res, r) for res in results if not res.get("skipped") for r in res["rows"]]
+    new = [o for _, r in rows for o in r["new"]]
+    if not new:
+        return []
+    tg = [o for o in new if o.get("targeted")]
+    mains = [r["new"][0] for _, r in rows if r["new"]]
+    L = ["\n## Tirages ciblés (mer, grande rivière, grand espace vert)",
+         f"\nOptions retenues venant d'un tirage ciblé : **{len(tg)} sur {len(new)}** (dont boucle recommandée : "
+         f"{sum(1 for m in mains if m.get('targeted'))} sur {len(mains)}).",
+         "\n| Départ | options ciblées retenues | exemples |", "|---|---|---|"]
+    for res in results:
+        if res.get("skipped"):
+            continue
+        t = [(r["duration_h"], r["level"], o) for r in res["rows"] for o in r["new"] if o.get("targeted")]
+        if t:
+            L.append(f"| {res['id']} | {len(t)} | " + " ; ".join(
+                f"{d:g} h {lv} {o['label']} (note {o['score']}, eau {o['water_pct']} %)" for d, lv, o in t[:3]) + " |")
+    pub = [r["published"][0] for _, r in rows if r["published"]]
+    if pub and mains:
+        L.append(f"\nBoucle recommandée, bord d'eau médian : publié {stt.median(o['water_pct'] for o in pub):.0f} % -> "
+                 f"nouveau {stt.median(o['water_pct'] for o in mains):.0f} %.")
+    return L
+
+
 def surface_summary(results) -> list:
     """Sonde « revêtement » (28/09/2026) : km de terre (notée ou pistes douteuses), publié contre nouveau, par durée."""
     import statistics as stt
@@ -543,14 +571,15 @@ def report_probe(results, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
     f = lambda o: (f"{o['label']}{' (= ' + o['same_as']['level'] + ')' if o.get('same_as') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
                    f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}"
-                   + (" [REPLI]" if o.get("fallback") else "")
+                   + (" [REPLI]" if o.get("fallback") else "") + (" [CIBLÉ]" if o.get("targeted") else "")
+                   + f", eau {o.get('water_pct')} %"
                    + (f", {o.get('min')} min, feux {o.get('lights_km')}/km, industriel {o.get('industrial_pct')} %" if "min" in o else "")
                    + (f", terre {o['surface']['dirt_km']} km (+ piste qualité 1 {o['surface']['g1_km']} km, sentiers "
                       f"{o['surface']['sentier_km']} km)" if o.get("surface") else ""))
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
          "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",
-         *probe_summary(results), *surface_summary(results),
+         *probe_summary(results), *surface_summary(results), *targeted_summary(results),
          f"\nVoies OSM au revêtement incertain identifiées par GraphHopper (osm_way_id) : {len(g.WAYS_LOG)} ; par classe : "
          + ", ".join(f"{c} {sum(1 for e in g.WAYS_LOG.values() if e['classe'] == c)}"
                      for c in ("piste_q1", "piste_terre_probable", "sentier_hors_ville", "sentier_ville"))]

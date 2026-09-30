@@ -242,9 +242,9 @@ jobs:
         run: |
           # NATURE_RELIEF non vide : sonde « relief » en sportif (O-18 B), prioritaire ; sinon NATURE_PROBE non vide : sonde
           # avant / après sur ces départs ; les deux vides : calibrage v5
-          NATURE_COMPARE="scripts/reference_gracia.json"   # non vide : boucles de Florent contre la production (prioritaire)
+          NATURE_COMPARE=""   # "scripts/reference_gracia.json" : boucles de Florent contre la production (prioritaire)
           NATURE_RELIEF=""
-          NATURE_PROBE="sant-andreu;gracia;badalona;terrassa;granollers;sant-cugat-del-valles;manresa;vic;igualada;les-serres-est;les-anoves-est;el-querforadat-est;lleto-est;santa-creu-d-horta-est;fuirosos-est;sallent-est;oliana;la-molina-sud-est;sant-marti-sesgueioles;pinos;gaia;castellgali"
+          NATURE_PROBE="sant-andreu;gracia;l-eixample;badalona;mataro;castelldefels;terrassa;granollers;sant-cugat-del-valles;manresa;vic;igualada;les-serres-est;les-anoves-est;el-querforadat-est;lleto-est;santa-creu-d-horta-est;fuirosos-est;sallent-est;oliana;la-molina-sud-est;sant-marti-sesgueioles;pinos;gaia;castellgali"
           if [ -n "$NATURE_COMPARE" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --compare-refs "$NATURE_COMPARE" --durations "2" --levels "modere" \
@@ -259,7 +259,7 @@ jobs:
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "0.75 1 2 3 6" \
               --levels "facile modere soutenu" --out data/nature_check.json --out-md data/nature_check.md \
-              --note "sonde v10 complète : repli souple ; ville −30 % en roulant ; feux pénalisés jusqu'à 5/km ; zones industrielles et portuaires pénalisées"
+              --note "sonde tirages ciblés (mer, rivière, espace vert) + ville comptée hors pistes sans voitures + terre dès le 1er km + variante ≥ 70 % ; comparer la durée à la sonde #141 (20 min)"
           else
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --references scripts/reference_loops.json \

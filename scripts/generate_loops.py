@@ -1598,6 +1598,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"surface_seq": l.surface_seq} if "u" in l.surface_seq or "p" in l.surface_seq else {}),
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
+        **({"targeted": True} if l.seed >= 900 else {}),          # tirage ciblé (lieu attrayant), pour les diagnostics
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
                     "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},
