@@ -242,7 +242,7 @@ jobs:
         run: |
           # NATURE_RELIEF non vide : sonde « relief » en sportif (O-18 B), prioritaire ; sinon NATURE_PROBE non vide : sonde
           # avant / après sur ces départs ; les deux vides : calibrage v5
-          NATURE_COMPARE=""   # "scripts/reference_gracia.json" : boucles de Florent contre la production (prioritaire)
+          NATURE_COMPARE="scripts/reference_gracia.json"   # non vide : boucles de Florent contre la production (prioritaire)
           NATURE_RELIEF=""
           NATURE_PROBE="sant-andreu;gracia;l-eixample;badalona;mataro;castelldefels;terrassa;granollers;sant-cugat-del-valles;manresa;vic;igualada;les-serres-est;les-anoves-est;el-querforadat-est;lleto-est;santa-creu-d-horta-est;fuirosos-est;sallent-est;oliana;la-molina-sud-est;sant-marti-sesgueioles;pinos;gaia;castellgali"
           if [ -n "$NATURE_COMPARE" ]; then

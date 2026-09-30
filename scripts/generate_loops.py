@@ -1669,7 +1669,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "10"  # 10 : revêtement complété par la base topographique ICGC (scripts/icgc_tag.py), terre évitée.
+GENERATOR_VERSION = "11"  # 11 : ville comptée hors pistes sans voitures, tirages ciblés, terre au km, variante ≥ 70 %.
+#                           10 : revêtement complété par la base topographique ICGC (scripts/icgc_tag.py), terre évitée.
 #                           9 : pistes sans revêtement noté et sentiers hors ville évités, comptés non goudronnés ;
 #                           surface_seq et road_seq pour le surlignage (28/09/2026). 8 : allures définies par la FTP
 
