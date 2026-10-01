@@ -475,11 +475,11 @@ jobs:
 
       - name: Préparer GitHub Pages
         if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site' || steps.resolve_mode.outputs.mode == 'landcover') }}
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6     # Node 24 (01/10/2026)
 
       - name: Envoyer le site
         if: ${{ (startsWith(steps.resolve_mode.outputs.mode, 'generate') || steps.resolve_mode.outputs.mode == 'pilot' || startsWith(steps.resolve_mode.outputs.mode, 'full') || steps.resolve_mode.outputs.mode == 'site' || steps.resolve_mode.outputs.mode == 'landcover') }}
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5   # Node 24 ; depuis v4, fichiers cachés (.nojekyll) non envoyés : sans effet, Pages par Actions ne lance pas Jekyll
         with:
           path: _site
 
@@ -518,4 +518,4 @@ jobs:
     steps:
       - name: Déployer sur GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5   # Node 24 (01/10/2026)
