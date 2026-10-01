@@ -80,7 +80,11 @@ CLIMB_MODEL = {
 
 SIGNAL_DELAY_S = 10.0         # attente moyenne par feu tricolore franchi ; sortie de Florent (Gràcia 2 h, 28/09/2026) :
 #                               166 feux franchis, 61 arrêts, 28,8 min -> 10,4 s par feu : confirmé (une seule sortie)
-CITY_SLOWDOWN = 0.30          # en ville, même en roulant (freinages, relances, virages, pistes partagées) : même sortie,
+CITY_SLOWDOWN = 0.25          # 01/10/2026 : 2e sortie de Florent (Gràcia 2 h, Sant Andreu / Nou Barris, ville moins dense,
+#                               feux cyclistes) : ville −11 % en roulant, 8,4 s par feu ; 1re sortie (Eixample, port) −27 % ;
+#                               25 % = compromis (1re sortie −2 %, 2e +4 % sur la durée). À terme : selon la densité du bâti.
+#                               Avant : 0,30 (1re sortie seule). Commentaire d'origine :
+#                               en ville, même en roulant (freinages, relances, virages, pistes partagées) : même sortie,
 #                               19,7 km/h en ville contre 26,9 km/h dans le delta (−27 %) ; 0,05 jusqu'au générateur 10
 SIGNAL_RADIUS_M = 15.0        # un feu OSM à moins de 15 m du tracé est considéré comme franchi
 SIGNAL_CLUSTER_M = 60.0       # feux de sens différents d'un même carrefour : comptés une seule fois
@@ -711,6 +715,19 @@ def sample_points(coords, cum, step):
     return out
 
 
+# Montées (01/10/2026, 2e sortie de Florent : « montée » de 29 m sur 7,2 km le long du Besòs ; Collserola, 7,7 km à 2,7 %,
+# classée « douce » malgré 2 km à 4-6 %). Méthode des compteurs (Garmin, Strava) : une montée a au moins CLIMB_MIN_LEN_M et
+# CLIMB_MIN_GRADE de moyenne, sur sa partie qui monte vraiment (découpée dans la montée brute, sans les faux plats) ;
+# score = pente (%, dénivelé / longueur horizontale) × longueur parcourue (m, sur la route : hypoténuse) ; catégorie selon
+# CLIMB_CATEGORIES (taille de la montée). La raideur (douce / soutenue / raide) vient du kilomètre le plus raide.
+CLIMB_MIN_LEN_M = 500.0
+CLIMB_MIN_GRADE = 3.0
+CLIMB_MIN_SCORE = 1500.0
+CLIMB_CATEGORIES = ((80000.0, "HC"), (64000.0, "1"), (32000.0, "2"), (16000.0, "3"), (8000.0, "4"), (1500.0, "nc"))
+CLIMB_STEEP_WINDOW_M = 1000.0
+CLIMB_SHOWN_MIN = 5              # petites montées (non classées) : seulement pour compléter jusqu'à 5 montées
+
+
 def detect_climb_runs(prof, threshold=5.0):
     """Suites monotones (montée ou descente) dont l'amplitude dépasse `threshold` (bruit sous ce seuil, comme un
     altimètre GPS). Retourne la liste des montées : [(indice de départ, indice du sommet)]. Une seule
@@ -743,6 +760,35 @@ def detect_climb_runs(prof, threshold=5.0):
     return runs
 
 
+def climb_score(gain: float, horiz: float) -> float:
+    """Score de montée : pente (%) × longueur parcourue sur la route (hypoténuse, m)."""
+    return 100.0 * gain / horiz * math.hypot(horiz, gain)
+
+
+def climb_core(prof, ds, a, b):
+    """Partie d'une montée brute [a, b] (indices du profil) au meilleur score parmi celles d'au moins CLIMB_MIN_LEN_M et
+    CLIMB_MIN_GRADE de pente moyenne : (i, j, score), ou None (pas une montée)."""
+    w = max(1, int(math.ceil(CLIMB_MIN_LEN_M / ds)))
+    best = None
+    for i in range(a, b - w + 1):
+        for j in range(i + w, b + 1):
+            horiz, gain = (j - i) * ds, prof[j] - prof[i]
+            if gain <= 0 or 100.0 * gain / horiz < CLIMB_MIN_GRADE:
+                continue
+            sc = climb_score(gain, horiz)
+            if best is None or sc > best[2]:
+                best = (i, j, sc)
+    return best if best and best[2] > CLIMB_MIN_SCORE else None
+
+
+def steepest_grade(prof, ds, a, b):
+    """Pente (%) du kilomètre le plus raide de [a, b] (de toute la montée si elle est plus courte)."""
+    w = max(1, int(round(CLIMB_STEEP_WINDOW_M / ds)))
+    if b - a <= w:
+        return 100.0 * (prof[b] - prof[a]) / ((b - a) * ds)
+    return max(100.0 * (prof[k + w] - prof[k]) / (w * ds) for k in range(a, b - w + 1))
+
+
 def slope_stats(ds, prof):
     """Pente max (lissée), répartition de la distance par classe de pente, montées significatives (affichage),
     et pente moyenne pondérée sur TOUTES les montées nettes (terrain.avg_climb_grade_pct — validée par le test de
@@ -763,13 +809,26 @@ def slope_stats(ds, prof):
     climb_gain = sum(g for g, _ in all_climbs)
     climb_len = sum(le for _, le in all_climbs)
     avg_climb = round(100.0 * climb_gain / climb_len, 1) if climb_len > 0 else None
-    # sous-ensemble affiché dans le pitch : seulement les montées >= 20 m, les 5 plus grosses
-    climbs = [{"start_km": round(a * ds / 1000.0, 1), "length_km": round((b - a) * ds / 1000.0, 1),
-              "gain_m": round(prof[b] - prof[a]), "avg_grade_pct": round(100.0 * (prof[b] - prof[a]) / ((b - a) * ds), 1)}
-              for a, b in runs if prof[b] - prof[a] >= 20.0 and (b - a) * ds > 0]
-    climbs.sort(key=lambda c: -c["gain_m"])
+    # montées affichées : dans chaque montée brute, la partie qui monte vraiment (meilleur score, voir CLIMB_*) ; TOUTES
+    # les montées classées (catégorie 4 et plus : en 6 h, la 5e montée gardée faisait souvent plus de 80 m, des catégories 4
+    # étaient perdues), complétées par les petites montées jusqu'à CLIMB_SHOWN_MIN ; ds = pas horizontal (à plat)
+    climbs = []
+    for a, b in runs:
+        core = climb_core(prof, ds, a, b)
+        if core is None:
+            continue
+        i, j, sc = core
+        horiz, gain = (j - i) * ds, prof[j] - prof[i]
+        climbs.append({"start_km": round(i * ds / 1000.0, 1), "length_km": round(horiz / 1000.0, 1),
+                       "gain_m": round(gain), "avg_grade_pct": round(100.0 * gain / horiz, 1),
+                       "score": round(sc), "category": next(c for th, c in CLIMB_CATEGORIES if sc > th),
+                       "steepest_km_grade_pct": round(steepest_grade(prof, ds, i, j), 1)})
+    n_all = len(climbs)                                  # toutes les montées (affichage « dont les N plus grosses »)
+    climbs.sort(key=lambda c: -c.get("score", 100.0 * c["gain_m"]))
+    ranked = [c for c in climbs if c.get("category", "nc") != "nc"]
+    climbs = ranked + [c for c in climbs if c.get("category", "nc") == "nc"][:max(0, CLIMB_SHOWN_MIN - len(ranked))]
     return {"max_grade_pct": round(100.0 * max(grades), 1), "bands": {k: round(v / n, 3) for k, v in bands.items()},
-            "climbs": climbs[:5], "n_climbs": len(climbs), "avg_climb_grade_pct": avg_climb}
+            "climbs": climbs, "n_climbs": n_all, "avg_climb_grade_pct": avg_climb}
 
 
 def count_uturns(coords, min_seg=8.0, angle=150.0) -> int:
@@ -1669,7 +1728,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "11"  # 11 : ville comptée hors pistes sans voitures, tirages ciblés, terre au km, variante ≥ 70 %.
+GENERATOR_VERSION = "12"  # 12 : ville −25 % (2e sortie de Florent) ; montées à la manière des compteurs (≥ 500 m, ≥ 3 %,
+#                           partie qui monte vraiment, catégories HC à 4) et raideur selon le km le plus raide (01/10/2026). 11 : ville comptée hors pistes sans voitures, tirages ciblés, terre au km, variante ≥ 70 %.
 #                           10 : revêtement complété par la base topographique ICGC (scripts/icgc_tag.py), terre évitée.
 #                           9 : pistes sans revêtement noté et sentiers hors ville évités, comptés non goudronnés ;
 #                           surface_seq et road_seq pour le surlignage (28/09/2026). 8 : allures définies par la FTP
