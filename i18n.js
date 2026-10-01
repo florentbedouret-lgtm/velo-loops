@@ -77,6 +77,8 @@ const I18N = {
   // nom d'une variante : sa différence la plus nette avec la boucle principale, sinon sa direction
   vn_city: ['Moins de ville', 'Less town', 'Menos ciudad', 'Menys ciutat'],
   vn_forest: ['Plus de forêt', 'More forest', 'Más bosque', 'Més bosc'],
+  vn_hills: ['Plus de relief', 'Hillier', 'Más desnivel', 'Més desnivell'],
+  vn_flat: ['Plus plate', 'Flatter', 'Más llana', 'Més plana'],
   vn_water: ["Plus de bord d'eau", 'More waterside', 'Más junto al agua', "Més vora l'aigua"],
   vn_cycle: ['Plus de pistes', 'More cycle paths', 'Más carriles bici', 'Més carrils bici'],
   vn_main: ['Moins de grands axes', 'Fewer main roads', 'Menos carreteras principales', 'Menys carreteres principals'],

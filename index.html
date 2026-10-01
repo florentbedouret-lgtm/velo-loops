@@ -339,8 +339,8 @@
   <script src="feedback.js"></script>
   <script>
     const optLabel = l => I18N['opt_' + l] ? t('opt_' + l) : l;   // nom d'une option (équilibrée, variante…)
-    // brief v2 : jamais « Variante » seul. Nom = différence mesurée la plus nette avec la boucle principale (moins de ville,
-    // plus de forêt…), sinon la direction prise (« Par le nord »)
+    // brief v2 : jamais « Variante » seul. Nom = différence mesurée la plus nette avec la boucle principale (plus de relief,
+    // moins de ville, plus de forêt…), sinon la direction prise (« Par le nord »)
     function optName(o) {
       if (o.label !== 'variante') return optLabel(o.label);
       const m = shown.find(x => x.label === 'equilibre') || shown[0];
@@ -355,6 +355,10 @@
       gains.push(['vn_cycle', (o.shares.dedicated_cycleway - m.shares.dedicated_cycleway) / 0.10],
                  ['vn_main', (m.shares.main_roads - o.shares.main_roads) / 0.10]);
       if (lpk(o) != null && lpk(m) != null) gains.push(['vn_lights', (lpk(m) - lpk(o)) / 0.5]);
+      // relief (Florent, 01/10/2026) : souvent la différence qu'on remarque d'abord. Écart de D+ par km rapporté à 3 m/km,
+      // et au moins 100 m de D+ d'écart pour ne pas nommer « relief » quelques côtes en plus
+      const mpk = x => x.ascend_m / Math.max(1, x.distance_km), dUp = o.ascend_m - m.ascend_m;
+      if (Math.abs(dUp) >= 100) gains.push([dUp > 0 ? 'vn_hills' : 'vn_flat', Math.abs(mpk(o) - mpk(m)) / 3]);
       const best = gains.filter(g => g[1] >= 1).sort((x, y) => y[1] - x[1])[0];
       if (best) return t(best[0]);
       // direction : cap du départ vers le centre de la variante, en 8 secteurs
