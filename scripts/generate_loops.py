@@ -107,6 +107,19 @@ TARGET_MIN_KM = 1.0              # lieu déjà au départ : rien à viser
 TARGET_MAX_SHARE = 0.4           # lieu au plus à 40 % de la longueur de la boucle
 TARGET_GREEN_MIN_DEG2 = 5e-5     # grand espace vert (~0,5 km²), comme le diagnostic O-12
 TARGET_OFFSET_DEG = 45.0
+# Retouche des meilleures boucles (Florent, 02/10/2026 : la Plata 2 h, rejoindre la piste du Besòs dès l'aller ; 74 contre
+# 60 au diagnostic). On découpe chacune des meilleures boucles en points de passage, puis on essaie de petites variantes :
+# suivre la rivière ou la mer entre deux points de passage, ou passer par un espace vert ou un lieu remarquable proche. Une
+# variante n'est gardée que si sa note dépasse celle de la boucle de départ. Désactivée tant que RETOUCH est faux (le
+# diagnostic l'appelle directement pour la mesurer).
+RETOUCH = False
+RETOUCH_TOP = 2                  # boucles retouchées par durée et allure
+RETOUCH_ANCHORS = (0.2, 0.4, 0.6, 0.8)   # points de passage pris sur la boucle (part de la distance)
+RETOUCH_REACH = 0.15             # lieu attrayant à au plus 15 % de la longueur de la boucle d'un point de passage…
+RETOUCH_REACH_MIN_KM = 2.0       # … et jamais moins de 2 km
+RETOUCH_MIN_RUN_KM = 1.0         # tronçon de rivière ou de mer suivi : au moins 1 km
+RETOUCH_ON_ROUTE_DEG = 0.003     # ~250 m : lieu déjà sur la boucle, rien à retoucher
+RETOUCH_MAX_TRIALS = 16          # variantes essayées par boucle (une requête GraphHopper chacune)
 TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement) ; +2 si lieu remarquable
 # Lieux remarquables (01/10/2026, Florent : « le Tibidabo, panorama sur Barcelone, devrait être encouragé, sans que tous les
 # parcours y passent » ; 51 boucles sur 5 865 dans un rayon de 20 km y passaient, dont 44 partant du sommet) : sommets,
@@ -1430,6 +1443,105 @@ def attraction_points(lon, lat, max_km):
     return out
 
 
+def nearest_attraction(cat: str, lon: float, lat: float, max_km: float):
+    """Point le plus proche d'un lieu attrayant d'une catégorie (riviere, mer, vert, lieu) : (lon, lat, km) ou None."""
+    import shapely
+    from shapely.ops import nearest_points
+    pt = shapely.Point(lon, lat)
+    if cat == "lieu":
+        if not POIS or "lieu" not in POIS:
+            return None
+        tree, items = POIS["lieu"]
+        near = [(q.x, q.y, haversine(lon, lat, q.x, q.y) / 1000.0) for q, _ in
+                (items[int(i)] for i in tree.query(pt.buffer(max_km / 90.0)))]
+        near = [x for x in near if x[2] <= max_km]
+        return min(near, key=lambda x: x[2]) if near else None
+    if LANDSCAPE is None:
+        return None
+    best = None
+    for key in {"mer": ("sea",), "riviere": ("river",), "vert": ("forest", "protected")}[cat]:
+        tree = LANDSCAPE.trees.get(key)
+        if tree is None:
+            continue
+        for i in tree.query(pt.buffer(max_km / 90.0)):
+            gm = tree.geometries[int(i)]
+            if cat == "vert" and (gm.geom_type not in ("Polygon", "MultiPolygon") or gm.area < TARGET_GREEN_MIN_DEG2):
+                continue
+            q = nearest_points(gm.boundary if cat == "vert" else gm, pt)[0]
+            km = haversine(lon, lat, q.x, q.y) / 1000.0
+            if km <= max_km and (best is None or km < best[2]):
+                best = (q.x, q.y, km)
+    return best
+
+
+def loop_anchors(l) -> list:
+    """Points de passage d'une boucle : ses points à RETOUCH_ANCHORS de la distance."""
+    c = l.coords
+    cum = [0.0]
+    for a, b in zip(c, c[1:]):
+        cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
+    out, j = [], 0
+    for f in RETOUCH_ANCHORS:
+        while j < len(cum) - 1 and cum[j] < f * cum[-1]:
+            j += 1
+        out.append([c[j][0], c[j][1]])
+    return out
+
+
+def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None) -> list:
+    """Variantes des meilleures boucles du pool (voir RETOUCH) : seulement celles qui ont une meilleure note."""
+    import shapely
+    if not pool:
+        return []
+    bases = []
+    for l in sorted(pool, key=lambda x: x.score, reverse=True):
+        if all(similarity(l, b) < 0.6 for b in bases):
+            bases.append(l)
+        if len(bases) >= RETOUCH_TOP:
+            break
+    target_s = duration_h * 3600.0
+    home = [st["lon"], st["lat"]]
+    found, n_try = [], 0
+    for bi, base in enumerate(bases):
+        line = shapely.LineString([p[:2] for p in base.coords])
+        on_route = lambda p: line.distance(shapely.Point(p[0], p[1])) < RETOUCH_ON_ROUTE_DEG  # noqa: E731
+        reach = max(RETOUCH_REACH_MIN_KM, RETOUCH_REACH * base.distance_m / 1000.0)
+        anchors = [home] + loop_anchors(base) + [home]
+        trials = []
+        for i in range(len(anchors) - 1):
+            P, Q = anchors[i], anchors[i + 1]
+            last = i + 1 == len(anchors) - 1
+            for cat in ("riviere", "mer"):                    # suivre l'eau entre P et Q (puis Q, ou directement la suite)
+                e, x = nearest_attraction(cat, P[0], P[1], reach), nearest_attraction(cat, Q[0], Q[1], reach)
+                if (e and x and haversine(e[0], e[1], x[0], x[1]) >= RETOUCH_MIN_RUN_KM * 1000.0
+                        and not (on_route(e) and on_route(x))):
+                    mid = [list(e[:2]), list(x[:2])]
+                    trials.append(anchors[:i + 1] + mid + anchors[i + 1:])
+                    if not last:
+                        trials.append(anchors[:i + 1] + mid + anchors[i + 2:])
+            M = [(P[0] + Q[0]) / 2.0, (P[1] + Q[1]) / 2.0]
+            for cat in ("vert", "lieu"):                      # passer par un espace vert ou un lieu remarquable proche
+                p = nearest_attraction(cat, M[0], M[1], reach)
+                if p and not on_route(p):
+                    trials.append(anchors[:i + 1] + [list(p[:2])] + anchors[i + 1:])
+                    if not last:
+                        trials.append(anchors[:i + 1] + [list(p[:2])] + anchors[i + 2:])
+        for k, way in enumerate(trials[:RETOUCH_MAX_TRIALS]):
+            n_try += 1
+            path = gh.via(way, base.profile)
+            loop = analyse(path, level, base.profile, duration_h, 1000 + 100 * bi + k, None) if path else None
+            if loop is None or abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
+                continue
+            if loop.overlap > MAX_OVERLAP or loop.u_turns > MAX_UTURNS:
+                continue
+            if loop.shares["unpaved"] > MAX_UNPAVED:
+                continue
+            if loop.score > base.score:
+                found.append(loop)
+    log(f"    retouche : {len(found)} variante(s) meilleure(s) sur {n_try} essai(s)")
+    return found
+
+
 def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
     """Boucles par les lieux attrayants proches : triangle vers un lieu (décalé de ±TARGET_OFFSET_DEG), ou enchaînement
     de deux lieux ; taille ajustée sur la durée (jamais plus près que le lieu lui-même). Mêmes filtres que fit_and_sample."""
@@ -1512,6 +1624,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
     pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))  # ciblés
+    if RETOUCH:
+        pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
     if pool:
         return pool
     # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre
@@ -1733,7 +1847,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"surface_seq": l.surface_seq} if "u" in l.surface_seq or "p" in l.surface_seq else {}),
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
-        **({"targeted": True} if l.seed >= 900 else {}),          # tirage ciblé (lieu attrayant), pour les diagnostics
+        **({"targeted": True} if 900 <= l.seed < 1000 else {}),   # tirage ciblé (lieu attrayant), pour les diagnostics
+        **({"retouched": True} if l.seed >= 1000 else {}),        # retouche d'une meilleure boucle (RETOUCH)
         **({"remarkable": l.remarkable} if l.remarkable else {}),  # lieux remarquables traversés (appli, GPX)
         **({"views_passed": l.views_passed} if l.views_passed else {}),   # belvédères devant lesquels on passe
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),

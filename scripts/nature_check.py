@@ -351,6 +351,7 @@ def report_references(results, path_json, path_md, note, t0):
 
 # ----------------------------------------------------------------------------- sonde : boucles de production avant/après
 WAYS = None                     # sonde « revêtement » : voies OSM classées (landcover.load_ways), chargées dans main()
+RETOUCH = False                 # --retouch : retouche des meilleures boucles mesurée (sonde, comparaison)
 
 
 def option_row(o) -> dict:
@@ -369,6 +370,7 @@ def option_row(o) -> dict:
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"],
             "fallback": bool(o.get("unpaved_fallback")), "targeted": bool(o.get("targeted")),
+            "retouched": bool(o.get("retouched")),
             "remarkable": [x["n"] for x in o.get("remarkable") or []], "views": o.get("views_passed", 0),
             "water_pct": round(100 * sc.get("water", 0)), "min": o.get("time_est_min"),
             "lights_km": o.get("traffic_lights_per_km"), "industrial_pct": round(100 * sc.get("industrial", 0))}
@@ -389,6 +391,11 @@ def run_probe(sid, site, gh_url, durations, levels):
         prior = []                                         # comme la génération réelle (O-18 A)
         for level in sorted(levels, key=list(g.LEVELS).index):
             pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
+            base_best = max((l.score for l in pool), default=None)
+            t_r = time.time()
+            if RETOUCH:                                    # retouche mesurée à part (temps, gain de note)
+                pool = pool + g.retouch_candidates(gh, st_, level, d, pool, lambda *_: None)
+            t_r = time.time() - t_r
             picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
             prior += [l for _, l in picks]
             for _, l in picks:
@@ -396,7 +403,8 @@ def run_probe(sid, site, gh_url, durations, levels):
             new = [option_row(g.to_json(l, lab, sid, i)) for i, (lab, l) in enumerate(picks, start=1)]
             old = [option_row(o) for o in pub["options"]
                    if o["level"] == level and round(o["duration_target_min"]) == round(d * 60)]
-            rows.append({"duration_h": d, "level": level, "published": old, "new": new, "valid": len(pool)})
+            rows.append({"duration_h": d, "level": level, "published": old, "new": new, "valid": len(pool),
+                         "base_best": None if base_best is None else round(base_best, 1), "retouch_s": round(t_r, 1)})
     return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
 
 
@@ -563,6 +571,30 @@ def targeted_summary(results) -> list:
     return L
 
 
+def retouch_summary(results) -> list:
+    """Retouche des meilleures boucles (02/10/2026) : gain de note de la boucle recommandée et temps de calcul en plus."""
+    import statistics as stt
+    rows = [r for res in results if not res.get("skipped") for r in res["rows"] if r.get("base_best") is not None]
+    if not RETOUCH or not rows:
+        return []
+    gains = [r["new"][0]["score"] - r["base_best"] for r in rows if r["new"] and r["new"][0].get("retouched")]
+    rt = sum(r["retouch_s"] for r in rows)
+    L = ["\n## Retouche des meilleures boucles",
+         f"\nBoucle recommandée venant d'une retouche : **{len(gains)} sur {len(rows)}** (durée × allure) ; gain de note "
+         f"médian {stt.median(gains) if gains else 0:.1f}, max {max(gains, default=0):.1f}.",
+         f"\nOptions retenues venant d'une retouche : {sum(1 for r in rows for o in r['new'] if o.get('retouched'))} sur "
+         f"{sum(len(r['new']) for r in rows)}.",
+         f"\nTemps de calcul de la retouche : {rt / 60:.1f} min au total (cumul des {len(rows)} calculs, tous fils confondus).",
+         "\n| Départ | durée | allure | meilleure note sans retouche | avec |", "|---|---|---|---|---|"]
+    for res in results:
+        if res.get("skipped"):
+            continue
+        for r in res["rows"]:
+            if r["new"] and r["new"][0].get("retouched"):
+                L.append(f"| {res['id']} | {r['duration_h']:g} h | {r['level']} | {r['base_best']} | {r['new'][0]['score']} |")
+    return L
+
+
 def surface_summary(results) -> list:
     """Sonde « revêtement » (28/09/2026) : km de terre (notée ou pistes douteuses), publié contre nouveau, par durée."""
     import statistics as stt
@@ -591,6 +623,7 @@ def report_probe(results, out_json, out_md, note, t0):
     f = lambda o: (f"{o['label']}{' (= ' + o['same_as']['level'] + ')' if o.get('same_as') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
                    f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}"
                    + (" [REPLI]" if o.get("fallback") else "") + (" [CIBLÉ]" if o.get("targeted") else "")
+                   + (" [RETOUCHE]" if o.get("retouched") else "")
                    + (" [PAR : " + ", ".join(o["remarkable"]) + "]" if o.get("remarkable") else "")
                    + f", eau {o.get('water_pct')} %"
                    + (f", {o.get('min')} min, feux {o.get('lights_km')}/km, industriel {o.get('industrial_pct')} %" if "min" in o else "")
@@ -599,7 +632,8 @@ def report_probe(results, out_json, out_md, note, t0):
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
          "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",
-         *probe_summary(results), *surface_summary(results), *targeted_summary(results), *remarkable_summary(results),
+         *probe_summary(results), *retouch_summary(results), *surface_summary(results), *targeted_summary(results),
+         *remarkable_summary(results),
          f"\nVoies OSM au revêtement incertain identifiées par GraphHopper (osm_way_id) : {len(g.WAYS_LOG)} ; par classe : "
          + ", ".join(f"{c} {sum(1 for e in g.WAYS_LOG.values() if e['classe'] == c)}"
                      for c in ("piste_q1", "piste_terre_probable", "sentier_hors_ville", "sentier_ville"))]
@@ -641,6 +675,8 @@ def run_compare(refs_path, site, gh_url, level, duration):
                 best = loop
         out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle")})
     pool = g.level_pool(gh, st_, level, duration, g.CANDIDATES, lambda *_: None)
+    if RETOUCH:
+        pool = pool + g.retouch_candidates(gh, st_, level, duration, pool, print)
     picks = g.choose_options(gh, st_, level, duration, pool, [], lambda *_: None)
     out["pool"] = sorted((summary(l) for l in pool), key=lambda x: -x["score"])
     out["picks"] = [{"label": lab, **summary(l)} for lab, l in picks]
@@ -650,10 +686,10 @@ def run_compare(refs_path, site, gh_url, level, duration):
 def report_compare(res, out_json, out_md, note, t0):
     Path(out_json).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
     cols = ("score", "km", "min", "dplus_m", "lights_per_km", "city_pct", "city_car_pct", "water_pct", "forest_pct",
-            "cycleway_pct", "industrial_pct", "dirt_km", "main_roads_pct", "seed")
+            "cycleway_pct", "industrial_pct", "dirt_km", "main_roads_pct", "seed")   # seed ≥ 1000 : retouche
     head = "| Boucle | " + " | ".join(("note", "km", "min", "D+", "feux/km", "ville %", "ville avec voitures %", "eau %",
                                          "forêt %", "pistes %", "industriel %", "terre km", "routes princ. %",
-                                         "tirage (≥ 900 : ciblé)")) + " |"
+                                         "tirage (≥ 900 : ciblé, ≥ 1000 : retouche)")) + " |"
     row = lambda name, x: "| " + name + " | " + " | ".join(str(x.get(c)) for c in cols) + " |"  # noqa: E731
     L = [f"# Boucles de Florent contre la production ({res['start']}, {res['level']}, {res['duration_h']:g} h ; "
          f"{round((time.time() - t0) / 60)} min)", (f"\n**{note}**" if note else ""),
@@ -690,6 +726,7 @@ def main() -> int:
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
     ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
+    ap.add_argument("--retouch", action="store_true", help="mesure la retouche des meilleures boucles (RETOUCH)")
     ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
@@ -703,6 +740,8 @@ def main() -> int:
     g.POIS = g.load_pois(pbf, wd)                       # lieux remarquables (tirages ciblés, bonus) comme la production
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
+    global RETOUCH
+    RETOUCH = args.retouch
     if args.compare_refs:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
