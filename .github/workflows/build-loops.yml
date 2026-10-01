@@ -157,7 +157,18 @@ jobs:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
         run: |
           mkdir -p data
-          curl -fL --retry 3 -o data/source.osm.pbf "$(jq -r .geofabrik_url "$REGION_FILE")"
+          # 01/10/2026 : le lien « latest » de Geofabrik renvoyait vers lui-même en boucle (run #158 échoué) ; secours :
+          # l'extrait daté des 4 derniers jours (cataluna-AAMMJJ.osm.pbf), publié chaque jour à côté
+          URL="$(jq -r .geofabrik_url "$REGION_FILE")"
+          if ! curl -fL --max-redirs 5 --retry 3 -o data/source.osm.pbf "$URL"; then
+            ok=""
+            for back in 1 2 3 4; do
+              DATED="${URL%-latest.osm.pbf}-$(date -u -d "-$back day" +%y%m%d).osm.pbf"
+              echo "Lien « latest » indisponible, essai de $DATED"
+              if curl -fL --max-redirs 5 --retry 2 -o data/source.osm.pbf "$DATED"; then ok=1; break; fi
+            done
+            [ -n "$ok" ] || { echo "Aucun extrait Geofabrik téléchargeable"; exit 1; }
+          fi
           BBOX="$BBOX_INPUT"
           if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
             if [ "$MODE" = "plan" ] || [ "$MODE" = "pilot" ] || [ "${MODE#full}" != "$MODE" ] || [ "$MODE" = "slope_check" ] || [ "$MODE" = "nature_check" ] || [ "${MODE#landcover}" != "$MODE" ]; then BBOX="province"; else BBOX="1.65,41.20,2.65,41.85"; fi
