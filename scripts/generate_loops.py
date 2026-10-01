@@ -107,7 +107,18 @@ TARGET_MIN_KM = 1.0              # lieu déjà au départ : rien à viser
 TARGET_MAX_SHARE = 0.4           # lieu au plus à 40 % de la longueur de la boucle
 TARGET_GREEN_MIN_DEG2 = 5e-5     # grand espace vert (~0,5 km²), comme le diagnostic O-12
 TARGET_OFFSET_DEG = 45.0
-TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement)
+TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement) ; +2 si lieu remarquable
+# Lieux remarquables (01/10/2026, Florent : « le Tibidabo, panorama sur Barcelone, devrait être encouragé, sans que tous les
+# parcours y passent » ; 51 boucles sur 5 865 dans un rayon de 20 km y passaient, dont 44 partant du sommet) : sommets,
+# belvédères et cols d'OSM ayant un article Wikipédia ; tirages ciblés et bonus modéré dans la note.
+REMARKABLE_NEAR_DEG = 0.0015    # ~130 m du tracé
+REMARKABLE_BONUS = 0.05         # 5 points par lieu
+REMARKABLE_MAX_BONUS = 0.08
+# Belvédères quels qu'ils soient (Florent, 01/10/2026) : bonus à part, pour ceux devant lesquels on passe vraiment ; avant,
+# 0,05 de la part « paysage » par point de vue à moins de ~300 m (≈ 0,6 point de note, trop loin et trop faible)
+VIEW_NEAR_DEG = 0.0012          # ~100 m
+VIEW_BONUS = 0.02               # 2 points par belvédère
+VIEW_MAX_BONUS = 0.04
 UNPAVED_PENALTY_PER_KM = 0.03    # note : 3 points par km de terre (notée, probable ou ICGC), 30 au plus
 FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
@@ -311,7 +322,7 @@ class LandscapeIndex:
         protected = share("protected", SCENERY_PROTECTED_DEG)
         ind_mask = industrial_mask(self.trees, pts)       # par point (tous les 100 m) : surlignage dans l'appli
         industrial = float(ind_mask.mean()) if len(xy) else 0.0
-        index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected + 0.05 * min(views, 4))
+        index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected)   # belvédères : bonus à part (VIEW_BONUS)
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
                 "industrial": industrial, "industrial_mask": ind_mask.tolist(), "score": round(100 * index),
                 "landcover": self.landcover(pts)}
@@ -517,10 +528,10 @@ def load_pois(pbf: Path, workdir: Path):
     filt, out = workdir / "pois.osm.pbf", workdir / "pois.geojsonseq"
     subprocess.run(["osmium", "tags-filter", str(pbf), "n/amenity=drinking_water", "nw/amenity=fountain",
                     "nw/amenity=cafe", "nw/shop=bakery", "nw/railway=station", "n/mountain_pass=yes", "n/natural=saddle",
-                    "n/natural=peak", "-o", str(filt), "--overwrite"], check=True, capture_output=True)
+                    "n/natural=peak", "nw/tourism=viewpoint", "-o", str(filt), "--overwrite"], check=True, capture_output=True)
     subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"], check=True,
                    capture_output=True)
-    kinds = {"w": [], "c": [], "g": [], "pass": [], "peak": []}
+    kinds = {"w": [], "c": [], "g": [], "pass": [], "peak": [], "lieu": []}
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -534,6 +545,9 @@ def load_pois(pbf: Path, workdir: Path):
             p = feat.get("properties", {})
             pt = geom if geom.geom_type == "Point" else geom.centroid
             name = p.get("name")
+            if name and p.get("wikipedia") and (p.get("natural") == "peak" or p.get("tourism") == "viewpoint"
+                                                or p.get("mountain_pass") == "yes"):
+                kinds["lieu"].append((pt, name))           # lieu remarquable (article Wikipédia) : tirages ciblés, bonus
             if p.get("amenity") == "drinking_water" or (p.get("amenity") == "fountain" and p.get("drinking_water") == "yes"):
                 kinds["w"].append((pt, name))
             elif p.get("amenity") == "cafe" or p.get("shop") == "bakery":
@@ -955,6 +969,8 @@ class Loop:
     road_seq: str = ""
     unpaved_fallback: bool = False
     doubt_ways: dict = field(default_factory=dict)
+    remarkable: list = field(default_factory=list)
+    views_passed: int = 0
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
     longest_repeat_m: float = 0.0
@@ -1183,6 +1199,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         scenery=scenery,
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
+    loop.remarkable = remarkable_passed(coords, cum)
+    loop.views_passed = views_passed(coords, cum)
     loop.surface_seq = surface_seq(edges, cum)
     loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
     loop.doubt_ways = doubt_ways(det, coords, cum)
@@ -1230,6 +1248,8 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
     # que 4 points, la pénalité ne comptant qu'au-delà de 3 % du parcours) ; la part au-delà de 3 % reste pénalisée
     dirt_km = l.shares["unpaved"] * l.distance_m / 1000.0
     total -= min(0.3, max(UNPAVED_PENALTY_PER_KM * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
+    total += min(REMARKABLE_MAX_BONUS, REMARKABLE_BONUS * len(l.remarkable))   # Tibidabo, belvédères connus…
+    total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
     if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
         total -= min(INDUSTRIAL_MAX_PENALTY, INDUSTRIAL_PENALTY * l.scenery.get("industrial", 0.0))
     return round(100 * max(0.0, total), 1)
@@ -1328,6 +1348,46 @@ def destination(lon, lat, bearing_deg, km):
     return (lon + km * math.sin(b) / (111.32 * math.cos(math.radians(lat))), lat + km * math.cos(b) / 110.54)
 
 
+def remarkable_passed(coords, cum):
+    """Lieux remarquables (sommets, belvédères avec un article Wikipédia) à moins de REMARKABLE_NEAR_DEG du tracé :
+    [{"n": nom, "km": km de passage}] (une fois chacun)."""
+    if not POIS or "lieu" not in POIS or len(coords) < 2:
+        return []
+    import numpy as np
+    import shapely
+    xy = sample_points(coords, cum, 100.0)
+    tree, items = POIS["lieu"]
+    hit = tree.query(shapely.points(np.array(xy)), predicate="dwithin", distance=REMARKABLE_NEAR_DEG)
+    seen, out = set(), []
+    for p_i, l_i in sorted(zip(hit[0].tolist(), hit[1].tolist())):
+        name = items[l_i][1]
+        if name not in seen:
+            seen.add(name)
+            out.append({"n": name, "km": round(p_i * 100.0 / 1000.0 * (cum[-1] / max(cum[-1], 1.0)), 1)})
+    return out
+
+
+def views_passed(coords, cum) -> int:
+    """Belvédères OSM (tourism=viewpoint, connus ou non) à moins de VIEW_NEAR_DEG du tracé, hors lieux remarquables
+    (déjà comptés) ; deux points de vue à moins de ~100 m l'un de l'autre comptent pour un."""
+    if LANDSCAPE is None or LANDSCAPE.trees.get("view") is None or len(coords) < 2:
+        return 0
+    import numpy as np
+    import shapely
+    pts = shapely.points(np.array(sample_points(coords, cum, 100.0)))
+    tree = LANDSCAPE.trees["view"]
+    idx = np.unique(tree.query(pts, predicate="dwithin", distance=VIEW_NEAR_DEG)[1])
+    kept = []
+    rem = POIS["lieu"][0] if POIS and "lieu" in POIS else None
+    for i in idx.tolist():
+        v = tree.geometries[i]
+        if rem is not None and len(rem.query(v, predicate="dwithin", distance=VIEW_NEAR_DEG)):
+            continue                                      # lieu remarquable : bonus REMARKABLE seulement
+        if all(v.distance(k) > VIEW_NEAR_DEG for k in kept):
+            kept.append(v)
+    return len(kept)
+
+
 def attraction_points(lon, lat, max_km):
     """Point le plus proche de chaque lieu attrayant (mer, grande rivière, grand espace vert) entre TARGET_MIN_KM et
     max_km : {catégorie: (lon, lat, km)}."""
@@ -1337,6 +1397,13 @@ def attraction_points(lon, lat, max_km):
     from shapely.ops import nearest_points
     pt = shapely.Point(lon, lat)
     out = {}
+    if POIS and "lieu" in POIS:                                # lieu remarquable (sommet, belvédère) : le point lui-même
+        tree, items = POIS["lieu"]
+        near = [items[int(i)] for i in tree.query(pt.buffer(max_km / 90.0))]
+        near = [(q.x, q.y, haversine(lon, lat, q.x, q.y) / 1000.0, n) for q, n in near]
+        near = [x for x in near if TARGET_MIN_KM <= x[2] <= max_km]
+        if near:
+            out["lieu"] = min(near, key=lambda x: x[2])[:3]
     for cat, keys in (("mer", ("sea",)), ("riviere", ("river",)), ("vert", ("forest", "protected"))):
         best = None
         for key in keys:
@@ -1365,7 +1432,7 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
     loop_km = 0.8 * flat_ms * target_s / 1000.0
     pts = attraction_points(lon, lat, TARGET_MAX_SHARE * loop_km)
     plans = []                                               # liste de [(bearing, km)] : points à viser, dans l'ordre
-    cats = sorted(pts, key=lambda c: pts[c][2])
+    cats = sorted(pts, key=lambda c: (c != "lieu", pts[c][2]))   # lieu remarquable d'abord, puis le plus proche
     for i in range(len(cats)):                               # deux lieux enchaînés (le plus proche d'abord) : prioritaires
         for j in range(i + 1, len(cats)):
             a, b = pts[cats[i]], pts[cats[j]]
@@ -1376,12 +1443,14 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
             x, y, km = pts[cat]
             th = bearing(lon, lat, x, y)
             plans.append((cat, [(th, km), (th + off, km)]))
-    plans = plans[:TARGET_MAX_PLANS]                         # coût : ~2,5 requêtes GraphHopper par tirage
+    plans = plans[:TARGET_MAX_PLANS + (2 if "lieu" in pts else 0)]   # coût : ~2,5 requêtes GraphHopper par tirage
     found, n_ok = [], 0
+    lieu_bd = (bearing(lon, lat, pts["lieu"][0], pts["lieu"][1]), pts["lieu"][2]) if "lieu" in pts else None
     for k, (name, plan) in enumerate(plans):
         s, loop = max(1.0, loop_km / 4.1 / max(p[1] for p in plan)), None
         for _ in range(3):                                   # ajustement de la taille sur la durée visée
-            way = [[lon, lat]] + [list(destination(lon, lat, b, d * s)) for b, d in plan] + [[lon, lat]]
+            way = [[lon, lat]] + [list(pts["lieu"][:2]) if (b, d) == lieu_bd else list(destination(lon, lat, b, d * s))
+                                  for b, d in plan] + [[lon, lat]]    # le lieu remarquable est visé exactement
             path = gh.via(way, profile)
             loop = analyse(path, level, profile, duration_h, 900 + k, None) if path else None
             if loop is None:
@@ -1658,6 +1727,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
         **({"targeted": True} if l.seed >= 900 else {}),          # tirage ciblé (lieu attrayant), pour les diagnostics
+        **({"remarkable": l.remarkable} if l.remarkable else {}),  # lieux remarquables traversés (appli, GPX)
+        **({"views_passed": l.views_passed} if l.views_passed else {}),   # belvédères devant lesquels on passe
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
                     "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},

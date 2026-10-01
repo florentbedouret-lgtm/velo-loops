@@ -28,6 +28,10 @@ function gpxWaypoints(o) {
     const named = RELIEF_WORD.test(c.name) ? c.name : t('gpx_col') + ' ' + c.name;   // « Turó d'en Gras » se suffit
     pts.push({ lon: q[0], lat: q[1], t: 'col', name: clip(named), desc: c.name + ' · +' + Math.round(c.gain_m) + ' m' });
   });
+  (o.remarkable || []).forEach(x => {                      // lieu remarquable (sommet, belvédère connu)
+    const q = on(x.km);
+    pts.push({ lon: q[0], lat: q[1], t: 'col', name: clip(x.n), desc: x.n + ' · ' + t('remarkable_gpx') });
+  });
   seqRanges(o, 'dirt').filter(([a, b]) => b - a >= GPX_DIRT_MIN_KM).forEach(([a, b]) => {   // début de chaque chemin de terre
     const q = on(a);
     pts.push({ lon: q[0], lat: q[1], t: 'dirt', name: clip(t('gpx_dirt') + ' ' + kmTxt(b - a) + ' km'),

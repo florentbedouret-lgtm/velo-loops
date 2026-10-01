@@ -369,6 +369,7 @@ def option_row(o) -> dict:
             "forest_pct": round(100 * sc.get("forest", 0)), "city_pct": round(100 * lc["city"]) if lc else None,
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"],
             "fallback": bool(o.get("unpaved_fallback")), "targeted": bool(o.get("targeted")),
+            "remarkable": [x["n"] for x in o.get("remarkable") or []], "views": o.get("views_passed", 0),
             "water_pct": round(100 * sc.get("water", 0)), "min": o.get("time_est_min"),
             "lights_km": o.get("traffic_lights_per_km"), "industrial_pct": round(100 * sc.get("industrial", 0))}
 
@@ -517,6 +518,24 @@ def probe_summary(results) -> list:
     return L
 
 
+def remarkable_summary(results) -> list:
+    """Lieux remarquables (01/10/2026) : boucles qui y passent, publié contre nouveau, et lieux les plus visités."""
+    from collections import Counter
+    rows = [r for res in results if not res.get("skipped") for r in res["rows"]]
+    new = [o for r in rows for o in r["new"]]
+    if not new:
+        return []
+    pub_hits = sum(1 for r in rows for o in r["published"] if o.get("remarkable"))
+    new_hits = sum(1 for o in new if o.get("remarkable"))
+    c = Counter(n for o in new for n in o.get("remarkable") or [])
+    L = ["\n## Lieux remarquables (sommets, belvédères, cols avec un article Wikipédia)",
+         f"\nOptions passant par au moins un lieu : nouveau **{new_hits} sur {len(new)}** (publié : {pub_hits}, sans relevé "
+         "avant le générateur 12 : 0 attendu).",
+         f"\nOptions passant devant au moins un belvédère (à moins de ~100 m) : **{sum(1 for o in new if o.get('views'))} sur "
+         f"{len(new)}**.", "\nLieux les plus visités : " + ", ".join(f"{n} ({k})" for n, k in c.most_common(12))]
+    return L
+
+
 def targeted_summary(results) -> list:
     """Tirages ciblés (30/09/2026) : combien d'options retenues en viennent, et ce qu'elles changent (note, eau)."""
     import statistics as stt
@@ -572,6 +591,7 @@ def report_probe(results, out_json, out_md, note, t0):
     f = lambda o: (f"{o['label']}{' (= ' + o['same_as']['level'] + ')' if o.get('same_as') else ''} : {o['km']} km, D+ {o['dplus_m']}, "  # noqa: E731
                    f"forêt {o['forest_pct']} %, ville {o['city_pct']} %, pistes {o['cycleway_pct']} %, note {o['score']}"
                    + (" [REPLI]" if o.get("fallback") else "") + (" [CIBLÉ]" if o.get("targeted") else "")
+                   + (" [PAR : " + ", ".join(o["remarkable"]) + "]" if o.get("remarkable") else "")
                    + f", eau {o.get('water_pct')} %"
                    + (f", {o.get('min')} min, feux {o.get('lights_km')}/km, industriel {o.get('industrial_pct')} %" if "min" in o else "")
                    + (f", terre {o['surface']['dirt_km']} km (+ piste qualité 1 {o['surface']['g1_km']} km, sentiers "
@@ -579,7 +599,7 @@ def report_probe(results, out_json, out_md, note, t0):
     L = [f"# Sonde : boucles de production avant / après ({round((time.time() - t0) / 60)} min)",
          (f"\n**Réglage de ce run : {note}**" if note else ""),
          "\n« Publié » = boucles en ligne ; « Nouveau » = ce que produirait la génération avec les réglages du dépôt.",
-         *probe_summary(results), *surface_summary(results), *targeted_summary(results),
+         *probe_summary(results), *surface_summary(results), *targeted_summary(results), *remarkable_summary(results),
          f"\nVoies OSM au revêtement incertain identifiées par GraphHopper (osm_way_id) : {len(g.WAYS_LOG)} ; par classe : "
          + ", ".join(f"{c} {sum(1 for e in g.WAYS_LOG.values() if e['classe'] == c)}"
                      for c in ("piste_q1", "piste_terre_probable", "sentier_hors_ville", "sentier_ville"))]
@@ -680,6 +700,7 @@ def main() -> int:
     g.SIGNALS = g.load_signals(pbf, wd)
     g.STOPS = g.load_points(pbf, wd, ["n/highway=stop"], "stops")
     g.LANDSCAPE = g.load_landscape(pbf, wd)
+    g.POIS = g.load_pois(pbf, wd)                       # lieux remarquables (tirages ciblés, bonus) comme la production
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
     if args.compare_refs:

@@ -45,6 +45,8 @@ const I18N = {
   link_here: ['Copie ce lien :', 'Copy this link:', 'Copia este enlace:', 'Copia aquest enllaç:'],
   last_start: ['Ton dernier départ', 'Your last start', 'Tu última salida', 'La teva última sortida'],
   from_link: ['Boucle partagée', 'Shared loop', 'Ruta compartida', 'Ruta compartida'],
+  k_remarkable: ['Passe par : {list}.', 'Goes via: {list}.', 'Pasa por: {list}.', 'Passa per: {list}.'],
+  remarkable_gpx: ['lieu remarquable (panorama)', 'remarkable place (panorama)', 'lugar destacado (panorámica)', 'lloc destacat (panoràmica)'],
   climb_cat_HC: ['hors catégorie', 'beyond category', 'fuera de categoría', 'fora de categoria'],
   climb_cat_1: ['catégorie 1', 'category 1', 'categoría 1', 'categoria 1'],
   climb_cat_2: ['catégorie 2', 'category 2', 'categoría 2', 'categoria 2'],

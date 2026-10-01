@@ -1131,6 +1131,8 @@
           (c.avg_grade_pct != null ? ' ' + climbLabel(c).charAt(0).toUpperCase() + climbLabel(c).slice(1) + '.' : ''),
           false, 'climb:0']);
       }
+      // lieux remarquables (01/10/2026, Florent : Tibidabo) : sommets, belvédères connus traversés
+      if (o.remarkable && o.remarkable.length) out.push(['', t('k_remarkable', { list: o.remarkable.map(x => x.n).join(', ') })]);
       // échappatoires (panel d'utilisateurs) : points d'eau, cafés hors ville, gares de retour
       const P = o.pois || [], nW = P.filter(x => x.t === 'w').length, nC = P.filter(x => x.t === 'c').length;
       const G = P.filter(x => x.t === 'g');
