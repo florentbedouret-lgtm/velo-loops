@@ -259,7 +259,7 @@ jobs:
         run: |
           # NATURE_RELIEF non vide : sonde « relief » en sportif (O-18 B), prioritaire ; sinon NATURE_PROBE non vide : sonde
           # avant / après sur ces départs ; les deux vides : calibrage v5
-          NATURE_COMPARE=""   # "scripts/reference_gracia.json" : boucles de Florent contre la production (prioritaire)
+          NATURE_COMPARE="scripts/reference_plata.json"   # "scripts/reference_gracia.json" : boucles de Florent contre la production (prioritaire)
           NATURE_RELIEF=""
           NATURE_WORKERS=3   # test #165 (01/10/2026) : 4 en parallèle ne gagnent que 2 %
           NATURE_PROBE="gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"
