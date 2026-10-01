@@ -1,0 +1,178 @@
+{
+ "_note": "Lieux remarquables : sommets (Q8502), cols (Q133056) et belvédères (Q1440300) de la province de Barcelone ayant au moins 6 articles Wikipédia (toutes langues) dans Wikidata (CC0), requête du 01/10/2026. Un sommet, belvédère ou col OSM dont le tag wikidata figure ici compte comme lieu remarquable (tirages ciblés, bonus). Liste modifiable à la main (ajouter un QID, ou en retirer).",
+ "min_sitelinks": 6,
+ "places": {
+  "Q732115": {
+   "label": "Montserrat",
+   "sitelinks": 46
+  },
+  "Q658271": {
+   "label": "Tibidabo",
+   "sitelinks": 31
+  },
+  "Q1122701": {
+   "label": "Montjuïc",
+   "sitelinks": 30
+  },
+  "Q1463283": {
+   "label": "Collserola",
+   "sitelinks": 23
+  },
+  "Q1862666": {
+   "label": "Pedraforca",
+   "sitelinks": 22
+  },
+  "Q3776656": {
+   "label": "la Tosa",
+   "sitelinks": 11
+  },
+  "Q7419090": {
+   "label": "Sant Jeroni",
+   "sitelinks": 11
+  },
+  "Q12263797": {
+   "label": "massís del Montnegre",
+   "sitelinks": 10
+  },
+  "Q6785970": {
+   "label": "Matagalls",
+   "sitelinks": 10
+  },
+  "Q4893362": {
+   "label": "Turó de l'Home",
+   "sitelinks": 10
+  },
+  "Q6529125": {
+   "label": "les Agudes",
+   "sitelinks": 9
+  },
+  "Q4895920": {
+   "label": "el Montcau",
+   "sitelinks": 9
+  },
+  "Q7259037": {
+   "label": "Puigllançada",
+   "sitelinks": 8
+  },
+  "Q5150472": {
+   "label": "Comabona",
+   "sitelinks": 8
+  },
+  "Q7165403": {
+   "label": "Penyes Altes de Moixeró",
+   "sitelinks": 8
+  },
+  "Q7856613": {
+   "label": "Turó del Samont",
+   "sitelinks": 8
+  },
+  "Q17482913": {
+   "label": "Còpia de Palomes",
+   "sitelinks": 8
+  },
+  "Q7259022": {
+   "label": "Puig Drau",
+   "sitelinks": 7
+  },
+  "Q8534972": {
+   "label": "l'Agullola",
+   "sitelinks": 7
+  },
+  "Q7353679": {
+   "label": "Rocallarga",
+   "sitelinks": 7
+  },
+  "Q7856610": {
+   "label": "Turó del Castell",
+   "sitelinks": 7
+  },
+  "Q7856606": {
+   "label": "Turó de Tagamanent",
+   "sitelinks": 7
+  },
+  "Q17482898": {
+   "label": "Puig d'Ossa",
+   "sitelinks": 7
+  },
+  "Q7259033": {
+   "label": "Puig de la Mola",
+   "sitelinks": 7
+  },
+  "Q6904469": {
+   "label": "Montau",
+   "sitelinks": 7
+  },
+  "Q8531595": {
+   "label": "la Morella",
+   "sitelinks": 7
+  },
+  "Q17481883": {
+   "label": "Turó de la Dona Morta",
+   "sitelinks": 6
+  },
+  "Q7856609": {
+   "label": "Turó de la Creu de Gurb",
+   "sitelinks": 6
+  },
+  "Q7259016": {
+   "label": "Puig Castellar",
+   "sitelinks": 6
+  },
+  "Q7353669": {
+   "label": "Roc de la Guàrdia",
+   "sitelinks": 6
+  },
+  "Q5367368": {
+   "label": "els Munts",
+   "sitelinks": 6
+  },
+  "Q6904618": {
+   "label": "Montdois",
+   "sitelinks": 6
+  },
+  "Q4884080": {
+   "label": "Bellmunt",
+   "sitelinks": 6
+  },
+  "Q5131098": {
+   "label": "Puig de l'Àliga",
+   "sitelinks": 6
+  },
+  "Q5015822": {
+   "label": "Cabrera",
+   "sitelinks": 6
+  },
+  "Q7353671": {
+   "label": "Roca Centella",
+   "sitelinks": 6
+  },
+  "Q7856603": {
+   "label": "Turó de Morou",
+   "sitelinks": 6
+  },
+  "Q5352208": {
+   "label": "el Sui",
+   "sitelinks": 6
+  },
+  "Q2666055": {
+   "label": "serra de Granera",
+   "sitelinks": 6
+  },
+  "Q7856602": {
+   "label": "Turó Gros",
+   "sitelinks": 6
+  },
+  "Q7856605": {
+   "label": "Turó de Sant Elies",
+   "sitelinks": 6
+  },
+  "Q11953660": {
+   "label": "Turó de la Rovira",
+   "sitelinks": 6
+  },
+  "Q8538595": {
+   "label": "turó del Carmel",
+   "sitelinks": 6
+  }
+ }
+}

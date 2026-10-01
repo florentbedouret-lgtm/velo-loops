@@ -110,7 +110,8 @@ TARGET_OFFSET_DEG = 45.0
 TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement) ; +2 si lieu remarquable
 # Lieux remarquables (01/10/2026, Florent : « le Tibidabo, panorama sur Barcelone, devrait être encouragé, sans que tous les
 # parcours y passent » ; 51 boucles sur 5 865 dans un rayon de 20 km y passaient, dont 44 partant du sommet) : sommets,
-# belvédères et cols d'OSM ayant un article Wikipédia ; tirages ciblés et bonus modéré dans la note.
+# belvédères et cols d'OSM dont l'élément Wikidata a au moins 6 articles Wikipédia (scripts/remarkable_places.json, 43
+# lieux : Montserrat, Tibidabo, Montjuïc, Turó de l'Home, Bunkers del Carmel…) ; tirages ciblés et bonus modéré.
 REMARKABLE_NEAR_DEG = 0.0015    # ~130 m du tracé
 REMARKABLE_BONUS = 0.05         # 5 points par lieu
 REMARKABLE_MAX_BONUS = 0.08
@@ -532,6 +533,12 @@ def load_pois(pbf: Path, workdir: Path):
     subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"], check=True,
                    capture_output=True)
     kinds = {"w": [], "c": [], "g": [], "pass": [], "peak": [], "lieu": []}
+    # lieux remarquables : scripts/remarkable_places.json (Wikidata, au moins 6 articles Wikipédia ; sonde #163 : le simple
+    # « a un article Wikipédia » retenait 63 petits turons de Catalogne, 239 boucles sur 459, le Tibidabo 2 fois seulement)
+    try:
+        remarkable = set(json.loads((Path(__file__).parent / "remarkable_places.json").read_text(encoding="utf-8"))["places"])
+    except (OSError, ValueError, KeyError):
+        remarkable = set()
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -545,9 +552,9 @@ def load_pois(pbf: Path, workdir: Path):
             p = feat.get("properties", {})
             pt = geom if geom.geom_type == "Point" else geom.centroid
             name = p.get("name")
-            if name and p.get("wikipedia") and (p.get("natural") == "peak" or p.get("tourism") == "viewpoint"
-                                                or p.get("mountain_pass") == "yes"):
-                kinds["lieu"].append((pt, name))           # lieu remarquable (article Wikipédia) : tirages ciblés, bonus
+            if name and p.get("wikidata") in remarkable and (p.get("natural") in ("peak", "saddle")
+                                                              or p.get("tourism") == "viewpoint" or p.get("mountain_pass") == "yes"):
+                kinds["lieu"].append((pt, name))           # lieu remarquable (liste Wikidata) : tirages ciblés, bonus
             if p.get("amenity") == "drinking_water" or (p.get("amenity") == "fountain" and p.get("drinking_water") == "yes"):
                 kinds["w"].append((pt, name))
             elif p.get("amenity") == "cafe" or p.get("shop") == "bakery":
