@@ -85,7 +85,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: build-loops
+  # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
+  group: ${{ contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops' }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
