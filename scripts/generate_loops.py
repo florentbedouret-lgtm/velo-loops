@@ -1974,7 +1974,9 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
     if old is not None:                                   # même point, mêmes niveaux : reprendre ce qui est réutilisable
         try:
             prev = _read_json(REUSE["src"], f"web/data/starts/{old['id']}.json")
-            have = {float(d) for d in old.get("durations_h", [])}
+            # durées déjà essayées, AVEC ou SANS boucle (01/10/2026 : run #159, 275 départs recalculaient à chaque relance
+            # les durées sans aucune boucle, alors que le résultat, à paramètres égaux, reste vide)
+            have = {float(d) for d in old.get("durations_h", [])} | {float(d) for d in old.get("durations_tried", [])}
             reusable = {float(d) for d in durations} & have
             opts = [o for o in prev["options"] if o["level"] in levels and
                     round(o["duration_target_min"] / 60, 4) in reusable]
@@ -1995,7 +1997,8 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
                              **({"municipality": st["municipality"]} if st.get("municipality") else {}),
                              **start_alt(options),
                              "options": len(options), "durations_h": sorted(float(k) for k in by_dur),
-                             "options_by_duration": by_dur, "compare": compare_block(options), "reused": True}
+                             "options_by_duration": by_dur, "compare": compare_block(options), "reused": True,
+                             "durations_tried": sorted(have | {float(d) for d in durations})}
                     log(f"- {st['name']} : réutilisé en entier (calculé le {old['computed_at']})")
                     return entry, buf, time.time() - t0
                 log(f"- {st['name']} : {len(reusable)}/{len(durations)} durée(s) réutilisée(s) "
@@ -2040,6 +2043,8 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
              **({"municipality": st["municipality"]} if st.get("municipality") else {}),
              **start_alt(options),
              "options": len(options), "durations_h": sorted(float(k) for k in by_dur), "options_by_duration": by_dur,
+             "durations_tried": sorted({float(d) for d in durations} | ({float(d) for d in reused_entry.get("durations_tried", [])}
+                                                                       if reused_entry else set())),
              "compare": compare_block(options), "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "compute_seconds": round(time.time() - t0, 1), "compute_seconds_by_duration": dur_seconds}
     log(f"  {len(options)} options, durées disponibles : {', '.join(by_dur)} h ({time.time() - t0:.0f} s)")
