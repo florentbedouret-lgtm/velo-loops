@@ -16,6 +16,10 @@ document.head.insertAdjacentHTML('beforeend', '<style>' +
   '.fb button{font:inherit;font-size:16px;padding:10px 14px;border:1px solid var(--color-text);border-radius:var(--radius-sm);' +
   'background:var(--color-surface);color:var(--color-text);margin:8px 8px 8px 0;cursor:pointer}' +
   '.fb button.sec{border-color:var(--color-border);color:var(--color-text-2)}' +
+  '.fb .fb-r{margin:6px 0}.fb .fb-pills{display:flex;gap:8px;margin-top:6px}' +
+  '.fb button.fb-pill{width:44px;height:44px;margin:0;padding:0;border-radius:22px;border-color:var(--color-border);' +
+  'font-family:var(--font-mono);font-size:15px}' +
+  '.fb button.fb-pill[aria-pressed=true]{background:var(--color-text);border-color:var(--color-text);color:#fff}' +
   '</style>');
 
 function fbLoad() {
@@ -33,8 +37,11 @@ function feedbackHtml(o) {
   const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   return '<details><summary>' + e(t('fb_title')) + '</summary>' +
     '<div class="fb">' +
-    '<label>' + e(t('fb_rating')) + '<select id="fb-rating"><option value="">' + e(t('fb_choose')) + '</option>' +
-    [1, 2, 3, 4, 5].map(n => '<option value="' + n + '">' + '★'.repeat(n) + '</option>').join('') + '</select></label>' +
+    // note : cinq pastilles de 44 px sur une ligne (brief v3), valeur gardée dans un champ caché
+    '<div class="fb-r"><span>' + e(t('fb_rating')) + '</span><input type="hidden" id="fb-rating" value="">' +
+    '<div class="fb-pills" role="group" aria-label="' + e(t('fb_rating')) + '">' +
+    [1, 2, 3, 4, 5].map(n => '<button type="button" class="fb-pill" aria-pressed="false" onclick="fbRate(this,' + n + ')">' + n +
+      '</button>').join('') + '</div></div>' +
     '<label>' + e(t('fb_min')) + '<input id="fb-min" type="number" inputmode="numeric" min="1"></label>' +
     '<label>' + e(t('fb_asc')) + '<input id="fb-asc" type="number" inputmode="numeric" min="0"></label>' +
     '<label>' + e(t('fb_diff')) + '<select id="fb-diff"><option value="">' + e(t('fb_choose')) + '</option>' +
@@ -49,6 +56,11 @@ function feedbackHtml(o) {
     '<button class="sec" onclick="exportFeedback()">' + e(t('fb_export')) + '</button>' +
     '<button class="sec" onclick="clearFeedback()">' + e(t('fb_clear')) + '</button>' +
     '</div></details>';
+}
+
+function fbRate(btn, n) {
+  document.getElementById('fb-rating').value = String(n);
+  btn.parentNode.querySelectorAll('.fb-pill').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
 }
 
 function saveFeedback() {
