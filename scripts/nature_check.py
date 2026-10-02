@@ -736,6 +736,7 @@ def main() -> int:
     ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
     ap.add_argument("--retouch", action="store_true", help="mesure la retouche des meilleures boucles (RETOUCH)")
+    ap.add_argument("--lacets", action="store_true", help="essai : les lacets ne comptent pas comme demi-tours (filtre et note)")
     ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
@@ -751,6 +752,7 @@ def main() -> int:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
     global RETOUCH
     RETOUCH = args.retouch
+    g.UTURN_LACETS_OK = args.lacets
     if args.compare_refs:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))

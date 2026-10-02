@@ -119,7 +119,14 @@ RETOUCH_REACH = 0.15             # lieu attrayant à au plus 15 % de la longueur
 RETOUCH_REACH_MIN_KM = 2.0       # … et jamais moins de 2 km
 RETOUCH_MIN_RUN_KM = 1.0         # tronçon de rivière ou de mer suivi : au moins 1 km
 RETOUCH_ON_ROUTE_DEG = 0.003     # ~250 m : lieu déjà sur la boucle, rien à retoucher
-RETOUCH_MAX_TRIALS = 16          # variantes essayées par boucle (une requête GraphHopper chacune)
+RETOUCH_MAX_TRIALS = 24          # variantes essayées par boucle (une requête GraphHopper chacune)
+RETOUCH_ANCHOR_SHIFT_M = 300.0   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
+# Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
+# Un vrai demi-tour reprend la même rue à l'envers : le tracé 30 m après passe à moins de UTURN_SAME_STREET_M de celui
+# 30 m avant. Essai (diagnostic --lacets) : UTURN_LACETS_OK vrai compte seulement ceux-là (filtre ET note) ; la production
+# compte encore tous les virages >= 150°.
+UTURN_SAME_STREET_M = 8.0
+UTURN_LACETS_OK = False
 TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement) ; +2 si lieu remarquable
 # Lieux remarquables (01/10/2026, Florent : « le Tibidabo, panorama sur Barcelone, devrait être encouragé, sans que tous les
 # parcours y passent » ; 51 boucles sur 5 865 dans un rayon de 20 km y passaient, dont 44 partant du sommet) : sommets,
@@ -1217,7 +1224,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     }
     surface_mix["unknown"] = max(0.0, 1.0 - sum(surface_mix.values()))
     terrain = slope_stats(ds, prof)
-    u_turns = count_uturns(coords)
+    u_turns = true_uturns(coords) if UTURN_LACETS_OK else count_uturns(coords)
     scenery = LANDSCAPE.measure(coords, cum) if LANDSCAPE is not None else None
     exit_dense = None
     ud = det.get("urban_density") or []
@@ -1494,17 +1501,28 @@ def nearest_attraction(cat: str, lon: float, lat: float, max_km: float):
     return best
 
 
+def true_uturns(coords) -> int:
+    """Demi-tours qui reprennent la même rue à l'envers (voir UTURN_SAME_STREET_M) : les lacets ne comptent pas."""
+    return sum(1 for u in uturn_points(coords) if u[2] < UTURN_SAME_STREET_M)
+
+
 def loop_anchors(l) -> list:
-    """Points de passage d'une boucle : ses points à RETOUCH_ANCHORS de la distance."""
+    """Points de passage d'une boucle : ses points à RETOUCH_ANCHORS de la distance, décalés de RETOUCH_ANCHOR_SHIFT_M
+    plus loin s'ils tombent à moins de 150 m d'un vrai demi-tour de la boucle (impasse : le calcul y referait demi-tour)."""
     c = l.coords
     cum = [0.0]
     for a, b in zip(c, c[1:]):
         cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
+    bad = [u for u in uturn_points(c) if u[2] < UTURN_SAME_STREET_M]
     out, j = [], 0
     for f in RETOUCH_ANCHORS:
         while j < len(cum) - 1 and cum[j] < f * cum[-1]:
             j += 1
-        out.append([c[j][0], c[j][1]])
+        k = j
+        if any(haversine(c[k][0], c[k][1], u[0], u[1]) < 150.0 for u in bad):
+            while k < len(cum) - 1 and cum[k] < cum[j] + RETOUCH_ANCHOR_SHIFT_M:
+                k += 1
+        out.append([c[k][0], c[k][1]])
     return out
 
 
@@ -1539,11 +1557,20 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 if not last:
                     trials.append((0, f"{desc} {i}-{i + 2} (saute {i + 1})", anchors[:i + 1] + mid + anchors[i + 2:]))
             for cat in ("riviere", "mer"):                    # suivre l'eau entre P et Q (puis Q, ou directement la suite)
-                e, x = nearest_attraction(cat, P[0], P[1], reach), nearest_attraction(cat, Q[0], Q[1], reach)
-                if e and not on_route(e):                     # entrée seule : on rejoint ensuite librement la suite (le
+                e = nearest_attraction(cat, P[0], P[1], reach)
+                if not e:
+                    continue
+                if not on_route(e):                           # entrée seule : on rejoint ensuite librement la suite (le
                     add(f"{cat} entrée seule {e[1]:.4f},{e[0]:.4f}", [list(e[:2])])   # long de l'eau si c'est le plus direct)
-                if (e and x and haversine(e[0], e[1], x[0], x[1]) >= RETOUCH_MIN_RUN_KM * 1000.0
-                        and not (on_route(e) and on_route(x))):
+                Q2 = anchors[i + 2] if not last else Q
+                exits = []                                    # sorties : près de Q, près du point d'après, à mi-chemin
+                for R in (Q, Q2, [(e[0] + Q2[0]) / 2.0, (e[1] + Q2[1]) / 2.0], [(e[0] + Q[0]) / 2.0, (e[1] + Q[1]) / 2.0]):
+                    x = nearest_attraction(cat, R[0], R[1], reach)
+                    if (x and haversine(e[0], e[1], x[0], x[1]) >= RETOUCH_MIN_RUN_KM * 1000.0
+                            and not (on_route(e) and on_route(x))
+                            and all(haversine(x[0], x[1], y[0], y[1]) > 500.0 for y in exits)):
+                        exits.append(x)
+                for x in exits:
                     add(f"{cat} entrée {e[1]:.4f},{e[0]:.4f} sortie {x[1]:.4f},{x[0]:.4f}", [list(e[:2]), list(x[:2])])
             M = [(P[0] + Q[0]) / 2.0, (P[1] + Q[1]) / 2.0]
             for cat in ("vert", "lieu"):                      # passer par un espace vert ou un lieu remarquable proche
