@@ -1488,8 +1488,9 @@ def loop_anchors(l) -> list:
     return out
 
 
-def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None) -> list:
-    """Variantes des meilleures boucles du pool (voir RETOUCH) : seulement celles qui ont une meilleure note."""
+def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, detail=None) -> list:
+    """Variantes des meilleures boucles du pool (voir RETOUCH) : seulement celles qui ont une meilleure note. detail :
+    liste qui reçoit une ligne par essai (diagnostic)."""
     import shapely
     if not pool:
         return []
@@ -1516,28 +1517,46 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None) -> l
                 if (e and x and haversine(e[0], e[1], x[0], x[1]) >= RETOUCH_MIN_RUN_KM * 1000.0
                         and not (on_route(e) and on_route(x))):
                     mid = [list(e[:2]), list(x[:2])]
-                    trials.append(anchors[:i + 1] + mid + anchors[i + 1:])
+                    pts = f"entrée {e[1]:.4f},{e[0]:.4f} sortie {x[1]:.4f},{x[0]:.4f}"
+                    trials.append((f"{cat} {i}-{i + 1} {pts}", anchors[:i + 1] + mid + anchors[i + 1:]))
                     if not last:
-                        trials.append(anchors[:i + 1] + mid + anchors[i + 2:])
+                        trials.append((f"{cat} {i}-{i + 2} (saute {i + 1}) {pts}", anchors[:i + 1] + mid + anchors[i + 2:]))
             M = [(P[0] + Q[0]) / 2.0, (P[1] + Q[1]) / 2.0]
             for cat in ("vert", "lieu"):                      # passer par un espace vert ou un lieu remarquable proche
                 p = nearest_attraction(cat, M[0], M[1], reach)
                 if p and not on_route(p):
-                    trials.append(anchors[:i + 1] + [list(p[:2])] + anchors[i + 1:])
+                    pts = f"{p[1]:.4f},{p[0]:.4f}"
+                    trials.append((f"{cat} {i}-{i + 1} {pts}", anchors[:i + 1] + [list(p[:2])] + anchors[i + 1:]))
                     if not last:
-                        trials.append(anchors[:i + 1] + [list(p[:2])] + anchors[i + 2:])
-        for k, way in enumerate(trials[:RETOUCH_MAX_TRIALS]):
+                        trials.append((f"{cat} {i}-{i + 2} (saute {i + 1}) {pts}",
+                                       anchors[:i + 1] + [list(p[:2])] + anchors[i + 2:]))
+        if detail is not None:
+            detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
+                          f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
+                          + " ; ".join(f"{i}: {a[1]:.4f},{a[0]:.4f}" for i, a in enumerate(anchors[1:-1], start=1))
+                          + f" ; {len(trials)} essai(s) possibles, {min(len(trials), RETOUCH_MAX_TRIALS)} faits")
+        for k, (desc, way) in enumerate(trials[:RETOUCH_MAX_TRIALS]):
             n_try += 1
             path = gh.via(way, base.profile)
             loop = analyse(path, level, base.profile, duration_h, 1000 + 100 * bi + k, None) if path else None
-            if loop is None or abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
-                continue
-            if loop.overlap > MAX_OVERLAP or loop.u_turns > MAX_UTURNS:
-                continue
-            if loop.shares["unpaved"] > MAX_UNPAVED:
-                continue
-            if loop.score > base.score:
+            why = None
+            if loop is None:
+                why = "pas d'itinéraire" if path is None else "boucle invalide"
+            elif abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
+                why = "durée"
+            elif loop.overlap > MAX_OVERLAP or loop.u_turns > MAX_UTURNS:
+                why = "tronçons répétés ou demi-tours"
+            elif loop.shares["unpaved"] > MAX_UNPAVED:
+                why = "terre"
+            elif loop.score <= base.score:
+                why = "note plus basse"
+            else:
                 found.append(loop)
+            if detail is not None:
+                detail.append(f"  {desc} -> " + ("" if loop is None else
+                              f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, eau "
+                              f"{((loop.scenery or {}).get('landcover') or {}).get('water', 0):.0%}, industriel "
+                              f"{(loop.scenery or {}).get('industrial', 0):.0%} : ") + (why or "GARDÉE"))
     log(f"    retouche : {len(found)} variante(s) meilleure(s) sur {n_try} essai(s)")
     return found
 

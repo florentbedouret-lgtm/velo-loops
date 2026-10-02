@@ -676,7 +676,8 @@ def run_compare(refs_path, site, gh_url, level, duration):
         out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle")})
     pool = g.level_pool(gh, st_, level, duration, g.CANDIDATES, lambda *_: None)
     if RETOUCH:
-        pool = pool + g.retouch_candidates(gh, st_, level, duration, pool, print)
+        out["retouch_trials"] = []
+        pool = pool + g.retouch_candidates(gh, st_, level, duration, pool, print, detail=out["retouch_trials"])
     picks = g.choose_options(gh, st_, level, duration, pool, [], lambda *_: None)
     out["pool"] = sorted((summary(l) for l in pool), key=lambda x: -x["score"])
     out["picks"] = [{"label": lab, **summary(l)} for lab, l in picks]
@@ -703,6 +704,8 @@ def report_compare(res, out_json, out_md, note, t0):
     L += [f"\n## Tous les candidats valides tirés par la production ({len(res['pool'])}), du meilleur au moins bon", "",
           head, "|---" * (len(cols) + 1) + "|"]
     L += [row(f"candidat {k + 1}", p) for k, p in enumerate(res["pool"])]
+    if res.get("retouch_trials"):
+        L += ["\n## Retouche : détail des essais", "", "```", *res["retouch_trials"], "```"]
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L[:30]), flush=True)
 
