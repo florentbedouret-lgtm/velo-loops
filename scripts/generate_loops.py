@@ -1512,24 +1512,25 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
         for i in range(len(anchors) - 1):
             P, Q = anchors[i], anchors[i + 1]
             last = i + 1 == len(anchors) - 1
+            # essais qui sautent le point suivant d'abord (priorité 0) : un détour ajouté sans rien retirer dépasse
+            # souvent la durée (diagnostic la Plata, 02/10/2026)
+            def add(desc, mid):
+                trials.append((1, f"{desc} {i}-{i + 1}", anchors[:i + 1] + mid + anchors[i + 1:]))
+                if not last:
+                    trials.append((0, f"{desc} {i}-{i + 2} (saute {i + 1})", anchors[:i + 1] + mid + anchors[i + 2:]))
             for cat in ("riviere", "mer"):                    # suivre l'eau entre P et Q (puis Q, ou directement la suite)
                 e, x = nearest_attraction(cat, P[0], P[1], reach), nearest_attraction(cat, Q[0], Q[1], reach)
+                if e and not on_route(e):                     # entrée seule : on rejoint ensuite librement la suite (le
+                    add(f"{cat} entrée seule {e[1]:.4f},{e[0]:.4f}", [list(e[:2])])   # long de l'eau si c'est le plus direct)
                 if (e and x and haversine(e[0], e[1], x[0], x[1]) >= RETOUCH_MIN_RUN_KM * 1000.0
                         and not (on_route(e) and on_route(x))):
-                    mid = [list(e[:2]), list(x[:2])]
-                    pts = f"entrée {e[1]:.4f},{e[0]:.4f} sortie {x[1]:.4f},{x[0]:.4f}"
-                    trials.append((f"{cat} {i}-{i + 1} {pts}", anchors[:i + 1] + mid + anchors[i + 1:]))
-                    if not last:
-                        trials.append((f"{cat} {i}-{i + 2} (saute {i + 1}) {pts}", anchors[:i + 1] + mid + anchors[i + 2:]))
+                    add(f"{cat} entrée {e[1]:.4f},{e[0]:.4f} sortie {x[1]:.4f},{x[0]:.4f}", [list(e[:2]), list(x[:2])])
             M = [(P[0] + Q[0]) / 2.0, (P[1] + Q[1]) / 2.0]
             for cat in ("vert", "lieu"):                      # passer par un espace vert ou un lieu remarquable proche
                 p = nearest_attraction(cat, M[0], M[1], reach)
                 if p and not on_route(p):
-                    pts = f"{p[1]:.4f},{p[0]:.4f}"
-                    trials.append((f"{cat} {i}-{i + 1} {pts}", anchors[:i + 1] + [list(p[:2])] + anchors[i + 1:]))
-                    if not last:
-                        trials.append((f"{cat} {i}-{i + 2} (saute {i + 1}) {pts}",
-                                       anchors[:i + 1] + [list(p[:2])] + anchors[i + 2:]))
+                    add(f"{cat} {p[1]:.4f},{p[0]:.4f}", [list(p[:2])])
+        trials = [t[1:] for t in sorted(trials, key=lambda t: t[0])]   # tri stable : ordre des tronçons gardé
         if detail is not None:
             detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
@@ -1544,8 +1545,10 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 why = "pas d'itinéraire" if path is None else "boucle invalide"
             elif abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
                 why = "durée"
-            elif loop.overlap > MAX_OVERLAP or loop.u_turns > MAX_UTURNS:
-                why = "tronçons répétés ou demi-tours"
+            elif loop.overlap > MAX_OVERLAP:
+                why = f"tronçons répétés ({loop.overlap:.0%})"
+            elif loop.u_turns > MAX_UTURNS:
+                why = f"demi-tours ({loop.u_turns})"
             elif loop.shares["unpaved"] > MAX_UNPAVED:
                 why = "terre"
             elif loop.score <= base.score:
