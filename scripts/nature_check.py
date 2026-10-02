@@ -393,9 +393,10 @@ def run_probe(sid, site, gh_url, durations, levels):
         for level in sorted(levels, key=list(g.LEVELS).index):
             pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
             base_best = max((l.score for l in pool), default=None)
-            t_r = time.time()
+            t_r, det, found = time.time(), [], []
             if RETOUCH:                                    # retouche mesurée à part (temps, gain de note)
-                pool = pool + g.retouch_candidates(gh, st_, level, d, pool, lambda *_: None)
+                found = g.retouch_candidates(gh, st_, level, d, pool, lambda *_: None, detail=det)
+                pool = pool + found
             t_r = time.time() - t_r
             picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
             prior += [l for _, l in picks]
@@ -405,7 +406,11 @@ def run_probe(sid, site, gh_url, durations, levels):
             old = [option_row(o) for o in pub["options"]
                    if o["level"] == level and round(o["duration_target_min"]) == round(d * 60)]
             rows.append({"duration_h": d, "level": level, "published": old, "new": new, "valid": len(pool),
-                         "base_best": None if base_best is None else round(base_best, 1), "retouch_s": round(t_r, 1)})
+                         "base_best": None if base_best is None else round(base_best, 1), "retouch_s": round(t_r, 1),
+                         # pour simuler des réglages moins coûteux : variantes gardées (tirage = 1000 + 100 × boucle + rang de
+                         # l'essai) et essais faits
+                         "retouch_found": [[l.seed, round(l.score, 1)] for l in found],
+                         "retouch_trials": sum(1 for x in det if x.startswith("  "))})
     return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
 
 
