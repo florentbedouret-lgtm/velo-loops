@@ -119,7 +119,15 @@ RETOUCH_REACH = 0.15             # lieu attrayant à au plus 15 % de la longueur
 RETOUCH_REACH_MIN_KM = 2.0       # … et jamais moins de 2 km
 RETOUCH_MIN_RUN_KM = 1.0         # tronçon de rivière ou de mer suivi : au moins 1 km
 RETOUCH_ON_ROUTE_DEG = 0.003     # ~250 m : lieu déjà sur la boucle, rien à retoucher
-RETOUCH_MAX_TRIALS = 24          # variantes essayées par boucle (une requête GraphHopper chacune)
+RETOUCH_MAX_TRIALS = 10          # variantes essayées par boucle (une requête GraphHopper chacune) ; sonde du 02/10/2026
+# (16 départs, tous les essais) : 10 essais triés par rentabilité gardent 122 des 135 améliorations, pour 30 % des essais
+# Types d'essais du plus au moins rentable (gain de note par essai, même sonde) : on essaie d'abord ceux-là
+RETOUCH_KIND_ORDER = ["mer/sortie-mi-Q/garde", "lieu/saute", "lieu/garde", "mer/sortie-Q/saute", "mer/sortie-mi-Q/saute",
+                      "mer/seule/garde", "mer/seule/saute", "mer/sortie-Q/garde", "mer/sortie-mi-Q2/garde",
+                      "riviere/seule/garde", "mer/sortie-mi-Q2/saute", "vert/garde", "riviere/seule/saute", "vert/saute",
+                      "riviere/sortie-Q/saute", "mer/sortie-Q2/saute", "riviere/sortie-mi-Q/saute", "riviere/sortie-Q/garde",
+                      "riviere/sortie-mi-Q/garde", "riviere/sortie-mi-Q2/garde", "riviere/sortie-mi-Q2/saute",
+                      "riviere/sortie-Q2/saute", "mer/sortie-Q2/garde", "riviere/sortie-Q2/garde"]
 RETOUCH_ANCHOR_SHIFT_M = 300.0   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
 # Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
 # Un vrai demi-tour reprend la même rue à l'envers : le tracé 30 m après passe à moins de UTURN_SAME_STREET_M de celui
@@ -1581,7 +1589,8 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 p = nearest_attraction(cat, M[0], M[1], reach)
                 if p and not on_route(p):
                     add(f"{cat} {p[1]:.4f},{p[0]:.4f}", [list(p[:2])], cat)
-        trials = [t[1:] for t in sorted(trials, key=lambda t: t[0])]   # tri stable : ordre des tronçons gardé
+        rank = {k: n for n, k in enumerate(RETOUCH_KIND_ORDER)}   # plus rentables d'abord ; tri stable : ordre des tronçons
+        trials = [t[1:] for t in sorted(trials, key=lambda t: rank.get(t[3], len(rank)))]
         if detail is not None:
             detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
