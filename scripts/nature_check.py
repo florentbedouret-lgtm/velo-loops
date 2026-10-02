@@ -393,9 +393,9 @@ def run_probe(sid, site, gh_url, durations, levels):
         for level in sorted(levels, key=list(g.LEVELS).index):
             pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
             base_best = max((l.score for l in pool), default=None)
-            t_r, det, found = time.time(), [], []
+            t_r, det, found, rstats = time.time(), [], [], []
             if RETOUCH:                                    # retouche mesurée à part (temps, gain de note)
-                found = g.retouch_candidates(gh, st_, level, d, pool, lambda *_: None, detail=det)
+                found = g.retouch_candidates(gh, st_, level, d, pool, lambda *_: None, detail=det, stats=rstats)
                 pool = pool + found
             t_r = time.time() - t_r
             picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
@@ -410,7 +410,7 @@ def run_probe(sid, site, gh_url, durations, levels):
                          # pour simuler des réglages moins coûteux : variantes gardées (tirage = 1000 + 100 × boucle + rang de
                          # l'essai) et essais faits
                          "retouch_found": [[l.seed, round(l.score, 1)] for l in found],
-                         "retouch_trials": sum(1 for x in det if x.startswith("  "))})
+                         "retouch_trials": sum(1 for x in det if x.startswith("  ")), "retouch_stats": rstats})
     return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
 
 
@@ -741,6 +741,7 @@ def main() -> int:
     ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
     ap.add_argument("--retouch", action="store_true", help="mesure la retouche des meilleures boucles (RETOUCH)")
+    ap.add_argument("--retouch-trials", type=int, default=None, help="essais de retouche par boucle (RETOUCH_MAX_TRIALS)")
     ap.add_argument("--lacets", action="store_true", help="essai : les lacets ne comptent pas comme demi-tours (filtre et note)")
     ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
     ap.add_argument("--references", default=None,
@@ -758,6 +759,8 @@ def main() -> int:
     global RETOUCH
     RETOUCH = args.retouch
     g.UTURN_LACETS_OK = args.lacets
+    if args.retouch_trials:
+        g.RETOUCH_MAX_TRIALS = args.retouch_trials
     if args.compare_refs:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))

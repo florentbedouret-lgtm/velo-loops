@@ -1526,7 +1526,7 @@ def loop_anchors(l) -> list:
     return out
 
 
-def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, detail=None) -> list:
+def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, detail=None, stats=None) -> list:
     """Variantes des meilleures boucles du pool (voir RETOUCH) : seulement celles qui ont une meilleure note. detail :
     liste qui reçoit une ligne par essai (diagnostic)."""
     import shapely
@@ -1552,38 +1552,42 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
             last = i + 1 == len(anchors) - 1
             # essais qui sautent le point suivant d'abord (priorité 0) : un détour ajouté sans rien retirer dépasse
             # souvent la durée (diagnostic la Plata, 02/10/2026)
-            def add(desc, mid):
-                trials.append((1, f"{desc} {i}-{i + 1}", anchors[:i + 1] + mid + anchors[i + 1:]))
+            def add(desc, mid, kind):
+                trials.append((1, f"{desc} {i}-{i + 1}", anchors[:i + 1] + mid + anchors[i + 1:], kind + "/garde"))
                 if not last:
-                    trials.append((0, f"{desc} {i}-{i + 2} (saute {i + 1})", anchors[:i + 1] + mid + anchors[i + 2:]))
+                    trials.append((0, f"{desc} {i}-{i + 2} (saute {i + 1})", anchors[:i + 1] + mid + anchors[i + 2:],
+                                   kind + "/saute"))
             for cat in ("riviere", "mer"):                    # suivre l'eau entre P et Q (puis Q, ou directement la suite)
                 e = nearest_attraction(cat, P[0], P[1], reach)
                 if not e:
                     continue
                 if not on_route(e):                           # entrée seule : on rejoint ensuite librement la suite (le
-                    add(f"{cat} entrée seule {e[1]:.4f},{e[0]:.4f}", [list(e[:2])])   # long de l'eau si c'est le plus direct)
+                    add(f"{cat} entrée seule {e[1]:.4f},{e[0]:.4f}", [list(e[:2])], f"{cat}/seule")   # (le long de l'eau
+                    # si c'est le plus direct)
                 Q2 = anchors[i + 2] if not last else Q
                 exits = []                                    # sorties : près de Q, près du point d'après, à mi-chemin
-                for R in (Q, Q2, [(e[0] + Q2[0]) / 2.0, (e[1] + Q2[1]) / 2.0], [(e[0] + Q[0]) / 2.0, (e[1] + Q[1]) / 2.0]):
+                for tag, R in (("Q", Q), ("Q2", Q2), ("mi-Q2", [(e[0] + Q2[0]) / 2.0, (e[1] + Q2[1]) / 2.0]),
+                               ("mi-Q", [(e[0] + Q[0]) / 2.0, (e[1] + Q[1]) / 2.0])):
                     x = nearest_attraction(cat, R[0], R[1], reach)
                     if (x and haversine(e[0], e[1], x[0], x[1]) >= RETOUCH_MIN_RUN_KM * 1000.0
                             and not (on_route(e) and on_route(x))
-                            and all(haversine(x[0], x[1], y[0], y[1]) > 500.0 for y in exits)):
-                        exits.append(x)
-                for x in exits:
-                    add(f"{cat} entrée {e[1]:.4f},{e[0]:.4f} sortie {x[1]:.4f},{x[0]:.4f}", [list(e[:2]), list(x[:2])])
+                            and all(haversine(x[0], x[1], y[0], y[1]) > 500.0 for _, y in exits)):
+                        exits.append((tag, x))
+                for tag, x in exits:
+                    add(f"{cat} entrée {e[1]:.4f},{e[0]:.4f} sortie {x[1]:.4f},{x[0]:.4f}", [list(e[:2]), list(x[:2])],
+                        f"{cat}/sortie-{tag}")
             M = [(P[0] + Q[0]) / 2.0, (P[1] + Q[1]) / 2.0]
             for cat in ("vert", "lieu"):                      # passer par un espace vert ou un lieu remarquable proche
                 p = nearest_attraction(cat, M[0], M[1], reach)
                 if p and not on_route(p):
-                    add(f"{cat} {p[1]:.4f},{p[0]:.4f}", [list(p[:2])])
+                    add(f"{cat} {p[1]:.4f},{p[0]:.4f}", [list(p[:2])], cat)
         trials = [t[1:] for t in sorted(trials, key=lambda t: t[0])]   # tri stable : ordre des tronçons gardé
         if detail is not None:
             detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
                           + " ; ".join(f"{i}: {a[1]:.4f},{a[0]:.4f}" for i, a in enumerate(anchors[1:-1], start=1))
                           + f" ; {len(trials)} essai(s) possibles, {min(len(trials), RETOUCH_MAX_TRIALS)} faits")
-        for k, (desc, way) in enumerate(trials[:RETOUCH_MAX_TRIALS]):
+        for k, (desc, way, kind) in enumerate(trials[:RETOUCH_MAX_TRIALS]):
             n_try += 1
             path = gh.via(way, base.profile, pass_through=True)
             loop = analyse(path, level, base.profile, duration_h, 1000 + 100 * bi + k, None) if path else None
@@ -1602,6 +1606,8 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 why = "note plus basse"
             else:
                 found.append(loop)
+            if stats is not None:                            # diagnostic : quels essais rapportent
+                stats.append([kind, bi, k, why or "gardée", None if loop is None else round(loop.score - base.score, 1)])
             if detail is not None:
                 detail.append(f"  {desc} -> " + ("" if loop is None else
                               f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, eau "
