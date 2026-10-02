@@ -867,20 +867,38 @@ def slope_stats(ds, prof):
 
 def count_uturns(coords, min_seg=8.0, angle=150.0) -> int:
     """Demi-tours : inversions de cap >= 150° (impasses, aller-retour), en ignorant les micro-segments."""
+    return len(uturn_points(coords, min_seg, angle))
+
+
+def uturn_points(coords, min_seg=8.0, angle=150.0) -> list:
+    """Position de chaque demi-tour compté par count_uturns : (lon, lat, écart en m entre le tracé 30 m avant et 30 m
+    après ; ~0 = même rue reprise en sens inverse, quelques mètres = lacet ou voie parallèle)."""
     kept = [coords[0]]
     for c in coords[1:]:
         if haversine(kept[-1][0], kept[-1][1], c[0], c[1]) >= min_seg:
             kept.append(c)
-    n, i = 0, 1
+    n, i = [], 1
     while i < len(kept) - 1:
         b1 = bearing(kept[i - 1][0], kept[i - 1][1], kept[i][0], kept[i][1])
         b2 = bearing(kept[i][0], kept[i][1], kept[i + 1][0], kept[i + 1][1])
         if abs((b2 - b1 + 180) % 360 - 180) >= angle:
-            n += 1
+            n.append((kept[i][0], kept[i][1], _back_gap(kept, i)))
             i += 2
         else:
             i += 1
     return n
+
+
+def _back_gap(kept, i, d=30.0) -> float:
+    """Écart (m) entre le point du tracé d m avant le sommet i et celui d m après."""
+    def walk(step):
+        j, acc = i, 0.0
+        while 0 < j < len(kept) - 1 and acc < d:
+            acc += haversine(kept[j][0], kept[j][1], kept[j + step][0], kept[j + step][1])
+            j += step
+        return kept[j]
+    a, b = walk(-1), walk(1)
+    return round(haversine(a[0], a[1], b[0], b[1]), 1)
 
 
 def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_share: float,
@@ -1561,7 +1579,9 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 detail.append(f"  {desc} -> " + ("" if loop is None else
                               f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, eau "
                               f"{((loop.scenery or {}).get('landcover') or {}).get('water', 0):.0%}, industriel "
-                              f"{(loop.scenery or {}).get('industrial', 0):.0%} : ") + (why or "GARDÉE"))
+                              f"{(loop.scenery or {}).get('industrial', 0):.0%} : ") + (why or "GARDÉE")
+                              + ("" if loop is None or not loop.u_turns else " ; demi-tours (lat,lon,écart m) "
+                                 + " ".join(f"{u[1]:.5f},{u[0]:.5f},{u[2]:g}" for u in uturn_points(loop.coords))))
     log(f"    retouche : {len(found)} variante(s) meilleure(s) sur {n_try} essai(s)")
     return found
 

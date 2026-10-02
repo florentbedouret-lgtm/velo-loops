@@ -674,7 +674,8 @@ def run_compare(refs_path, site, gh_url, level, duration):
             loop = g.analyse(path, level, profile, duration, 800, None) if path else None
             if loop is not None and (best is None or loop.score > best.score):
                 best = loop
-        out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle")})
+        out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle"),
+                            "uturns_at": [list(u) for u in g.uturn_points(best.coords)] if best else []})
     pool = g.level_pool(gh, st_, level, duration, g.CANDIDATES, lambda *_: None)
     if RETOUCH:
         out["retouch_trials"] = []
@@ -700,6 +701,10 @@ def report_compare(res, out_json, out_md, note, t0):
          "\n## Références", "", head, "|---" * (len(cols) + 1) + "|"]
     for r in res["refs"]:
         L.append(row(r["name"], r["loop"]) if r["loop"] else f"| {r['name']} | {r['error']} |")
+    for r in res["refs"]:
+        if r.get("uturns_at"):
+            L.append(f"\n{r['name']} : {len(r['uturns_at'])} demi-tour(s) compté(s) (lat,lon,écart m) "
+                     + " ".join(f"{u[1]:.5f},{u[0]:.5f},{u[2]:g}" for u in r["uturns_at"]))
     L += ["\n## Options choisies par la production", "", head, "|---" * (len(cols) + 1) + "|"]
     L += [row(p["label"], p) for p in res["picks"]]
     L += [f"\n## Tous les candidats valides tirés par la production ({len(res['pool'])}), du meilleur au moins bon", "",
