@@ -758,7 +758,8 @@ def main() -> int:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
     global RETOUCH
     RETOUCH = args.retouch
-    g.UTURN_LACETS_OK = args.lacets
+    g.UTURN_LACETS_OK = args.lacets or g.UTURN_LACETS_OK   # v13 : déjà vrai en production
+    g.RETOUCH = False          # la retouche est appelée à part (--retouch) pour la mesurer ; pas deux fois via level_pool
     if args.retouch_trials:
         g.RETOUCH_MAX_TRIALS = args.retouch_trials
     if args.compare_refs:

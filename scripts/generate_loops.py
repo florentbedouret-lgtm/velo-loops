@@ -112,7 +112,7 @@ TARGET_OFFSET_DEG = 45.0
 # suivre la rivière ou la mer entre deux points de passage, ou passer par un espace vert ou un lieu remarquable proche. Une
 # variante n'est gardée que si sa note dépasse celle de la boucle de départ. Désactivée tant que RETOUCH est faux (le
 # diagnostic l'appelle directement pour la mesurer).
-RETOUCH = False
+RETOUCH = True                   # v13 (02/10/2026)
 RETOUCH_TOP = 2                  # boucles retouchées par durée et allure
 RETOUCH_ANCHORS = (0.2, 0.4, 0.6, 0.8)   # points de passage pris sur la boucle (part de la distance)
 RETOUCH_REACH = 0.15             # lieu attrayant à au plus 15 % de la longueur de la boucle d'un point de passage…
@@ -134,7 +134,7 @@ RETOUCH_ANCHOR_SHIFT_M = 300.0   # point de passage tombant sur un vrai demi-tou
 # 30 m avant. Essai (diagnostic --lacets) : UTURN_LACETS_OK vrai compte seulement ceux-là (filtre ET note) ; la production
 # compte encore tous les virages >= 150°.
 UTURN_SAME_STREET_M = 8.0
-UTURN_LACETS_OK = False
+UTURN_LACETS_OK = True           # v13 (02/10/2026)
 TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier profil seulement) ; +2 si lieu remarquable
 # Lieux remarquables (01/10/2026, Florent : « le Tibidabo, panorama sur Barcelone, devrait être encouragé, sans que tous les
 # parcours y passent » ; 51 boucles sur 5 865 dans un rayon de 20 km y passaient, dont 44 partant du sommet) : sommets,
@@ -2007,7 +2007,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "12"  # 12 : ville −25 % (2e sortie de Florent) ; montées à la manière des compteurs (≥ 500 m, ≥ 3 %,
+GENERATOR_VERSION = "13"  # 13 : retouche des meilleures boucles (rivière, mer, espace vert, lieu remarquable ;
+#                           10 essais triés par rentabilité) et lacets non comptés comme demi-tours (02/10/2026). 12 : ville −25 % (2e sortie de Florent) ; montées à la manière des compteurs (≥ 500 m, ≥ 3 %,
 #                           partie qui monte vraiment, catégories HC à 4) et raideur selon le km le plus raide (01/10/2026). 11 : ville comptée hors pistes sans voitures, tirages ciblés, terre au km, variante ≥ 70 %.
 #                           10 : revêtement complété par la base topographique ICGC (scripts/icgc_tag.py), terre évitée.
 #                           9 : pistes sans revêtement noté et sentiers hors ville évités, comptés non goudronnés ;
@@ -2071,7 +2072,10 @@ def params_hash(config_dir: str = "config") -> str:
                           RIDER_KG, LONG_RIDE_H, LONG_RIDE_DROP],
               "profile": [PROFILE_STEP_M, SMOOTH_WINDOW, ASCENT_THRESHOLD_M],
               **({"relief": [RELIEF_WEIGHTS, RELIEF_FULL_M_PER_KM]} if RELIEF_WEIGHTS else {}),
-              "level_dup": [LEVEL_DUP_SIM, "same_as"]}
+              "level_dup": [LEVEL_DUP_SIM, "same_as"],
+              "retouch": [RETOUCH, RETOUCH_TOP, RETOUCH_ANCHORS, RETOUCH_REACH, RETOUCH_REACH_MIN_KM, RETOUCH_MIN_RUN_KM,
+                          RETOUCH_ON_ROUTE_DEG, RETOUCH_MAX_TRIALS, RETOUCH_ANCHOR_SHIFT_M, RETOUCH_KIND_ORDER],
+              "uturns": [UTURN_LACETS_OK, UTURN_SAME_STREET_M]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     cfg = Path(config_dir)
     if cfg.exists():
