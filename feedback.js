@@ -17,9 +17,9 @@ document.head.insertAdjacentHTML('beforeend', '<style>' +
   'background:var(--color-surface);color:var(--color-text);margin:8px 8px 8px 0;cursor:pointer}' +
   '.fb button.sec{border-color:var(--color-border);color:var(--color-text-2)}' +
   '.fb .fb-r{margin:6px 0}.fb .fb-pills{display:flex;gap:8px;margin-top:6px}' +
-  '.fb button.fb-pill{width:44px;height:44px;margin:0;padding:0;border-radius:22px;border-color:var(--color-border);' +
-  'font-family:var(--font-mono);font-size:15px}' +
-  '.fb button.fb-pill[aria-pressed=true]{background:var(--color-text);border-color:var(--color-text);color:#fff}' +
+  '.fb .fb-pills{gap:2px}.fb button.fb-pill{width:44px;height:44px;margin:0;padding:0;border:0;background:none;' +
+  'font-size:30px;line-height:1;color:var(--color-border)}' +
+  '.fb button.fb-pill.on{color:var(--color-accent)}' +
   '</style>');
 
 function fbLoad() {
@@ -37,11 +37,11 @@ function feedbackHtml(o) {
   const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   return '<details><summary>' + e(t('fb_title')) + '</summary>' +
     '<div class="fb">' +
-    // note : cinq pastilles de 44 px sur une ligne (brief v3), valeur gardée dans un champ caché
+    // note : cinq étoiles de 44 px (Florent, 02/10/2026 : avec des chiffres, on ne savait pas si 1 ou 5 était le mieux)
     '<div class="fb-r"><span>' + e(t('fb_rating')) + '</span><input type="hidden" id="fb-rating" value="">' +
     '<div class="fb-pills" role="group" aria-label="' + e(t('fb_rating')) + '">' +
-    [1, 2, 3, 4, 5].map(n => '<button type="button" class="fb-pill" aria-pressed="false" onclick="fbRate(this,' + n + ')">' + n +
-      '</button>').join('') + '</div></div>' +
+    [1, 2, 3, 4, 5].map(n => '<button type="button" class="fb-pill" data-n="' + n + '" aria-pressed="false" aria-label="' +
+      e(t('fb_star', { n })) + '" onclick="fbRate(this,' + n + ')">★</button>').join('') + '</div></div>' +
     '<label>' + e(t('fb_min')) + '<input id="fb-min" type="number" inputmode="numeric" min="1"></label>' +
     '<label>' + e(t('fb_asc')) + '<input id="fb-asc" type="number" inputmode="numeric" min="0"></label>' +
     '<label>' + e(t('fb_diff')) + '<select id="fb-diff"><option value="">' + e(t('fb_choose')) + '</option>' +
@@ -60,7 +60,10 @@ function feedbackHtml(o) {
 
 function fbRate(btn, n) {
   document.getElementById('fb-rating').value = String(n);
-  btn.parentNode.querySelectorAll('.fb-pill').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  btn.parentNode.querySelectorAll('.fb-pill').forEach(b => {
+    b.setAttribute('aria-pressed', String(b === btn));
+    b.classList.toggle('on', Number(b.dataset.n) <= n);     // étoiles allumées jusqu'à la note choisie
+  });
 }
 
 function saveFeedback() {

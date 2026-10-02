@@ -1069,7 +1069,8 @@ def per_edge(det, n) -> list:
 
 
 def unpaved_edges(det, n) -> list:
-    """Par tronçon : 'u' non goudronné noté, 'p' probablement non goudronné (voir PROBABLE_UNPAVED_PATHS), '-' sinon."""
+    """Par tronçon : 'u' non goudronné noté, 'p' probablement non goudronné (voir PROBABLE_UNPAVED_PATHS), 'n' revêtement
+    non renseigné hors ville (surlignage seulement : en ville, ce sont presque toujours des rues goudronnées), '-' sinon."""
     rc, sf, tt, ud = (per_edge(det.get(k), n) for k in ("road_class", "surface", "track_type", "urban_density"))
     out = []
     for i in range(n):
@@ -1078,6 +1079,8 @@ def unpaved_edges(det, n) -> list:
         elif sf[i] in (None, "missing") and ((rc[i] == "track" and tt[i] != "grade1")
                                               or (rc[i] in PROBABLE_UNPAVED_PATHS and ud[i] == "rural")):
             out.append("p")
+        elif sf[i] in (None, "missing") and ud[i] == "rural":
+            out.append("n")
         else:
             out.append("-")
     return out
@@ -1930,7 +1933,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         "stop_signs": l.stops,
         "stop_signs_per_km": (None if l.stops is None else round(l.stops / max(l.distance_m / 1000.0, 0.1), 2)),
         "surface": {k: round(v, 3) for k, v in l.surface_mix.items()},
-        **({"surface_seq": l.surface_seq} if "u" in l.surface_seq or "p" in l.surface_seq else {}),
+        **({"surface_seq": l.surface_seq} if any(c in l.surface_seq for c in "upn") else {}),
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
         **({"targeted": True} if 900 <= l.seed < 1000 else {}),   # tirage ciblé (lieu attrayant), pour les diagnostics
