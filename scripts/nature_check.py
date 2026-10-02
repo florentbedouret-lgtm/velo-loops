@@ -54,9 +54,10 @@ PART_LABELS = {"calm": "calme (ville)", "lights": "feux", "axes": "grands axes",
 class GH(g.GraphHopper):
     """GraphHopper de production + itinéraire passant par des points imposés (candidats « vers le vert »)."""
 
-    def via(self, points, profile):
+    def via(self, points, profile, pass_through=False):
         body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
-                "elevation": True, "instructions": False, "details": g.DETAILS}
+                "elevation": True, "instructions": False, "details": g.DETAILS,
+                **({"pass_through": True} if pass_through else {})}
         try:
             r = self.http.post(f"{self.base}/route", json=body, timeout=120)
         except requests.RequestException as e:

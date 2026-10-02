@@ -917,10 +917,12 @@ class GraphHopper:
         d = r.json()
         return d["coordinates"][0], d["coordinates"][1], d.get("distance", 0.0)
 
-    def via(self, points, profile):
-        """Itinéraire passant par des points imposés (tirages ciblés), mêmes détails que round_trip."""
+    def via(self, points, profile, pass_through=False):
+        """Itinéraire passant par des points imposés (tirages ciblés), mêmes détails que round_trip. pass_through : pas de
+        demi-tour aux points de passage (retouche : points pris sur une boucle, parfois du mauvais côté d'une avenue)."""
         body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
-                "elevation": True, "instructions": False, "details": DETAILS}
+                "elevation": True, "instructions": False, "details": DETAILS,
+                **({"pass_through": True} if pass_through else {})}
         try:
             r = self.http.post(f"{self.base}/route", json=body, timeout=120)
         except requests.RequestException as e:
@@ -1538,11 +1540,11 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                           + f" ; {len(trials)} essai(s) possibles, {min(len(trials), RETOUCH_MAX_TRIALS)} faits")
         for k, (desc, way) in enumerate(trials[:RETOUCH_MAX_TRIALS]):
             n_try += 1
-            path = gh.via(way, base.profile)
+            path = gh.via(way, base.profile, pass_through=True)
             loop = analyse(path, level, base.profile, duration_h, 1000 + 100 * bi + k, None) if path else None
             why = None
             if loop is None:
-                why = "pas d'itinéraire" if path is None else "boucle invalide"
+                why = f"pas d'itinéraire ({gh.last_error})" if path is None else "boucle invalide"
             elif abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
                 why = "durée"
             elif loop.overlap > MAX_OVERLAP:
