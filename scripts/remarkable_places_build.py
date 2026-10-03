@@ -5,7 +5,7 @@ Lieux de la province de Barcelone ayant au moins MIN_SITELINKS articles Wikipéd
 belvédères (liste du 01/10/2026), plus, depuis le 03/10/2026 (Florent : Montserrat manquait), monastères, abbayes,
 sanctuaires, châteaux, barrages, réservoirs et lacs. Les cathédrales et les monuments de la vieille ville sont écartés
 (but de sortie à vélo improbable, traversée du centre). Les champs ajoutés à la main dans le fichier existant
-(« point », « via », « exclude ») sont gardés.
+(« point », « point_name », « via », « exclude ») sont gardés.
 
 Usage : python scripts/remarkable_places_build.py   (stdlib seulement)
 """
@@ -44,7 +44,7 @@ def main():
         if k not in e["kind"]:
             e["kind"].append(k)
     for qid, e in places.items():                     # champs relus à la main : gardés
-        for k in ("point", "via", "exclude"):
+        for k in ("point", "point_name", "via", "exclude"):
             if k in old.get(qid, {}):
                 e[k] = old[qid][k]
     note = ("Lieux remarquables de la province de Barcelone ayant au moins 6 articles Wikipédia (Wikidata, CC0), construits par "

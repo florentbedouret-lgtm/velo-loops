@@ -618,8 +618,9 @@ def load_pois(pbf: Path, workdir: Path):
         from shapely.geometry import Point
         for e in remarkable_all.values():
             if e.get("point") and not e.get("exclude"):
-                kinds["lieu"].append((Point(e["point"][0], e["point"][1]), e["label"]))
-                LIEU_FAME[e["label"]] = e.get("sitelinks", 0)
+                name = e.get("point_name") or e["label"]          # ex. « Coll de Pal » plutôt que le sommet voisin
+                kinds["lieu"].append((Point(e["point"][0], e["point"][1]), name))
+                LIEU_FAME[name] = e.get("sitelinks", 0)
     print("Points d'intérêt : " + ", ".join(f"{k} {len(v)}" for k, v in kinds.items()), flush=True)
     return {k: (STRtree([g for g, _ in v]), v) for k, v in kinds.items() if v}
 
