@@ -1,0 +1,32 @@
+{
+ "_note": "La Plata (sud-ouest), sportif, 2 h (Florent, 03/10/2026) : la boucle v13 revient de Montcada par Nou Barris et Sant Andreu ; retour par la piste du Besòs à la place. Points de passage seulement : ceux de la boucle publiée jusqu'à Montcada, puis la piste du Parc Fluvial del Besòs (OSM 93661443, 1013701155). Utilisées par nature_check.py --compare-refs.",
+ "start": "la-plata-sud-ouest",
+ "loops": [
+  {
+   "name": "Retour par le Besòs, puis Sant Martí (Pere IV)",
+   "source": "Florent, capture du 03/10/2026",
+   "waypoints": [
+    [2.2138, 41.4054], [2.2395, 41.4345], [2.2692, 41.4615], [2.2609, 41.4885], [2.2451, 41.502],
+    [2.2232, 41.5214], [2.1953, 41.4924], [2.1906, 41.4753],
+    [2.20925, 41.44165], [2.21919, 41.42745], [2.20470, 41.41220]
+   ]
+  },
+  {
+   "name": "Retour par le Besòs jusqu'à Sant Adrià, puis direct",
+   "source": "Florent, capture du 03/10/2026",
+   "waypoints": [
+    [2.2138, 41.4054], [2.2395, 41.4345], [2.2692, 41.4615], [2.2609, 41.4885], [2.2451, 41.502],
+    [2.2232, 41.5214], [2.1953, 41.4924], [2.1906, 41.4753],
+    [2.20925, 41.44165], [2.21919, 41.42745], [2.22814, 41.4226]
+   ]
+  },
+  {
+   "name": "Témoin : la sportive v13 publiée (retour par Sant Andreu), recalculée",
+   "source": "production v13",
+   "waypoints": [
+    [2.2138, 41.4054], [2.2395, 41.4345], [2.2692, 41.4615], [2.2609, 41.4885], [2.2451, 41.502],
+    [2.2232, 41.5214], [2.1953, 41.4924], [2.1906, 41.4753], [2.1871, 41.444], [2.1867, 41.4205]
+   ]
+  }
+ ]
+}
