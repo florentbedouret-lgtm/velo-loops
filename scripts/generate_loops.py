@@ -132,6 +132,7 @@ RETOUCH_ANCHOR_SHIFT_M = 300.0
 # Essais (03/10/2026, la Plata sportif 2 h : 10 essais épuisés avant les essais « rivière » ; sur la sonde, 45 % des essais
 # échouent sur la durée). Désactivés en production tant qu'ils ne sont pas validés (diagnostic --retouch-prefilter) :
 RETOUCH_DEDUPE = False           # essais aux mêmes points de passage : un seul
+RETOUCH_FAMILY_CAP = None        # au plus N essais par famille (mer, lieu, rivière, vert) avant les autres : diversité
 RETOUCH_PREFILTER = None         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
 #                                  celle de la boucle de départ) ; au-delà, l'essai est écarté sans requête ni compter   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
 # Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
@@ -1599,6 +1600,13 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                     add(f"{cat} {p[1]:.4f},{p[0]:.4f}", [list(p[:2])], cat)
         rank = {k: n for n, k in enumerate(RETOUCH_KIND_ORDER)}   # plus rentables d'abord ; tri stable : ordre des tronçons
         trials = [t[1:] for t in sorted(trials, key=lambda t: rank.get(t[3], len(rank)))]
+        if RETOUCH_FAMILY_CAP:                               # chaque famille a sa chance (la Plata sportif, 03/10/2026 :
+            fam, first, rest = {}, [], []                    # 7 essais « mer » sur 10, l'espace vert du Besòs jamais essayé)
+            for t in trials:
+                f = t[2].split("/")[0]
+                fam[f] = fam.get(f, 0) + 1
+                (first if fam[f] <= RETOUCH_FAMILY_CAP else rest).append(t)
+            trials = first + rest
         if detail is not None:
             detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
