@@ -1390,7 +1390,12 @@ def outback_candidates(gh, st, level, profile, duration_h, log, detail=None) -> 
             want, loop = 0.3 * loop_km, None
             for _ in range(3):                              # ajustement de la distance visée sur la durée
                 s = min(side, key=lambda s: abs(s[2] - want))
-                path = gh.via([[lon, lat], [s[0], s[1]], [lon, lat]], profile)
+                # par l'eau à l'aller ET au retour (diagnostic Sant Adrià : sans ça, le calcul revenait par les rues) :
+                # entrée au plus près, un point au bord de l'eau à mi-chemin, le point visé, puis les mêmes en sens inverse
+                e = nearest_attraction(cat, lon, lat, 0.5 * loop_km)
+                m = nearest_attraction(cat, (e[0] + s[0]) / 2.0, (e[1] + s[1]) / 2.0, 0.5 * loop_km) if e else None
+                go = [list(p[:2]) for p in (e, m) if p]
+                path = gh.via([[lon, lat]] + go + [[s[0], s[1]]] + go[::-1] + [[lon, lat]], profile)
                 loop = analyse(path, level, profile, duration_h, 950, None) if path else None
                 if loop is None:
                     break
@@ -1786,6 +1791,10 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
             a, b = pts[cats[i]], pts[cats[j]]
             plans.append((cats[i] + "+" + cats[j], [(bearing(lon, lat, a[0], a[1]), a[2]),
                                                     (bearing(lon, lat, b[0], b[1]), b[2])]))
+    if REMARKABLE_FAME:                                      # monter au lieu et redescendre (Sarrià 1 h : le Tibidabo par
+        for cat in [c for c in cats if c.startswith("lieu")][::-1]:   # une route, retour par une autre : 51 contre 35)
+            x, y, km = pts[cat]
+            plans.insert(0, (cat + "-ar", [(bearing(lon, lat, x, y), km)]))
     for off in (TARGET_OFFSET_DEG, -TARGET_OFFSET_DEG):       # puis un lieu seul, triangle décalé d'un côté puis de l'autre
         for cat in cats:
             x, y, km = pts[cat]
@@ -1804,8 +1813,8 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
             if loop is None:
                 break
             ratio = loop.time_s / target_s
-            if abs(ratio - 1.0) <= 0.05 or (s <= 1.0 and ratio > 1.0):
-                break
+            if abs(ratio - 1.0) <= 0.05 or (s <= 1.0 and ratio > 1.0) or all(q in aims for q in plan):
+                break                                        # (tous les points visés exactement : rien à ajuster)
             s = max(1.0, s / ratio)
         if loop is None or abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
             continue

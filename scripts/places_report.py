@@ -57,6 +57,52 @@ def export(pbf, workdir, filters, name):
     return feats
 
 
+PAVED_HW = "w/highway=primary,secondary,tertiary,unclassified,residential,living_street,service,cycleway,track,road"
+UNPAVED = {"unpaved", "compacted", "fine_gravel", "gravel", "ground", "dirt", "grass", "sand", "pebblestone", "mud"}
+
+
+def road_index(pbf, workdir):
+    """Routes où passe un vélo de route : goudronnées ou sans revêtement noté hors pistes et chemins (les pistes ne
+    comptent que si elles sont notées goudronnées). Index shapely en coordonnées locales (km)."""
+    import shapely
+    filt, out = Path(workdir) / "places_roads.osm.pbf", Path(workdir) / "places_roads.geojsonseq"
+    subprocess.run(["osmium", "tags-filter", str(pbf), PAVED_HW, "-o", str(filt), "--overwrite"], check=True, capture_output=True)
+    subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "--geometry-types=linestring", "-o", str(out),
+                    "--overwrite"], check=True, capture_output=True)
+    from shapely.geometry import shape
+    lines = []
+    for line in out.open(encoding="utf-8"):
+        line = line.strip("\x1e\n ")
+        if not line:
+            continue
+        try:
+            f = json.loads(line)
+        except ValueError:
+            continue
+        p = f.get("properties", {})
+        sf, hw = p.get("surface"), p.get("highway")
+        if (sf in UNPAVED or (hw in ("track", "service") and sf is None) or p.get("access") in ("private", "no")
+                or p.get("bicycle") == "no"):
+            continue
+        try:
+            lines.append(shape(f["geometry"]))
+        except (ValueError, KeyError):
+            continue
+    return shapely.STRtree(lines), lines
+
+
+def road_dist_m(tree, lines, lon, lat):
+    """Distance (m) du point à la route goudronnée la plus proche, et ce point de route (lon, lat)."""
+    import shapely
+    from shapely.ops import nearest_points
+    pt = shapely.Point(lon, lat)
+    i = tree.query_nearest(pt)
+    if not len(i):
+        return None, None
+    q = nearest_points(lines[int(i[0])], pt)[0]
+    return hav(lon, lat, q.x, q.y), (q.x, q.y)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gh", required=True)
@@ -82,6 +128,8 @@ def main():
     for x, y, p in export(a.pbf, a.workdir, ["nwr/wikidata=" + ",".join(places)], "places_wd"):
         osm.setdefault(p.get("wikidata"), []).append((x, y, p))
     cands = [(x, y, p) for x, y, p in export(a.pbf, a.workdir, ACCESS_TAGS, "places_access") if p.get("name")]
+    rtree, rlines = road_index(a.pbf, a.workdir)
+    print(f"Routes goudronnées indexées : {len(rlines)}", flush=True)
     print(f"Lieux : {len(places)} ; éléments OSM reliés : {sum(len(v) for v in osm.values())} ; candidats d'accès : {len(cands)}",
           flush=True)
 
@@ -114,8 +162,7 @@ def main():
             best_el = el[0]
         lon, lat = (best_el[0], best_el[1]) if best_el else tuple(e["coord"])
         osm_name = best_el[2].get("name") if best_el else None
-        sn = nearest(lon, lat)
-        snap = sn[2] if sn else None
+        snap, road_pt = road_dist_m(rtree, rlines, lon, lat)
         row = {"qid": qid, "label": e["label"], "sitelinks": e["sitelinks"], "kind": kinds, "lon": round(lon, 6),
                "lat": round(lat, 6), "osm": bool(best_el), "osm_name": osm_name, "road_m": None if snap is None else round(snap),
                "passes": sum(passes.get(n, 0) for n in {e["label"], osm_name} if n)}
@@ -125,21 +172,21 @@ def main():
                 d0 = hav(lon, lat, x, y)
                 if d0 > SEARCH_KM * 1000.0 or (abs(x - lon) < 1e-6 and abs(y - lat) < 1e-6):
                     continue
-                s2 = nearest(x, y)
-                if s2 and s2[2] <= NEAR_ROAD_M and (best is None or d0 < best[3]):
+                s2, _ = road_dist_m(rtree, rlines, x, y)
+                if s2 is not None and s2 <= NEAR_ROAD_M and (best is None or d0 < best[3]):
                     best = (x, y, p, d0)
             if best:
                 row["access"] = {"point": [round(best[0], 6), round(best[1], 6)], "via": best[2].get("name"),
                                  "tags": {k: v for k, v in best[2].items() if k in ("amenity", "historic", "tourism", "natural")},
                                  "dist_m": round(best[3])}
             elif snap <= ROAD_FALLBACK_M:
-                row["access"] = {"point": [round(sn[0], 6), round(sn[1], 6)], "via": "route la plus proche",
+                row["access"] = {"point": [round(road_pt[0], 6), round(road_pt[1], 6)], "via": "route goudronnée la plus proche",
                                  "dist_m": round(snap)}
         rows.append(row)
 
     Path(a.out).write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
     L = ["# Lieux remarquables : accessibilité et passages", "",
-         f"{len(rows)} lieux ; {n_opt} options publiées lues. « route » = distance du lieu à la route la plus proche ; "
+         f"{len(rows)} lieux ; {n_opt} options publiées lues. « route » = distance du lieu à la route goudronnée la plus proche ; "
          f"au-delà de {ACCESS_MAX_M:.0f} m, point d'accès proposé (à relire).", "",
          "| lieu | articles | type | dans OSM | route (m) | boucles qui y passent | point d'accès proposé |", "|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: -r["sitelinks"]):
