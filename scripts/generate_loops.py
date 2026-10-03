@@ -1372,12 +1372,17 @@ def outback_candidates(gh, st, level, profile, duration_h, log, detail=None) -> 
         for i in tree.query(pt.buffer(0.5 * loop_km / 90.0)):
             gm = tree.geometries[int(i)]
             line = gm.boundary if gm.geom_type in ("Polygon", "MultiPolygon") else gm
-            n = max(2, int(line.length / 0.004))
-            for k in range(n + 1):
-                q = line.interpolate(k / n, normalized=True)
-                d = haversine(lon, lat, q.x, q.y) / 1000.0
-                if 0.15 * loop_km <= d <= 0.5 * loop_km:
-                    samples.append((q.x, q.y, d, bearing(lon, lat, q.x, q.y)))
+            parts = list(getattr(line, "geoms", [line]))      # MultiLineString : interpolate ne marche que par morceau
+            for part in parts:
+                n = max(2, int(part.length / 0.004))
+                for k in range(n + 1):
+                    q = part.interpolate(k / n, normalized=True)
+                    d = haversine(lon, lat, q.x, q.y) / 1000.0
+                    if 0.15 * loop_km <= d <= 0.5 * loop_km:
+                        samples.append((q.x, q.y, d, bearing(lon, lat, q.x, q.y)))
+        if detail is not None:
+            detail.append(f"  {cat} : {len(samples)} point(s) au bord de l'eau entre {0.15 * loop_km:.1f} et "
+                          f"{0.5 * loop_km:.1f} km (boucle visée ~{loop_km:.1f} km)")
         if not samples:
             continue
         dirs = []                                           # deux directions à plus de 60° l'une de l'autre
