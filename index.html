@@ -198,6 +198,11 @@
     .hint { font-size: 13px; color: var(--color-text-2); margin-top: 6px; text-align: center; }
     .k .qm { font: inherit; font-size: 11px; width: 16px; height: 16px; border-radius: 8px; border: 1px solid var(--color-border);
              background: var(--color-surface); color: var(--color-text-2); padding: 0; margin-left: 4px; cursor: pointer; line-height: 14px; }
+    .keys .qm { font: inherit; font-size: 11px; flex: none; width: 22px; height: 22px; border-radius: 11px; padding: 0;
+                border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-2); cursor: pointer; }
+    .keys .row-help { margin: 0; padding: 0 0 12px 84px; font-size: 13px; color: var(--color-text-2); line-height: 1.4;
+                      border-bottom: 1px solid var(--color-border); }
+    .keys div:has(+ .row-help:not([hidden])) { border-bottom: 0; }
     .dplus-help { grid-column: 1 / -1; font-size: 13px; color: var(--color-text-2); margin-top: 6px; }
     #sheetBody small, #sheetBody .sub { color: var(--color-text-2); }
     .badge { display: inline-block; font-size: 13px; background: var(--color-border); color: var(--color-text); padding: 2px 6px; border-radius: 6px; }
@@ -1219,11 +1224,13 @@
       return keyRowsHtml(keyPoints(o).map(([fig, txt, warn, hl]) => [fig, txt, hl, warn]));
     }
     function keyRowsHtml(rows) {
-      return '<div class="keys">' + rows.map(([fig, txt, hl, warn]) =>
+      return '<div class="keys">' + rows.map(([fig, txt, hl, warn, help]) =>
         '<div' + (warn ? ' class="warn-row"' : '') + (hl ? ' data-hl="' + hl + '" role="button" tabindex="0"' : '') +
         '><span class="fig">' + esc(fig) + '</span><span class="txt">' + esc(txt) +
         '</span>' + (warn ? WARN_ICON_() : '') + (hl ? '<span class="onmap"><span>' + esc(t('on_map')) + '</span>' + MAP_ICON + '</span>' : '') +
-        '</div>').join('') + '</div>';
+        (help ? '<button type="button" class="qm" aria-expanded="false" aria-label="' + esc(t('help_btn')) +
+                '" onclick="toggleRowHelp(this)">?</button>' : '') +
+        '</div>' + (help ? '<p class="row-help" hidden>' + esc(help) + '</p>' : '')).join('') + '</div>';
     }
     // « Tous les chiffres » (brief v2) : trois blocs, chaque ligne = [repère chiffré, phrase, tronçon à surligner, alerte ?] ;
     // ville, forêt et bord d'eau : mêmes pourcentages que la barre de terrain ; jamais de pourcentage de pente (D17)
@@ -1238,19 +1245,19 @@
       const climbs = (tr.climbs || []).map((c, k) => [c, k]).sort((x, y) => x[0].start_km - y[0].start_km);
       if (tr.n_climbs) {
         R.push([String(tr.n_climbs), tn('fr_climbs', tr.n_climbs) + (tr.avg_climb_grade_pct != null ? ', ' + slopeCategory(tr.avg_climb_grade_pct) : '') +
-          (climbs.length && climbs.length < tr.n_climbs ? t('fr_biggest', { k: climbs.length }) : '') + '.']);
+          (climbs.length && climbs.length < tr.n_climbs ? t('fr_biggest', { k: climbs.length }) : '') + '.', null, false,
+          climbs.some(([c]) => c.category) ? t('climb_cat_help') : null]);   // échelle des catégories : dépliée par « ? »
         climbs.forEach(([c, k], n) => R.push(['n° ' + (n + 1), (c.name ? c.name + ' · ' : '') + 'km ' + km(c.start_km) + ' → ' +
           km(c.start_km + c.length_km) + ' · +' + Math.round(c.gain_m) + ' m' +
           (c.avg_grade_pct != null ? ' · ' + climbLabel(c) : ''), 'climb:' + k]));   // brief v3 : nom, plage, « · »
-        if (climbs.some(([c]) => c.category)) R.push(['?', t('climb_cat_help')]);
       } else R.push(['0', t('fr_noclimb')]);
       const lcF = LANDCOVER_OK && o.scenery && o.scenery.landcover, seq = !!(o.scenery && o.scenery.landcover_seq);
       const sc = o.scenery;
       if (sc) {
         const fo = lcF ? lcF.forest : sc.forest, wa = lcF ? lcF.water : sc.water;
         if (fo >= 0.05) E.push([pc(fo), t('fr_forest'), seq ? 'forest' : null]);
-        if (sc.protected >= 0.05) E.push([t('fr_protected_fig', { p: pc(sc.protected) }), t('fr_protected'),
-          sc.protected_seq ? 'park' : null]);              // « dont 32 % » : les parcs recoupent la barre de terrain
+        // part de TOUT le parcours ; « dont 25 % » sous la forêt se lisait « 25 % des 15 % » (Florent, 03/10/2026)
+        if (sc.protected >= 0.05) E.push([pc(sc.protected), t('k_protected'), sc.protected_seq ? 'park' : null]);
         if (wa >= 0.05) E.push([pc(wa), t('fr_water'), seq ? 'water' : null]);
         if (sc.viewpoints >= 1) E.push([String(sc.viewpoints), tn('fr_views', sc.viewpoints)]);
       }
@@ -1628,6 +1635,11 @@
       downloadGpx(startData.start, shown[current], t('lvl_' + shown[current].level));
       addHistory('gpx');
       showGpxHelp(t('gpx_help'));
+    }
+    function toggleRowHelp(b) {                            // « ? » d'une ligne : explication dépliée sous la ligne
+      const h = b.parentNode.nextElementSibling;
+      h.hidden = !h.hidden;
+      b.setAttribute('aria-expanded', String(!h.hidden));
     }
     function toggleDplusHelp(b) {
       const h = sheetHead.querySelector('.dplus-help');

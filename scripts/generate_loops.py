@@ -131,11 +131,11 @@ RETOUCH_KIND_ORDER = ["mer/sortie-mi-Q/garde", "lieu/saute", "lieu/garde", "mer/
 RETOUCH_ANCHOR_SHIFT_M = 300.0
 # Essais (03/10/2026, la Plata sportif 2 h : 10 essais épuisés avant les essais « rivière » ; sur la sonde, 45 % des essais
 # échouent sur la durée). Désactivés en production tant qu'ils ne sont pas validés (diagnostic --retouch-prefilter) :
-RETOUCH_DEDUPE = False           # essais aux mêmes points de passage : un seul
-RETOUCH_WORST_LEG_FIRST = False  # essais d'abord sur le tronçon le plus chargé en feux (comme Florent à la Plata : il a
+RETOUCH_DEDUPE = True            # essais aux mêmes points de passage : un seul
+RETOUCH_WORST_LEG_FIRST = True   # essais d'abord sur le tronçon le plus chargé en feux (comme Florent à la Plata : il a
 #                                  corrigé l'aller par Sant Andreu en modéré, le retour en sportif)
 RETOUCH_FAMILY_CAP = None        # au plus N essais par famille (mer, lieu, rivière, vert) avant les autres : diversité
-RETOUCH_PREFILTER = None         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
+RETOUCH_PREFILTER = 0.25         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
 #                                  celle de la boucle de départ) ; au-delà, l'essai est écarté sans requête ni compter   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
 # Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
 # Un vrai demi-tour reprend la même rue à l'envers : le tracé 30 m après passe à moins de UTURN_SAME_STREET_M de celui
@@ -2057,7 +2057,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "13"  # 13 : retouche des meilleures boucles (rivière, mer, espace vert, lieu remarquable ;
+GENERATOR_VERSION = "14"  # 14 : retouche sans doublons, préfiltre de durée (±25 %), tronçon le plus chargé en feux
+#                           d'abord (la Plata sportif 2 h : retour par le Besòs, 03/10/2026). 13 : retouche des meilleures boucles (rivière, mer, espace vert, lieu remarquable ;
 #                           10 essais triés par rentabilité) et lacets non comptés comme demi-tours (02/10/2026). 12 : ville −25 % (2e sortie de Florent) ; montées à la manière des compteurs (≥ 500 m, ≥ 3 %,
 #                           partie qui monte vraiment, catégories HC à 4) et raideur selon le km le plus raide (01/10/2026). 11 : ville comptée hors pistes sans voitures, tirages ciblés, terre au km, variante ≥ 70 %.
 #                           10 : revêtement complété par la base topographique ICGC (scripts/icgc_tag.py), terre évitée.
@@ -2125,7 +2126,8 @@ def params_hash(config_dir: str = "config") -> str:
               "level_dup": [LEVEL_DUP_SIM, "same_as"],
               "retouch": [RETOUCH, RETOUCH_TOP, RETOUCH_ANCHORS, RETOUCH_REACH, RETOUCH_REACH_MIN_KM, RETOUCH_MIN_RUN_KM,
                           RETOUCH_ON_ROUTE_DEG, RETOUCH_MAX_TRIALS, RETOUCH_ANCHOR_SHIFT_M, RETOUCH_KIND_ORDER],
-              "uturns": [UTURN_LACETS_OK, UTURN_SAME_STREET_M]}
+              "uturns": [UTURN_LACETS_OK, UTURN_SAME_STREET_M],
+              "retouch14": [RETOUCH_DEDUPE, RETOUCH_PREFILTER, RETOUCH_WORST_LEG_FIRST, RETOUCH_FAMILY_CAP]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     cfg = Path(config_dir)
     if cfg.exists():
