@@ -1,0 +1,78 @@
+{
+ "_note": "Gràcia, longue sortie difficile : Montserrat depuis Barcelone par Vallvidrera, Terrassa, Vacarisses, Monistrol, le monastère (route BP-1121), Olesa, Martorell, Molins de Rei (Florent, 03/10/2026, d'après un parcours connu ; points de passage seulement, géocodés avec Nominatim). Utilisées par nature_check.py --compare-refs.",
+ "start": "gracia",
+ "loops": [
+  {
+   "name": "Montserrat par Vallvidrera, Terrassa, Vacarisses ; retour par Olesa, Martorell, Molins de Rei",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.11838,
+     41.42197
+    ],
+    [
+     2.01,
+     41.563
+    ],
+    [
+     1.9195,
+     41.6064
+    ],
+    [
+     1.8453,
+     41.6105
+    ],
+    [
+     1.8375,
+     41.5934
+    ],
+    [
+     1.8914,
+     41.544
+    ],
+    [
+     1.93,
+     41.476
+    ],
+    [
+     2.016,
+     41.414
+    ]
+   ]
+  },
+  {
+   "name": "Montserrat, même aller ; retour direct par Olesa et le Llobregat",
+   "source": "variante",
+   "waypoints": [
+    [
+     2.11838,
+     41.42197
+    ],
+    [
+     2.01,
+     41.563
+    ],
+    [
+     1.9195,
+     41.6064
+    ],
+    [
+     1.8453,
+     41.6105
+    ],
+    [
+     1.8375,
+     41.5934
+    ],
+    [
+     1.8914,
+     41.544
+    ],
+    [
+     2.016,
+     41.414
+    ]
+   ]
+  }
+ ]
+}
