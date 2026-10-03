@@ -245,6 +245,8 @@ const I18N = {
     'estación en el recorrido para volver en tren si hace falta.', 'estació al recorregut per tornar en tren si cal.'],
   k_stations_other: ['gares sur le parcours pour rentrer en train si besoin.', 'stations on the route to go home by train if needed.',
     'estaciones en el recorrido para volver en tren si hace falta.', 'estacions al recorregut per tornar en tren si cal.'],
+  k_outback: ["en aller-retour : la même piste cyclable à l'aller et au retour.", 'out and back: the same cycle path both ways.',
+    'de ida y vuelta: el mismo carril bici a la ida y a la vuelta.', "d'anada i tornada: el mateix carril bici a l'anada i a la tornada."],
   help_btn: ['Explication', 'Explanation', 'Explicación', 'Explicació'],
   fb_star: ['{n} sur 5', '{n} out of 5', '{n} de 5', '{n} de 5'],
   k_water_one: ["point d'eau sur le parcours.", 'water point on the route.', 'fuente en el recorrido.', 'font al recorregut.'],

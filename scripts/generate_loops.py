@@ -46,7 +46,8 @@ DRIVETRAIN_EFF = 0.975
 AIR_RHO = 1.2
 G = 9.81
 DESCENT_CAP_MS = 13.0         # ~47 km/h : on ne suppose pas de descentes plus rapides
-REAL_WORLD_FACTOR = 0.88      # arrêts, virages, prudence : à calibrer avec les retours utilisateurs
+REAL_WORLD_FACTOR = 0.93      # arrêts, virages, prudence ; 0,88 jusqu'à la v14 : la 2e sortie de Florent (Gràcia 2 h,
+#                              03/10/2026) était 10 % plus rapide que le modèle, en ville comme hors ville
 
 LEVELS = {                    # puissance moyenne soutenue (W) utilisée EN INTERNE uniquement
     # allures définies par la FTP (W/kg, tableau de profil de puissance de Coggan) et la part de FTP tenue sur la sortie
@@ -65,7 +66,8 @@ CANDIDATES = [(1, None), (2, None), (3, 0), (4, 90), (5, 180), (6, 270), (7, 45)
 # boucle par Collserola, 888 m de D+, perdue au recalcul O-15). Le score choisit toujours la boucle « équilibrée ».
 # O-18 option B : poids du relief dans la note, par niveau (vide = aucun bonus, réglage actuel). Réglé après la sonde
 # « relief » (nature_check --relief) ; partie « relief » = D+ par km rapporté à RELIEF_FULL_M_PER_KM (plafonné à 1).
-RELIEF_WEIGHTS: dict = {"soutenu": 0.10}   # sonde relief (run #92) : D+ médian +12 %, forêt 44 -> 54 %, routes de col acceptées
+RELIEF_WEIGHTS: dict = {"soutenu": 0.30}   # v15 (sonde du 03/10/2026, 16 départs) : D+ 615 -> 682 m, forêt 34 -> 42 %,
+#   feux/km médian 0,71 -> 0,60, routes principales 13 -> 20 % (routes de col) ; avant : 0,10   # sonde relief (run #92) : D+ médian +12 %, forêt 44 -> 54 %, routes de col acceptées
 # O-18 option A : une option secondaire (moins / plus de relief, variante) qui répète une option de l'allure inférieure
 # (même durée) est remplacée ; « répète » = chacune recouvre l'autre à au moins 80 % (une boucle courte contenue dans
 # une plus longue et plus vallonnée n'est PAS un doublon). La boucle principale (équilibrée) n'est jamais écartée.
@@ -97,10 +99,10 @@ MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
 # Aller-retour (Florent, 03/10/2026 : Sant Adrià 1 h, l'aller-retour sur la piste du Besòs note 59 contre 42) : accepté
 # au-delà de MAX_OVERLAP si la partie répétée est surtout piste cyclable ou voie verte. Essai : désactivé en production.
-OUTBACK_OK = False
-OUTBACK_MAX_OVERLAP = 0.6        # part répétée maximale d'un aller-retour
-OUTBACK_MIN_CYCLE = 0.7          # part de piste cyclable / voie verte dans la partie répétée
-OUTBACK_DRAWS = False            # tirages « aller-retour au bord de l'eau » (rivière, mer)
+OUTBACK_OK = True
+OUTBACK_MAX_OVERLAP = 1.0        # un vrai aller-retour est répété à ~100 % (Sant Adrià 1 h : 72 %, note 65 contre 46)
+OUTBACK_MIN_CYCLE = 0.6          # part de piste cyclable / voie verte dans la partie répétée
+OUTBACK_DRAWS = True             # tirages « aller-retour au bord de l'eau » (rivière, mer)
 # Repli (choix B de Florent, 28/09/2026, test v10 : Castellgalí, Gaià perdaient leurs boucles courtes) : s'il n'existe AUCUN
 # candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
 # FALLBACK_UNPAVED_KM et FALLBACK_UNPAVED_SHARE, signalés dans l'appli (unpaved_fallback).
@@ -159,8 +161,8 @@ REMARKABLE_BONUS = 0.05         # 5 points par lieu
 REMARKABLE_MAX_BONUS = 0.08
 # Lieux remarquables, essais du 03/10/2026 (désactivés en production) : Sarrià 1 h visait le Turó del Carmel (6 articles,
 # le plus proche) et pas le Tibidabo (31) ; Montserrat (sommet inaccessible) jamais atteint.
-REMARKABLE_FAME = False          # tirages ciblés vers les 2 lieux les plus célèbres à portée (et non le plus proche)
-REMARKABLE_POINTS = False        # lieux de la liste ayant un « point » (accès relu, ex. monastère de Montserrat) visés aussi
+REMARKABLE_FAME = True           # tirages ciblés vers les 2 lieux les plus célèbres à portée (et non le plus proche)
+REMARKABLE_POINTS = True         # lieux de la liste ayant un « point » (accès relu, ex. monastère de Montserrat) visés aussi
 LIEU_FAME: dict = {}             # nom du lieu -> nombre d'articles Wikipédia
 # Belvédères quels qu'ils soient (Florent, 01/10/2026) : bonus à part, pour ceux devant lesquels on passe vraiment ; avant,
 # 0,05 de la part « paysage » par point de vue à moins de ~300 m (≈ 0,6 point de note, trop loin et trop faible)
@@ -2168,7 +2170,8 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "14"  # 14 : retouche sans doublons, préfiltre de durée (±25 %), tronçon le plus chargé en feux
+GENERATOR_VERSION = "15"  # 15 : lieux remarquables les plus célèbres visés (aller-retour au lieu compris) et points
+#                           d'accès relus (monastère de Montserrat, Coll de Pal…), relief sportif 0,30, vitesse 0,93, allers-retours sur piste au bord de l'eau (03/10/2026). 14 : retouche sans doublons, préfiltre de durée (±25 %), tronçon le plus chargé en feux
 #                           d'abord (la Plata sportif 2 h : retour par le Besòs, 03/10/2026). 13 : retouche des meilleures boucles (rivière, mer, espace vert, lieu remarquable ;
 #                           10 essais triés par rentabilité) et lacets non comptés comme demi-tours (02/10/2026). 12 : ville −25 % (2e sortie de Florent) ; montées à la manière des compteurs (≥ 500 m, ≥ 3 %,
 #                           partie qui monte vraiment, catégories HC à 4) et raideur selon le km le plus raide (01/10/2026). 11 : ville comptée hors pistes sans voitures, tirages ciblés, terre au km, variante ≥ 70 %.
@@ -2238,8 +2241,12 @@ def params_hash(config_dir: str = "config") -> str:
               "retouch": [RETOUCH, RETOUCH_TOP, RETOUCH_ANCHORS, RETOUCH_REACH, RETOUCH_REACH_MIN_KM, RETOUCH_MIN_RUN_KM,
                           RETOUCH_ON_ROUTE_DEG, RETOUCH_MAX_TRIALS, RETOUCH_ANCHOR_SHIFT_M, RETOUCH_KIND_ORDER],
               "uturns": [UTURN_LACETS_OK, UTURN_SAME_STREET_M],
-              "retouch14": [RETOUCH_DEDUPE, RETOUCH_PREFILTER, RETOUCH_WORST_LEG_FIRST, RETOUCH_FAMILY_CAP]}
+              "retouch14": [RETOUCH_DEDUPE, RETOUCH_PREFILTER, RETOUCH_WORST_LEG_FIRST, RETOUCH_FAMILY_CAP],
+              "v15": [REMARKABLE_FAME, REMARKABLE_POINTS, OUTBACK_OK, OUTBACK_DRAWS, OUTBACK_MAX_OVERLAP, OUTBACK_MIN_CYCLE]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
+    rp = Path(__file__).parent / "remarkable_places.json"   # liste des lieux (points d'accès) : change les boucles aussi
+    if rp.exists():
+        h.update(rp.read_bytes())
     cfg = Path(config_dir)
     if cfg.exists():
         for f in sorted(cfg.rglob("*")):

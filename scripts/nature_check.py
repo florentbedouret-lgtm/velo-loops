@@ -372,6 +372,7 @@ def option_row(o) -> dict:
             "cycleway_pct": round(100 * o["shares"]["dedicated_cycleway"]), "score": o["score"],
             "fallback": bool(o.get("unpaved_fallback")), "targeted": bool(o.get("targeted")),
             "retouched": bool(o.get("retouched")),
+            "outback": bool(o.get("out_and_back")),
             "remarkable": [x["n"] for x in o.get("remarkable") or []], "views": o.get("views_passed", 0),
             "water_pct": round(100 * sc.get("water", 0)), "min": o.get("time_est_min"),
             "lights_km": o.get("traffic_lights_per_km"), "industrial_pct": round(100 * sc.get("industrial", 0))}
