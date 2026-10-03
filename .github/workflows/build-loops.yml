@@ -264,8 +264,8 @@ jobs:
           NATURE_COMPARE_LEVEL="soutenu"   # "scripts/reference_gracia.json" : boucles de Florent contre la production (prioritaire)
           NATURE_RELIEF=""
           NATURE_WORKERS=3   # test #165 (01/10/2026) : 4 en parallèle ne gagnent que 2 %
-          NATURE_PROBE=""   # sonde de 16 départs : "gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"
-          NATURE_RETOUCH="--retouch --lacets"   # --lacets : essai, lacets non comptés comme demi-tours ; retouche des meilleures boucles mesurée (02/10/2026) ; "" : production telle quelle
+          NATURE_PROBE="gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"
+          NATURE_RETOUCH="--retouch --lacets --retouch-trials 60 --retouch-dedupe"   # --lacets : essai, lacets non comptés comme demi-tours ; retouche des meilleures boucles mesurée (02/10/2026) ; "" : production telle quelle
           if [ -n "$NATURE_COMPARE" ]; then   # comparaison d'abord (rapport à part), puis la sonde ci-dessous si elle est réglée
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --compare-refs "$NATURE_COMPARE" --durations "2" --levels "$NATURE_COMPARE_LEVEL" \

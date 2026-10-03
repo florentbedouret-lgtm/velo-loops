@@ -128,7 +128,12 @@ RETOUCH_KIND_ORDER = ["mer/sortie-mi-Q/garde", "lieu/saute", "lieu/garde", "mer/
                       "riviere/sortie-Q/saute", "mer/sortie-Q2/saute", "riviere/sortie-mi-Q/saute", "riviere/sortie-Q/garde",
                       "riviere/sortie-mi-Q/garde", "riviere/sortie-mi-Q2/garde", "riviere/sortie-mi-Q2/saute",
                       "riviere/sortie-Q2/saute", "mer/sortie-Q2/garde", "riviere/sortie-Q2/garde"]
-RETOUCH_ANCHOR_SHIFT_M = 300.0   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
+RETOUCH_ANCHOR_SHIFT_M = 300.0
+# Essais (03/10/2026, la Plata sportif 2 h : 10 essais épuisés avant les essais « rivière » ; sur la sonde, 45 % des essais
+# échouent sur la durée). Désactivés en production tant qu'ils ne sont pas validés (diagnostic --retouch-prefilter) :
+RETOUCH_DEDUPE = False           # essais aux mêmes points de passage : un seul
+RETOUCH_PREFILTER = None         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
+#                                  celle de la boucle de départ) ; au-delà, l'essai est écarté sans requête ni compter   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
 # Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
 # Un vrai demi-tour reprend la même rue à l'envers : le tracé 30 m après passe à moins de UTURN_SAME_STREET_M de celui
 # 30 m avant. Essai (diagnostic --lacets) : UTURN_LACETS_OK vrai compte seulement ceux-là (filtre ET note) ; la production
@@ -1599,7 +1604,19 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
                           + " ; ".join(f"{i}: {a[1]:.4f},{a[0]:.4f}" for i, a in enumerate(anchors[1:-1], start=1))
                           + f" ; {len(trials)} essai(s) possibles, {min(len(trials), RETOUCH_MAX_TRIALS)} faits")
-        for k, (desc, way, kind) in enumerate(trials[:RETOUCH_MAX_TRIALS]):
+        def poly_km(pts):
+            return sum(haversine(a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:])) / 1000.0
+        base_poly, seen, kept = max(poly_km(anchors), 0.1), set(), []
+        for desc, way, kind in trials:
+            key = tuple((round(p[0], 4), round(p[1], 4)) for p in way)
+            if RETOUCH_DEDUPE and key in seen:
+                continue
+            seen.add(key)
+            pred = base.time_s / target_s * poly_km(way) / base_poly       # durée prévue / durée visée
+            if RETOUCH_PREFILTER is not None and abs(pred - 1.0) > RETOUCH_PREFILTER:
+                continue
+            kept.append((desc, way, kind, pred))
+        for k, (desc, way, kind, pred) in enumerate(kept[:RETOUCH_MAX_TRIALS]):
             n_try += 1
             path = gh.via(way, base.profile, pass_through=True)
             loop = analyse(path, level, base.profile, duration_h, 1000 + 100 * bi + k, None) if path else None
@@ -1619,9 +1636,10 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
             else:
                 found.append(loop)
             if stats is not None:                            # diagnostic : quels essais rapportent
-                stats.append([kind, bi, k, why or "gardée", None if loop is None else round(loop.score - base.score, 1)])
+                stats.append([kind, bi, k, why or "gardée", None if loop is None else round(loop.score - base.score, 1),
+                              round(pred, 3), None if loop is None else round(loop.time_s / target_s, 3)])
             if detail is not None:
-                detail.append(f"  {desc} -> " + ("" if loop is None else
+                detail.append(f"  {desc} [durée prévue {pred:.2f}] -> " + ("" if loop is None else
                               f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, eau "
                               f"{((loop.scenery or {}).get('landcover') or {}).get('water', 0):.0%}, industriel "
                               f"{(loop.scenery or {}).get('industrial', 0):.0%} : ") + (why or "GARDÉE")

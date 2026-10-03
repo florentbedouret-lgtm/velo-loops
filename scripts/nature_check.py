@@ -742,6 +742,9 @@ def main() -> int:
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
     ap.add_argument("--retouch", action="store_true", help="mesure la retouche des meilleures boucles (RETOUCH)")
     ap.add_argument("--retouch-trials", type=int, default=None, help="essais de retouche par boucle (RETOUCH_MAX_TRIALS)")
+    ap.add_argument("--retouch-prefilter", type=float, default=None,
+                    help="essai : écarte les retouches dont la durée prévue s'écarte de plus de X (RETOUCH_PREFILTER)")
+    ap.add_argument("--retouch-dedupe", action="store_true", help="essai : retouches aux mêmes points de passage, une seule")
     ap.add_argument("--lacets", action="store_true", help="essai : les lacets ne comptent pas comme demi-tours (filtre et note)")
     ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
     ap.add_argument("--references", default=None,
@@ -762,6 +765,9 @@ def main() -> int:
     g.RETOUCH = False          # la retouche est appelée à part (--retouch) pour la mesurer ; pas deux fois via level_pool
     if args.retouch_trials:
         g.RETOUCH_MAX_TRIALS = args.retouch_trials
+    if args.retouch_prefilter is not None:
+        g.RETOUCH_PREFILTER = args.retouch_prefilter
+    g.RETOUCH_DEDUPE = args.retouch_dedupe or g.RETOUCH_DEDUPE
     if args.compare_refs:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
