@@ -415,7 +415,7 @@ def run_probe(sid, site, gh_url, durations, levels):
 
 
 # ----------------------------------------------------------------------------- sonde « relief » (O-18, option B)
-RELIEF_VARIANTS = (0.0, 0.10, 0.20, 0.30)     # poids du relief dans la note du niveau sportif (0 = réglage actuel)
+RELIEF_VARIANTS = (0.10, 0.20, 0.30, 0.40)   # poids du relief en sportif ; 0,10 = réglage actuel (RELIEF_WEIGHTS, 03/10/2026)
 
 
 def relief_row(l, label, sid, modere_cells):
@@ -465,7 +465,8 @@ def report_relief(results, out_json, out_md, note, t0):
          "\nMêmes candidats, options choisies avec plusieurs poids du relief dans la note (0 = réglage actuel). "
          "« Doublon » = option qui recouvre à 80 % ou plus une option du niveau modéré.",
          "\n| Poids relief | D+ médian de l'équilibrée | D+/km médian | forêt médiane | ville médiane | routes principales médiane "
-         "| note (réglage actuel) médiane | équilibrée = modéré | options en doublon |", "|---|---|---|---|---|---|---|---|---|"]
+         "| note (réglage actuel) médiane | équilibrée = modéré | options en doublon | feux/km médian | feux/km moyen |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
     for w in RELIEF_VARIANTS:
         k = f"{w:g}"
         mains = [row["variants"][k][0] for r in ok for row in r["rows"] if row["variants"].get(k)]
@@ -475,7 +476,8 @@ def report_relief(results, out_json, out_md, note, t0):
         med = lambda key: stt.median([o[key] for o in mains if o.get(key) is not None])  # noqa: E731
         L.append(f"| {k} | {med('dplus_m'):.0f} m | {med('dplus_per_km'):.1f} | {med('forest_pct'):.0f} % | {med('city_pct'):.0f} % | "
                  f"{med('main_roads_pct'):.0f} % | {med('score'):.1f} | {sum(o['same_as_modere'] for o in mains)}/{len(mains)} | "
-                 f"{sum(o['same_as_modere'] for o in allo)}/{len(allo)} |")
+                 f"{sum(o['same_as_modere'] for o in allo)}/{len(allo)} | {med('lights_km'):.2f} | "
+                 f"{stt.mean([o['lights_km'] for o in mains if o.get('lights_km') is not None]):.2f} |")
     L.append("\n## Détail : boucle « équilibrée » sportive selon le poids du relief")
     for r in results:
         if r.get("skipped"):
