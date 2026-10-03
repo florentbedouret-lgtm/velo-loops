@@ -745,6 +745,8 @@ def main() -> int:
     ap.add_argument("--retouch-prefilter", type=float, default=None,
                     help="essai : écarte les retouches dont la durée prévue s'écarte de plus de X (RETOUCH_PREFILTER)")
     ap.add_argument("--retouch-family-cap", type=int, default=None, help="essai : au plus N essais par famille d'abord")
+    ap.add_argument("--lieux", action="store_true", help="essai : lieux les plus célèbres visés, points d'accès (REMARKABLE_*)")
+    ap.add_argument("--outback", action="store_true", help="essai : allers-retours sur piste acceptés et tirés (OUTBACK_*)")
     ap.add_argument("--retouch-worst-leg", action="store_true", help="essai : tronçon le plus chargé en feux d'abord")
     ap.add_argument("--retouch-dedupe", action="store_true", help="essai : retouches aux mêmes points de passage, une seule")
     ap.add_argument("--lacets", action="store_true", help="essai : les lacets ne comptent pas comme demi-tours (filtre et note)")
@@ -752,6 +754,8 @@ def main() -> int:
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
+    if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
+        g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()
 
     pbf, wd = Path(args.pbf), Path(args.workdir)
@@ -773,6 +777,10 @@ def main() -> int:
     if args.retouch_family_cap:
         g.RETOUCH_FAMILY_CAP = args.retouch_family_cap
     g.RETOUCH_WORST_LEG_FIRST = args.retouch_worst_leg or g.RETOUCH_WORST_LEG_FIRST
+    if args.outback:
+        g.OUTBACK_OK = g.OUTBACK_DRAWS = True
+    if args.lieux:
+        g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     if args.compare_refs:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))

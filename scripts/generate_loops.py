@@ -95,6 +95,12 @@ ASCENT_THRESHOLD_M = 3.0      # une variation < 3 m n'est pas comptée comme mon
 TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
+# Aller-retour (Florent, 03/10/2026 : Sant Adrià 1 h, l'aller-retour sur la piste du Besòs note 59 contre 42) : accepté
+# au-delà de MAX_OVERLAP si la partie répétée est surtout piste cyclable ou voie verte. Essai : désactivé en production.
+OUTBACK_OK = False
+OUTBACK_MAX_OVERLAP = 0.6        # part répétée maximale d'un aller-retour
+OUTBACK_MIN_CYCLE = 0.7          # part de piste cyclable / voie verte dans la partie répétée
+OUTBACK_DRAWS = False            # tirages « aller-retour au bord de l'eau » (rivière, mer)
 # Repli (choix B de Florent, 28/09/2026, test v10 : Castellgalí, Gaià perdaient leurs boucles courtes) : s'il n'existe AUCUN
 # candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
 # FALLBACK_UNPAVED_KM et FALLBACK_UNPAVED_SHARE, signalés dans l'appli (unpaved_fallback).
@@ -151,6 +157,11 @@ TARGET_MAX_PLANS = 6            # tirages ciblés par durée et allure (premier 
 REMARKABLE_NEAR_DEG = 0.0015    # ~130 m du tracé
 REMARKABLE_BONUS = 0.05         # 5 points par lieu
 REMARKABLE_MAX_BONUS = 0.08
+# Lieux remarquables, essais du 03/10/2026 (désactivés en production) : Sarrià 1 h visait le Turó del Carmel (6 articles,
+# le plus proche) et pas le Tibidabo (31) ; Montserrat (sommet inaccessible) jamais atteint.
+REMARKABLE_FAME = False          # tirages ciblés vers les 2 lieux les plus célèbres à portée (et non le plus proche)
+REMARKABLE_POINTS = False        # lieux de la liste ayant un « point » (accès relu, ex. monastère de Montserrat) visés aussi
+LIEU_FAME: dict = {}             # nom du lieu -> nombre d'articles Wikipédia
 # Belvédères quels qu'ils soient (Florent, 01/10/2026) : bonus à part, pour ceux devant lesquels on passe vraiment ; avant,
 # 0,05 de la part « paysage » par point de vue à moins de ~300 m (≈ 0,6 point de note, trop loin et trop faible)
 VIEW_NEAR_DEG = 0.0012          # ~100 m
@@ -572,9 +583,10 @@ def load_pois(pbf: Path, workdir: Path):
     # lieux remarquables : scripts/remarkable_places.json (Wikidata, au moins 6 articles Wikipédia ; sonde #163 : le simple
     # « a un article Wikipédia » retenait 63 petits turons de Catalogne, 239 boucles sur 459, le Tibidabo 2 fois seulement)
     try:
-        remarkable = set(json.loads((Path(__file__).parent / "remarkable_places.json").read_text(encoding="utf-8"))["places"])
+        remarkable_all = json.loads((Path(__file__).parent / "remarkable_places.json").read_text(encoding="utf-8"))["places"]
+        remarkable = set(remarkable_all)
     except (OSError, ValueError, KeyError):
-        remarkable = set()
+        remarkable, remarkable_all = set(), {}
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -591,6 +603,7 @@ def load_pois(pbf: Path, workdir: Path):
             if name and p.get("wikidata") in remarkable and (p.get("natural") in ("peak", "saddle")
                                                               or p.get("tourism") == "viewpoint" or p.get("mountain_pass") == "yes"):
                 kinds["lieu"].append((pt, name))           # lieu remarquable (liste Wikidata) : tirages ciblés, bonus
+                LIEU_FAME[name] = remarkable_all.get(p.get("wikidata"), {}).get("sitelinks", 0)
             if p.get("amenity") == "drinking_water" or (p.get("amenity") == "fountain" and p.get("drinking_water") == "yes"):
                 kinds["w"].append((pt, name))
             elif p.get("amenity") == "cafe" or p.get("shop") == "bakery":
@@ -601,6 +614,12 @@ def load_pois(pbf: Path, workdir: Path):
                 kinds["pass"].append((pt, name))
             elif p.get("natural") == "peak" and name:
                 kinds["peak"].append((pt, name))
+    if REMARKABLE_POINTS:                                    # points d'accès relus (« point ») : visés et comptés aussi
+        from shapely.geometry import Point
+        for e in remarkable_all.values():
+            if e.get("point") and not e.get("exclude"):
+                kinds["lieu"].append((Point(e["point"][0], e["point"][1]), e["label"]))
+                LIEU_FAME[e["label"]] = e.get("sitelinks", 0)
     print("Points d'intérêt : " + ", ".join(f"{k} {len(v)}" for k, v in kinds.items()), flush=True)
     return {k: (STRtree([g for g, _ in v]), v) for k, v in kinds.items() if v}
 
@@ -1037,6 +1056,7 @@ class Loop:
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
     longest_repeat_m: float = 0.0
+    repeat_cycle_share: float = 0.0
     scenery: dict | None = None
 
     @property
@@ -1190,6 +1210,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         keys.append(k)
         seen[k] = seen.get(k, 0) + 1
     repeated = sum(cum[i + 1] - cum[i] for i, k in enumerate(keys) if seen[k] > 1)
+    rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
+    rep_cycle = sum(cum[i + 1] - cum[i] for i, k in enumerate(keys) if seen[k] > 1 and rc_rep[i] == "c")
     longest_repeat, run = 0.0, 0.0
     for i, k in enumerate(keys):                     # plus long tronçon consécutif emprunté deux fois
         run = run + (cum[i + 1] - cum[i]) if seen[k] > 1 else 0.0
@@ -1262,6 +1284,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         time_s=estimate_time_s(ds, prof, watts, city, resid, n_signals),
         shares=shares, overlap=repeated / total, signals=n_signals, exit_dense_m=exit_dense,
         stops=n_stops, surface_mix=surface_mix, terrain=terrain, u_turns=u_turns, longest_repeat_m=longest_repeat,
+        repeat_cycle_share=(rep_cycle / repeated) if repeated > 0 else 0.0,
         scenery=scenery,
     )
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
@@ -1322,6 +1345,71 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
 
 
 # --------------------------------------------------------------------------- génération
+def overlap_ok(l) -> bool:
+    """Part répétée acceptable : sous MAX_OVERLAP, ou aller-retour sur piste cyclable (OUTBACK_OK)."""
+    return l.overlap <= MAX_OVERLAP or (OUTBACK_OK and l.overlap <= OUTBACK_MAX_OVERLAP
+                                        and l.repeat_cycle_share >= OUTBACK_MIN_CYCLE)
+
+
+def outback_candidates(gh, st, level, profile, duration_h, log, detail=None) -> list:
+    """Allers-retours au bord de l'eau (OUTBACK_DRAWS) : on vise un point d'une rivière ou de la mer à la bonne distance,
+    dans deux directions bien distinctes, et GraphHopper revient par le chemin qu'il préfère (souvent le même : la piste)."""
+    if LANDSCAPE is None:
+        return []
+    import shapely
+    lon, lat = st["lon"], st["lat"]
+    target_s = duration_h * 3600.0
+    flat_ms = speed_from_power(level_watts(level, duration_h), 0.0) * REAL_WORLD_FACTOR
+    loop_km = 0.8 * flat_ms * target_s / 1000.0
+    pt = shapely.Point(lon, lat)
+    found = []
+    for cat, key in (("riviere", "river"), ("mer", "sea")):
+        tree = LANDSCAPE.trees.get(key)
+        if tree is None:
+            continue
+        samples = []                                        # points de l'eau entre 15 % et 50 % de la longueur de boucle
+        for i in tree.query(pt.buffer(0.5 * loop_km / 90.0)):
+            gm = tree.geometries[int(i)]
+            line = gm.boundary if gm.geom_type in ("Polygon", "MultiPolygon") else gm
+            n = max(2, int(line.length / 0.004))
+            for k in range(n + 1):
+                q = line.interpolate(k / n, normalized=True)
+                d = haversine(lon, lat, q.x, q.y) / 1000.0
+                if 0.15 * loop_km <= d <= 0.5 * loop_km:
+                    samples.append((q.x, q.y, d, bearing(lon, lat, q.x, q.y)))
+        if not samples:
+            continue
+        dirs = []                                           # deux directions à plus de 60° l'une de l'autre
+        for s in sorted(samples, key=lambda s: abs(s[2] - 0.3 * loop_km)):
+            if all(abs((s[3] - b + 180) % 360 - 180) > 60 for b in dirs):
+                dirs.append(s[3])
+            if len(dirs) >= 2:
+                break
+        for b0 in dirs:
+            side = [s for s in samples if abs((s[3] - b0 + 180) % 360 - 180) <= 30]
+            want, loop = 0.3 * loop_km, None
+            for _ in range(3):                              # ajustement de la distance visée sur la durée
+                s = min(side, key=lambda s: abs(s[2] - want))
+                path = gh.via([[lon, lat], [s[0], s[1]], [lon, lat]], profile)
+                loop = analyse(path, level, profile, duration_h, 950, None) if path else None
+                if loop is None:
+                    break
+                ratio = loop.time_s / target_s
+                if abs(ratio - 1.0) <= 0.05:
+                    break
+                want = s[2] / ratio
+            ok = (loop is not None and abs(loop.time_s / target_s - 1.0) <= TIME_TOLERANCE and overlap_ok(loop)
+                  and loop.u_turns <= MAX_UTURNS and loop.shares["unpaved"] <= MAX_UNPAVED)
+            if detail is not None:
+                detail.append(f"  aller-retour {cat} cap {b0:.0f}° -> " + ("pas de boucle" if loop is None else
+                              f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, répété "
+                              f"{loop.overlap:.0%} (piste {loop.repeat_cycle_share:.0%}) : " + ("GARDÉ" if ok else "rejeté")))
+            if ok:
+                found.append(loop)
+    log(f"    allers-retours au bord de l'eau : {len(found)} valide(s)")
+    return found
+
+
 def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h: float, candidates, log,
                    fallback: list | None = None):
     """Retourne (candidats valides, compteur des raisons de rejet). fallback : reçoit les candidats rejetés pour la
@@ -1378,7 +1466,7 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
             if cand is None or abs(cand.time_s / target_s - 1.0) > TIME_TOLERANCE:
                 rejects["durée"] += 1
                 continue
-        if cand.overlap > MAX_OVERLAP:
+        if not overlap_ok(cand):
             rejects["tronçons répétés"] += 1
             continue
         if cand.u_turns > MAX_UTURNS:
@@ -1468,7 +1556,12 @@ def attraction_points(lon, lat, max_km):
         near = [items[int(i)] for i in tree.query(pt.buffer(max_km / 90.0))]
         near = [(q.x, q.y, haversine(lon, lat, q.x, q.y) / 1000.0, n) for q, n in near]
         near = [x for x in near if TARGET_MIN_KM <= x[2] <= max_km]
-        if near:
+        if near and REMARKABLE_FAME:                           # les 2 plus célèbres (à célébrité égale, le plus proche)
+            near.sort(key=lambda x: (-LIEU_FAME.get(x[3], 0), x[2]))
+            out["lieu"] = near[0][:3]
+            if len(near) > 1:
+                out["lieu2"] = near[1][:3]
+        elif near:
             out["lieu"] = min(near, key=lambda x: x[2])[:3]
     for cat, keys in (("mer", ("sea",)), ("riviere", ("river",)), ("vert", ("forest", "protected"))):
         best = None
@@ -1654,7 +1747,7 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 why = f"pas d'itinéraire ({gh.last_error})" if path is None else "boucle invalide"
             elif abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
                 why = "durée"
-            elif loop.overlap > MAX_OVERLAP:
+            elif not overlap_ok(loop):
                 why = f"tronçons répétés ({loop.overlap:.0%})"
             elif loop.u_turns > MAX_UTURNS:
                 why = f"demi-tours ({loop.u_turns})"
@@ -1698,14 +1791,14 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
             x, y, km = pts[cat]
             th = bearing(lon, lat, x, y)
             plans.append((cat, [(th, km), (th + off, km)]))
-    plans = plans[:TARGET_MAX_PLANS + (2 if "lieu" in pts else 0)]   # coût : ~2,5 requêtes GraphHopper par tirage
+    plans = plans[:TARGET_MAX_PLANS + (2 if "lieu" in pts else 0) + (2 if "lieu2" in pts else 0)]   # ~2,5 requêtes / tirage
     found, n_ok = [], 0
-    lieu_bd = (bearing(lon, lat, pts["lieu"][0], pts["lieu"][1]), pts["lieu"][2]) if "lieu" in pts else None
+    aims = {(bearing(lon, lat, pts[c][0], pts[c][1]), pts[c][2]): list(pts[c][:2]) for c in pts if c.startswith("lieu")}
     for k, (name, plan) in enumerate(plans):
         s, loop = max(1.0, loop_km / 4.1 / max(p[1] for p in plan)), None
         for _ in range(3):                                   # ajustement de la taille sur la durée visée
-            way = [[lon, lat]] + [list(pts["lieu"][:2]) if (b, d) == lieu_bd else list(destination(lon, lat, b, d * s))
-                                  for b, d in plan] + [[lon, lat]]    # le lieu remarquable est visé exactement
+            way = [[lon, lat]] + [aims[(b, d)] if (b, d) in aims else list(destination(lon, lat, b, d * s))
+                                  for b, d in plan] + [[lon, lat]]    # les lieux remarquables sont visés exactement
             path = gh.via(way, profile)
             loop = analyse(path, level, profile, duration_h, 900 + k, None) if path else None
             if loop is None:
@@ -1716,7 +1809,7 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
             s = max(1.0, s / ratio)
         if loop is None or abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
             continue
-        if loop.overlap > MAX_OVERLAP or loop.u_turns > MAX_UTURNS:
+        if not overlap_ok(loop) or loop.u_turns > MAX_UTURNS:
             continue
         if loop.shares["unpaved"] > MAX_UNPAVED:
             if (fallback is not None and loop.shares["unpaved"] <= FALLBACK_UNPAVED_SHARE
@@ -1760,6 +1853,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
     pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))  # ciblés
+    if OUTBACK_DRAWS:
+        pool.extend(outback_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
     if RETOUCH:
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
     if pool:
@@ -1992,6 +2087,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},
         "u_turns": l.u_turns,
         "longest_repeat_km": round(l.longest_repeat_m / 1000.0, 2),
+        **({"out_and_back": True} if l.overlap > MAX_OVERLAP else {}),   # aller-retour sur piste (OUTBACK_OK)
         "scenery": (None if l.scenery is None else {
             "forest": round(l.scenery["forest"], 3), "water": round(l.scenery["water"], 3),
             "protected": round(l.scenery["protected"], 3), "viewpoints": l.scenery["viewpoints"],
