@@ -132,6 +132,8 @@ RETOUCH_ANCHOR_SHIFT_M = 300.0
 # Essais (03/10/2026, la Plata sportif 2 h : 10 essais épuisés avant les essais « rivière » ; sur la sonde, 45 % des essais
 # échouent sur la durée). Désactivés en production tant qu'ils ne sont pas validés (diagnostic --retouch-prefilter) :
 RETOUCH_DEDUPE = False           # essais aux mêmes points de passage : un seul
+RETOUCH_WORST_LEG_FIRST = False  # essais d'abord sur le tronçon le plus chargé en feux (comme Florent à la Plata : il a
+#                                  corrigé l'aller par Sant Andreu en modéré, le retour en sportif)
 RETOUCH_FAMILY_CAP = None        # au plus N essais par famille (mer, lieu, rivière, vert) avant les autres : diversité
 RETOUCH_PREFILTER = None         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
 #                                  celle de la boucle de départ) ; au-delà, l'essai est écarté sans requête ni compter   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
@@ -1523,7 +1525,7 @@ def true_uturns(coords) -> int:
     return sum(1 for u in uturn_points(coords) if u[2] < UTURN_SAME_STREET_M)
 
 
-def loop_anchors(l) -> list:
+def loop_anchors(l, with_idx=False):
     """Points de passage d'une boucle : ses points à RETOUCH_ANCHORS de la distance, décalés de RETOUCH_ANCHOR_SHIFT_M
     plus loin s'ils tombent à moins de 150 m d'un vrai demi-tour de la boucle (impasse : le calcul y referait demi-tour)."""
     c = l.coords
@@ -1531,7 +1533,7 @@ def loop_anchors(l) -> list:
     for a, b in zip(c, c[1:]):
         cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
     bad = [u for u in uturn_points(c) if u[2] < UTURN_SAME_STREET_M]
-    out, j = [], 0
+    out, idx, j = [], [], 0
     for f in RETOUCH_ANCHORS:
         while j < len(cum) - 1 and cum[j] < f * cum[-1]:
             j += 1
@@ -1540,6 +1542,20 @@ def loop_anchors(l) -> list:
             while k < len(cum) - 1 and cum[k] < cum[j] + RETOUCH_ANCHOR_SHIFT_M:
                 k += 1
         out.append([c[k][0], c[k][1]])
+        idx.append(k)
+    return (out, idx) if with_idx else out
+
+
+def leg_lights_per_km(l, idx) -> list:
+    """Feux par km de chaque tronçon de la boucle entre ses points de passage (idx : indices des points de passage)."""
+    c, cuts, out = l.coords, [0] + list(idx) + [len(l.coords) - 1], []
+    for a, b in zip(cuts, cuts[1:]):
+        sub = c[a:b + 1]
+        cum = [0.0]
+        for p, q in zip(sub, sub[1:]):
+            cum.append(cum[-1] + haversine(p[0], p[1], q[0], q[1]))
+        n = SIGNALS.count_along(sub, cum) if SIGNALS is not None and len(sub) > 1 else 0
+        out.append(n / max(cum[-1] / 1000.0, 0.3))
     return out
 
 
@@ -1562,7 +1578,9 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
         line = shapely.LineString([p[:2] for p in base.coords])
         on_route = lambda p: line.distance(shapely.Point(p[0], p[1])) < RETOUCH_ON_ROUTE_DEG  # noqa: E731
         reach = max(RETOUCH_REACH_MIN_KM, RETOUCH_REACH * base.distance_m / 1000.0)
-        anchors = [home] + loop_anchors(base) + [home]
+        pts, idx = loop_anchors(base, with_idx=True)
+        anchors = [home] + pts + [home]
+        legbad = leg_lights_per_km(base, idx) if RETOUCH_WORST_LEG_FIRST else [0.0] * (len(anchors) - 1)
         trials = []
         for i in range(len(anchors) - 1):
             P, Q = anchors[i], anchors[i + 1]
@@ -1570,10 +1588,11 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
             # essais qui sautent le point suivant d'abord (priorité 0) : un détour ajouté sans rien retirer dépasse
             # souvent la durée (diagnostic la Plata, 02/10/2026)
             def add(desc, mid, kind):
-                trials.append((1, f"{desc} {i}-{i + 1}", anchors[:i + 1] + mid + anchors[i + 1:], kind + "/garde"))
+                trials.append((1, f"{desc} {i}-{i + 1}", anchors[:i + 1] + mid + anchors[i + 1:], kind + "/garde",
+                               legbad[i]))
                 if not last:
                     trials.append((0, f"{desc} {i}-{i + 2} (saute {i + 1})", anchors[:i + 1] + mid + anchors[i + 2:],
-                                   kind + "/saute"))
+                                   kind + "/saute", max(legbad[i], legbad[i + 1])))
             for cat in ("riviere", "mer"):                    # suivre l'eau entre P et Q (puis Q, ou directement la suite)
                 e = nearest_attraction(cat, P[0], P[1], reach)
                 if not e:
@@ -1599,7 +1618,8 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 if p and not on_route(p):
                     add(f"{cat} {p[1]:.4f},{p[0]:.4f}", [list(p[:2])], cat)
         rank = {k: n for n, k in enumerate(RETOUCH_KIND_ORDER)}   # plus rentables d'abord ; tri stable : ordre des tronçons
-        trials = [t[1:] for t in sorted(trials, key=lambda t: rank.get(t[3], len(rank)))]
+        trials = [t[1:4] for t in sorted(trials, key=lambda t: ((-round(t[4]) if RETOUCH_WORST_LEG_FIRST else 0),
+                                                                 rank.get(t[3], len(rank))))]
         if RETOUCH_FAMILY_CAP:                               # chaque famille a sa chance (la Plata sportif, 03/10/2026 :
             fam, first, rest = {}, [], []                    # 7 essais « mer » sur 10, l'espace vert du Besòs jamais essayé)
             for t in trials:
@@ -1611,7 +1631,8 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
             detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "
                           + " ; ".join(f"{i}: {a[1]:.4f},{a[0]:.4f}" for i, a in enumerate(anchors[1:-1], start=1))
-                          + f" ; {len(trials)} essai(s) possibles, {min(len(trials), RETOUCH_MAX_TRIALS)} faits")
+                          + f" ; {len(trials)} essai(s) possibles, {min(len(trials), RETOUCH_MAX_TRIALS)} faits"
+                          + (" ; feux/km par tronçon " + " ".join(f"{x:.1f}" for x in legbad) if RETOUCH_WORST_LEG_FIRST else ""))
         def poly_km(pts):
             return sum(haversine(a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:])) / 1000.0
         base_poly, seen, kept = max(poly_km(anchors), 0.1), set(), []

@@ -265,7 +265,7 @@ jobs:
           NATURE_RELIEF=""
           NATURE_WORKERS=3   # test #165 (01/10/2026) : 4 en parallèle ne gagnent que 2 %
           NATURE_PROBE="gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"
-          NATURE_RETOUCH="--retouch --lacets --retouch-dedupe --retouch-prefilter 0.25 --retouch-family-cap 4"   # --lacets : essai, lacets non comptés comme demi-tours ; retouche des meilleures boucles mesurée (02/10/2026) ; "" : production telle quelle
+          NATURE_RETOUCH="--retouch --lacets --retouch-dedupe --retouch-prefilter 0.25 --retouch-worst-leg"   # --lacets : essai, lacets non comptés comme demi-tours ; retouche des meilleures boucles mesurée (02/10/2026) ; "" : production telle quelle
           if [ -n "$NATURE_COMPARE" ]; then   # comparaison d'abord (rapport à part), puis la sonde ci-dessous si elle est réglée
             for C in $NATURE_COMPARE; do
               LVL="${C%%:*}"; REF="${C#*:}"

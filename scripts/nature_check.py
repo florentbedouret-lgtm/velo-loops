@@ -745,6 +745,7 @@ def main() -> int:
     ap.add_argument("--retouch-prefilter", type=float, default=None,
                     help="essai : écarte les retouches dont la durée prévue s'écarte de plus de X (RETOUCH_PREFILTER)")
     ap.add_argument("--retouch-family-cap", type=int, default=None, help="essai : au plus N essais par famille d'abord")
+    ap.add_argument("--retouch-worst-leg", action="store_true", help="essai : tronçon le plus chargé en feux d'abord")
     ap.add_argument("--retouch-dedupe", action="store_true", help="essai : retouches aux mêmes points de passage, une seule")
     ap.add_argument("--lacets", action="store_true", help="essai : les lacets ne comptent pas comme demi-tours (filtre et note)")
     ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
@@ -771,6 +772,7 @@ def main() -> int:
     g.RETOUCH_DEDUPE = args.retouch_dedupe or g.RETOUCH_DEDUPE
     if args.retouch_family_cap:
         g.RETOUCH_FAMILY_CAP = args.retouch_family_cap
+    g.RETOUCH_WORST_LEG_FIRST = args.retouch_worst_leg or g.RETOUCH_WORST_LEG_FIRST
     if args.compare_refs:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
