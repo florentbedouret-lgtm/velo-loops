@@ -1,0 +1,76 @@
+{
+ "_note": "Sant Adrià de Besòs, facile, 1 h : piste cyclable du Besòs (Florent). Points de passage seulement. Utilisées par nature_check.py --compare-refs.",
+ "start": "sant-adria-de-besos",
+ "loops": [
+  {
+   "name": "Besòs vers l'amont (Santa Coloma), aller-retour sur la piste",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.20925,
+     41.44165
+    ],
+    [
+     2.2033,
+     41.4496
+    ],
+    [
+     2.1985,
+     41.459
+    ],
+    [
+     2.2033,
+     41.4496
+    ],
+    [
+     2.20925,
+     41.44165
+    ]
+   ]
+  },
+  {
+   "name": "Besòs vers l'amont, retour par Santa Coloma",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.20925,
+     41.44165
+    ],
+    [
+     2.2033,
+     41.4496
+    ],
+    [
+     2.1985,
+     41.459
+    ],
+    [
+     2.212,
+     41.448
+    ]
+   ]
+  },
+  {
+   "name": "Besòs vers la mer puis Fòrum et Diagonal Mar",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.2295,
+     41.4205
+    ],
+    [
+     2.2275,
+     41.4105
+    ],
+    [
+     2.212,
+     41.4
+    ],
+    [
+     2.213,
+     41.4127
+    ]
+   ]
+  }
+ ]
+}

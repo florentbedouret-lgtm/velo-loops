@@ -1,0 +1,90 @@
+{
+ "_note": "Gràcia, sportif, 1 h : boucles par plusieurs turons (Florent) ; revêtement à surveiller (colonne terre). Points de passage seulement. Utilisées par nature_check.py --compare-refs.",
+ "start": "gracia",
+ "loops": [
+  {
+   "name": "Carmel, Rovira",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.15327,
+     41.41834
+    ],
+    [
+     2.16154,
+     41.41926
+    ]
+   ]
+  },
+  {
+   "name": "Putxet, Creueta del Coll, Carmel, Rovira",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.14185,
+     41.40884
+    ],
+    [
+     2.14688,
+     41.41987
+    ],
+    [
+     2.15327,
+     41.41834
+    ],
+    [
+     2.16154,
+     41.41926
+    ]
+   ]
+  },
+  {
+   "name": "Creueta del Coll, Carmel, Rovira, Peira",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.14688,
+     41.41987
+    ],
+    [
+     2.15327,
+     41.41834
+    ],
+    [
+     2.16154,
+     41.41926
+    ],
+    [
+     2.1655,
+     41.43279
+    ]
+   ]
+  },
+  {
+   "name": "Putxet, Creueta, Carmel, Rovira, Peira",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.14185,
+     41.40884
+    ],
+    [
+     2.14688,
+     41.41987
+    ],
+    [
+     2.15327,
+     41.41834
+    ],
+    [
+     2.16154,
+     41.41926
+    ],
+    [
+     2.1655,
+     41.43279
+    ]
+   ]
+  }
+ ]
+}

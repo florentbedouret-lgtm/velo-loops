@@ -1,0 +1,62 @@
+{
+ "_note": "Les Corts, facile, 1 h 30 : le long du Llobregat (Florent) ; le Camí del Sorral est en terre dans OSM. Points de passage seulement. Utilisées par nature_check.py --compare-refs.",
+ "start": "les-corts",
+ "loops": [
+  {
+   "name": "Llobregat par le Camí del Sorral (terre)",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.09,
+     41.377
+    ],
+    [
+     2.063,
+     41.361
+    ],
+    [
+     2.0607,
+     41.3468
+    ],
+    [
+     2.0778,
+     41.3422
+    ],
+    [
+     2.105,
+     41.3331
+    ],
+    [
+     2.115,
+     41.36
+    ]
+   ]
+  },
+  {
+   "name": "Llobregat par les pistes goudronnées (Carretera d'Esplugues, Carretera de l'Hospitalet)",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.09,
+     41.377
+    ],
+    [
+     2.0759,
+     41.3647
+    ],
+    [
+     2.083,
+     41.3551
+    ],
+    [
+     2.0845,
+     41.349
+    ],
+    [
+     2.115,
+     41.36
+    ]
+   ]
+  }
+ ]
+}

@@ -1,0 +1,96 @@
+{
+ "_note": "Sarrià - Sant Gervasi, sportif, 1 h : la montée de la boucle de 1 h 30 (Tibidabo), redescendue plus tôt (Florent). Points de passage seulement. Utilisées par nature_check.py --compare-refs.",
+ "start": "sarria-sant-gervasi",
+ "loops": [
+  {
+   "name": "Tibidabo puis Carretera de Vallvidrera al Tibidabo",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.1387,
+     41.4193
+    ],
+    [
+     2.1275,
+     41.4274
+    ],
+    [
+     2.1346,
+     41.4341
+    ],
+    [
+     2.1208,
+     41.4226
+    ],
+    [
+     2.11838,
+     41.42197
+    ]
+   ]
+  },
+  {
+   "name": "Tibidabo puis Carrer Major del Rectoret",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.1387,
+     41.4193
+    ],
+    [
+     2.1275,
+     41.4274
+    ],
+    [
+     2.1346,
+     41.4341
+    ],
+    [
+     2.1208,
+     41.4226
+    ],
+    [
+     2.11838,
+     41.42197
+    ],
+    [
+     2.09509,
+     41.42298
+    ]
+   ]
+  },
+  {
+   "name": "Tibidabo puis Carrer del Molí de les Planes",
+   "source": "Florent, 03/10/2026",
+   "waypoints": [
+    [
+     2.1387,
+     41.4193
+    ],
+    [
+     2.1275,
+     41.4274
+    ],
+    [
+     2.1346,
+     41.4341
+    ],
+    [
+     2.1208,
+     41.4226
+    ],
+    [
+     2.11838,
+     41.42197
+    ],
+    [
+     2.09487,
+     41.42855
+    ],
+    [
+     2.09206,
+     41.43399
+    ]
+   ]
+  }
+ ]
+}
