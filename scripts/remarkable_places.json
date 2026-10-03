@@ -1,178 +1,645 @@
 {
- "_note": "Lieux remarquables : sommets (Q8502), cols (Q133056) et belvédères (Q1440300) de la province de Barcelone ayant au moins 6 articles Wikipédia (toutes langues) dans Wikidata (CC0), requête du 01/10/2026. Un sommet, belvédère ou col OSM dont le tag wikidata figure ici compte comme lieu remarquable (tirages ciblés, bonus). Liste modifiable à la main (ajouter un QID, ou en retirer).",
+ "_note": "Lieux remarquables de la province de Barcelone ayant au moins 6 articles Wikipédia (Wikidata, CC0), construits par scripts/remarkable_places_build.py. Sommets, cols, belvédères : un élément OSM de ce type portant le tag wikidata compte comme lieu (tirages ciblés, bonus). « point » [lon, lat] : endroit visé à vélo quand le lieu lui-même est inaccessible (ex. le monastère pour Montserrat), proposé par le rapport « lieux » puis relu ; « via » : ce qu'est ce point ; « exclude » : true pour écarter un lieu.",
  "min_sitelinks": 6,
  "places": {
   "Q732115": {
    "label": "Montserrat",
-   "sitelinks": 46
+   "sitelinks": 46,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.811495,
+    41.605376
+   ]
+  },
+  "Q771935": {
+   "label": "monestir de Montserrat",
+   "sitelinks": 38,
+   "kind": [
+    "abbaye"
+   ],
+   "coord": [
+    1.837139,
+    41.593194
+   ]
   },
   "Q658271": {
    "label": "Tibidabo",
-   "sitelinks": 31
+   "sitelinks": 31,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.118611,
+    41.4225
+   ]
   },
   "Q1122701": {
    "label": "Montjuïc",
-   "sitelinks": 30
+   "sitelinks": 30,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.158056,
+    41.364167
+   ]
   },
   "Q1463283": {
    "label": "Collserola",
-   "sitelinks": 23
+   "sitelinks": 23,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.073889,
+    41.412222
+   ]
   },
   "Q1862666": {
    "label": "Pedraforca",
-   "sitelinks": 22
+   "sitelinks": 22,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.702938,
+    42.239941
+   ]
   },
-  "Q3776656": {
-   "label": "la Tosa",
-   "sitelinks": 11
+  "Q1189293": {
+   "label": "Temple Expiatori del Sagrat Cor",
+   "sitelinks": 18,
+   "kind": [
+    "sanctuaire"
+   ],
+   "coord": [
+    2.118861,
+    41.422075
+   ]
+  },
+  "Q2500125": {
+   "label": "castell de Montjuïc",
+   "sitelinks": 17,
+   "kind": [
+    "château"
+   ],
+   "coord": [
+    2.16617,
+    41.36342
+   ]
+  },
+  "Q1321526": {
+   "label": "monestir de Santa Maria de Pedralbes",
+   "sitelinks": 16,
+   "kind": [
+    "monastère"
+   ],
+   "coord": [
+    2.112222,
+    41.395556
+   ]
+  },
+  "Q975868": {
+   "label": "Castell de Cardona",
+   "sitelinks": 12,
+   "kind": [
+    "château"
+   ],
+   "coord": [
+    1.685556,
+    41.914444
+   ]
   },
   "Q7419090": {
    "label": "Sant Jeroni",
-   "sitelinks": 11
+   "sitelinks": 11,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.811505,
+    41.605384
+   ]
   },
-  "Q12263797": {
-   "label": "massís del Montnegre",
-   "sitelinks": 10
+  "Q3776656": {
+   "label": "la Tosa",
+   "sitelinks": 11,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.892661,
+    42.320575
+   ]
   },
-  "Q6785970": {
-   "label": "Matagalls",
-   "sitelinks": 10
+  "Q615763": {
+   "label": "monestir de Sant Cugat",
+   "sitelinks": 11,
+   "kind": [
+    "monastère"
+   ],
+   "coord": [
+    2.08546,
+    41.47425
+   ]
   },
   "Q4893362": {
    "label": "Turó de l'Home",
-   "sitelinks": 10
+   "sitelinks": 10,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.434813,
+    41.776488
+   ]
   },
-  "Q6529125": {
-   "label": "les Agudes",
-   "sitelinks": 9
+  "Q6785970": {
+   "label": "Matagalls",
+   "sitelinks": 10,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.382618,
+    41.808817
+   ]
+  },
+  "Q12263797": {
+   "label": "massís del Montnegre",
+   "sitelinks": 10,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.567022,
+    41.675858
+   ]
+  },
+  "Q7131953": {
+   "label": "pantà de Susqueda",
+   "sitelinks": 10,
+   "kind": [
+    "lac",
+    "réservoir"
+   ],
+   "coord": [
+    2.52722,
+    41.9792
+   ]
+  },
+  "Q1140094": {
+   "label": "Pantà de Sau",
+   "sitelinks": 10,
+   "kind": [
+    "réservoir"
+   ],
+   "coord": [
+    2.384292,
+    41.974197
+   ]
   },
   "Q4895920": {
    "label": "el Montcau",
-   "sitelinks": 9
+   "sitelinks": 9,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.004627,
+    41.675041
+   ]
   },
-  "Q7259037": {
-   "label": "Puigllançada",
-   "sitelinks": 8
-  },
-  "Q5150472": {
-   "label": "Comabona",
-   "sitelinks": 8
-  },
-  "Q7165403": {
-   "label": "Penyes Altes de Moixeró",
-   "sitelinks": 8
-  },
-  "Q7856613": {
-   "label": "Turó del Samont",
-   "sitelinks": 8
+  "Q6529125": {
+   "label": "les Agudes",
+   "sitelinks": 9,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.443955,
+    41.789334
+   ]
   },
   "Q17482913": {
    "label": "Còpia de Palomes",
-   "sitelinks": 8
+   "sitelinks": 8,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.602805,
+    41.659749
+   ]
   },
-  "Q7259022": {
-   "label": "Puig Drau",
-   "sitelinks": 7
+  "Q7856613": {
+   "label": "Turó del Samont",
+   "sitelinks": 8,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.365525,
+    41.742676
+   ]
   },
-  "Q8534972": {
-   "label": "l'Agullola",
-   "sitelinks": 7
+  "Q5150472": {
+   "label": "Comabona",
+   "sitelinks": 8,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.727231,
+    42.283726
+   ]
   },
-  "Q7353679": {
-   "label": "Rocallarga",
-   "sitelinks": 7
+  "Q7165403": {
+   "label": "Penyes Altes de Moixeró",
+   "sitelinks": 8,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.842475,
+    42.3063
+   ]
   },
-  "Q7856610": {
-   "label": "Turó del Castell",
-   "sitelinks": 7
+  "Q7259037": {
+   "label": "Puigllançada",
+   "sitelinks": 8,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.935535,
+    42.300483
+   ]
   },
-  "Q7856606": {
-   "label": "Turó de Tagamanent",
-   "sitelinks": 7
+  "Q10975126": {
+   "label": "castell de Santa Florentina",
+   "sitelinks": 8,
+   "kind": [
+    "château"
+   ],
+   "coord": [
+    2.57698,
+    41.6008
+   ]
   },
-  "Q17482898": {
-   "label": "Puig d'Ossa",
-   "sitelinks": 7
+  "Q9034416": {
+   "label": "Sant Miquel del Fai",
+   "sitelinks": 8,
+   "kind": [
+    "monastère"
+   ],
+   "coord": [
+    2.19047,
+    41.7161
+   ]
   },
-  "Q7259033": {
-   "label": "Puig de la Mola",
-   "sitelinks": 7
-  },
-  "Q6904469": {
-   "label": "Montau",
-   "sitelinks": 7
+  "Q1738829": {
+   "label": "Sant Pere de Casserres",
+   "sitelinks": 8,
+   "kind": [
+    "monastère"
+   ],
+   "coord": [
+    2.340839,
+    42.00184
+   ]
   },
   "Q8531595": {
    "label": "la Morella",
-   "sitelinks": 7
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.915486,
+    41.296533
+   ]
   },
-  "Q17481883": {
-   "label": "Turó de la Dona Morta",
-   "sitelinks": 6
+  "Q6904469": {
+   "label": "Montau",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.885001,
+    41.345864
+   ]
   },
-  "Q7856609": {
-   "label": "Turó de la Creu de Gurb",
-   "sitelinks": 6
+  "Q17482898": {
+   "label": "Puig d'Ossa",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.097878,
+    41.393659
+   ]
   },
-  "Q7259016": {
-   "label": "Puig Castellar",
-   "sitelinks": 6
+  "Q7259033": {
+   "label": "Puig de la Mola",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    1.847853,
+    41.319322
+   ]
   },
-  "Q7353669": {
-   "label": "Roc de la Guàrdia",
-   "sitelinks": 6
+  "Q7856606": {
+   "label": "Turó de Tagamanent",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.296021,
+    41.747478
+   ]
   },
-  "Q5367368": {
-   "label": "els Munts",
-   "sitelinks": 6
+  "Q7856610": {
+   "label": "Turó del Castell",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.396292,
+    41.983072
+   ]
   },
-  "Q6904618": {
-   "label": "Montdois",
-   "sitelinks": 6
+  "Q7353679": {
+   "label": "Rocallarga",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.445601,
+    42.009809
+   ]
   },
-  "Q4884080": {
-   "label": "Bellmunt",
-   "sitelinks": 6
+  "Q8534972": {
+   "label": "l'Agullola",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.482929,
+    42.004523
+   ]
   },
-  "Q5131098": {
-   "label": "Puig de l'Àliga",
-   "sitelinks": 6
+  "Q7259022": {
+   "label": "Puig Drau",
+   "sitelinks": 7,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.348303,
+    41.764578
+   ]
   },
-  "Q5015822": {
-   "label": "Cabrera",
-   "sitelinks": 6
+  "Q5855361": {
+   "label": "monestir de Sant Llorenç del Munt",
+   "sitelinks": 7,
+   "kind": [
+    "monastère"
+   ],
+   "coord": [
+    2.018074,
+    41.641165
+   ]
   },
-  "Q7353671": {
-   "label": "Roca Centella",
-   "sitelinks": 6
-  },
-  "Q7856603": {
-   "label": "Turó de Morou",
-   "sitelinks": 6
-  },
-  "Q5352208": {
-   "label": "el Sui",
-   "sitelinks": 6
-  },
-  "Q2666055": {
-   "label": "serra de Granera",
-   "sitelinks": 6
-  },
-  "Q7856602": {
-   "label": "Turó Gros",
-   "sitelinks": 6
-  },
-  "Q7856605": {
-   "label": "Turó de Sant Elies",
-   "sitelinks": 6
-  },
-  "Q11953660": {
-   "label": "Turó de la Rovira",
-   "sitelinks": 6
+  "Q3326666": {
+   "label": "Sant Benet de Bages",
+   "sitelinks": 6,
+   "kind": [
+    "abbaye"
+   ],
+   "coord": [
+    1.89925,
+    41.742639
+   ]
   },
   "Q8538595": {
    "label": "turó del Carmel",
-   "sitelinks": 6
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.153352,
+    41.418435
+   ]
+  },
+  "Q11953660": {
+   "label": "Turó de la Rovira",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.16174,
+    41.4194
+   ]
+  },
+  "Q7856605": {
+   "label": "Turó de Sant Elies",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.379688,
+    41.730059
+   ]
+  },
+  "Q7856602": {
+   "label": "Turó Gros",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.576671,
+    41.661482
+   ]
+  },
+  "Q5352208": {
+   "label": "el Sui",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.345652,
+    41.749114
+   ]
+  },
+  "Q2666055": {
+   "label": "serra de Granera",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.063611,
+    41.738333
+   ]
+  },
+  "Q7856603": {
+   "label": "Turó de Morou",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.480833,
+    41.772778
+   ]
+  },
+  "Q7353671": {
+   "label": "Roca Centella",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.322222,
+    41.719722
+   ]
+  },
+  "Q5015822": {
+   "label": "Cabrera",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.407272,
+    42.075996
+   ]
+  },
+  "Q5131098": {
+   "label": "Puig de l'Àliga",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.349318,
+    42.109015
+   ]
+  },
+  "Q4884080": {
+   "label": "Bellmunt",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.29375,
+    42.101535
+   ]
+  },
+  "Q5367368": {
+   "label": "els Munts",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.153281,
+    42.078726
+   ]
+  },
+  "Q6904618": {
+   "label": "Montdois",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.480222,
+    41.978772
+   ]
+  },
+  "Q7856609": {
+   "label": "Turó de la Creu de Gurb",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.210461,
+    41.952088
+   ]
+  },
+  "Q7353669": {
+   "label": "Roc de la Guàrdia",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.203739,
+    41.825269
+   ]
+  },
+  "Q7259016": {
+   "label": "Puig Castellar",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.198056,
+    41.819444
+   ]
+  },
+  "Q17481883": {
+   "label": "Turó de la Dona Morta",
+   "sitelinks": 6,
+   "kind": [
+    "sommet"
+   ],
+   "coord": [
+    2.723996,
+    41.744401
+   ]
+  },
+  "Q5132925": {
+   "label": "castell de Castellet",
+   "sitelinks": 6,
+   "kind": [
+    "château"
+   ],
+   "coord": [
+    1.63611,
+    41.2647
+   ]
+  },
+  "Q17596072": {
+   "label": "Castell de Castelldefels",
+   "sitelinks": 6,
+   "kind": [
+    "château"
+   ],
+   "coord": [
+    1.97795,
+    41.28422
+   ]
   }
  }
 }
