@@ -961,7 +961,9 @@ def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_s
 
 
 # --------------------------------------------------------------------------- client GraphHopper
-GH_MEMO = False                 # mémoire des itinéraires déjà demandés, par départ (voir GraphHopper._route) ; essai
+GH_MEMO = True                  # mémoire des itinéraires déjà demandés, par départ (voir GraphHopper._route) ; sonde du
+#                                 04/10/2026 : 10 % des requêtes réutilisées, sonde 31 -> 24 min, boucles identiques (aux
+#                                 données OSM du jour près)
 
 
 class GraphHopper:
