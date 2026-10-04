@@ -54,20 +54,8 @@ PART_LABELS = {"calm": "calme (ville)", "lights": "feux", "axes": "grands axes",
 class GH(g.GraphHopper):
     """GraphHopper de production + itinéraire passant par des points imposés (candidats « vers le vert »)."""
 
-    def via(self, points, profile, pass_through=False):
-        body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
-                "elevation": True, "instructions": False, "details": g.DETAILS,
-                **({"pass_through": True} if pass_through else {})}
-        try:
-            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
-        except requests.RequestException as e:
-            self.last_error = f"requête échouée : {e}"
-            return None
-        if r.status_code != 200:
-            self.last_error = f"HTTP {r.status_code} : {r.text[:300]}"
-            return None
-        paths = r.json().get("paths") or []
-        return paths[0] if paths else None
+    def via(self, points, profile, pass_through=False):          # même client que la production (mémoire comprise)
+        return g.GraphHopper.via(self, points, profile, pass_through)
 
 
 def destination(lon, lat, bearing_deg, km):
@@ -412,7 +400,8 @@ def run_probe(sid, site, gh_url, durations, levels):
                          # l'essai) et essais faits
                          "retouch_found": [[l.seed, round(l.score, 1)] for l in found],
                          "retouch_trials": sum(1 for x in det if x.startswith("  ")), "retouch_stats": rstats})
-    return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
+    return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows,
+            "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
 # ----------------------------------------------------------------------------- sonde « relief » (O-18, option B)
@@ -763,6 +752,7 @@ def main() -> int:
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
+    g.GH_MEMO = True                                    # mémoire des itinéraires (essai du 04/10/2026)
     if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
         g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()

@@ -262,7 +262,7 @@ jobs:
           # avant / après sur ces départs ; les deux vides : calibrage v5
           # comparaisons « allure:durée en h:boucles de référence » (autres : "modere:2:scripts/reference_plata.json",
           # "soutenu:2:scripts/reference_plata_soutenu.json", "modere:2:scripts/reference_gracia.json")
-          NATURE_COMPARE="facile:1:scripts/reference_sant_adria.json soutenu:1:scripts/reference_sarria_1h.json modere:2:scripts/reference_plata.json soutenu:2:scripts/reference_plata_soutenu.json"
+          NATURE_COMPARE=""   # v15 (03/10/2026) : "facile:1:scripts/reference_sant_adria.json soutenu:1:scripts/reference_sarria_1h.json modere:2:scripts/reference_plata.json soutenu:2:scripts/reference_plata_soutenu.json"
           # Montserrat (03/10/2026) : "soutenu:5:scripts/reference_montserrat.json soutenu:6:scripts/reference_montserrat.json modere:6:scripts/reference_montserrat.json"
           NATURE_PLACES=""   # rapport « lieux remarquables » (accessibilité, points d'accès, passages), indépendant du reste
           # avant (03/10/2026) : "soutenu:1:scripts/reference_sarria_1h.json soutenu:1:scripts/reference_gracia_turons.json facile:1:scripts/reference_sant_adria.json facile:1.5:scripts/reference_les_corts.json"

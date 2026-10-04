@@ -961,11 +961,44 @@ def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_s
 
 
 # --------------------------------------------------------------------------- client GraphHopper
+GH_MEMO = False                 # mémoire des itinéraires déjà demandés, par départ (voir GraphHopper._route) ; essai
+
+
 class GraphHopper:
     def __init__(self, base_url: str):
         self.base = base_url.rstrip("/")
         self.http = requests.Session()
         self.last_error = ""
+        # mémoire des itinéraires déjà demandés (04/10/2026) : un client par départ ; les mêmes requêtes reviennent d'une
+        # durée et d'une allure à l'autre (monter au Tibidabo et redescendre…). Même requête = même réponse : boucles
+        # identiques, seul le temps de calcul baisse.
+        self._memo: dict = {}
+        self.calls = 0
+        self.hits = 0
+
+    def _route(self, body):
+        import copy
+        key = json.dumps(body, sort_keys=True)
+        self.calls += 1
+        if GH_MEMO and key in self._memo:
+            self.hits += 1
+            path, self.last_error = self._memo[key]
+            return copy.deepcopy(path)
+        try:
+            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
+        except requests.RequestException as e:
+            self.last_error = f"requête échouée : {e}"
+            return None                                   # erreur réseau : pas gardée (peut réussir au prochain essai)
+        if r.status_code != 200:
+            self.last_error = f"HTTP {r.status_code} : {r.text[:200]}"
+            path = None
+        else:
+            self.last_error = ""
+            paths = r.json().get("paths") or []
+            path = paths[0] if paths else None
+        if GH_MEMO:
+            self._memo[key] = (copy.deepcopy(path), self.last_error)
+        return path
 
     def info(self) -> dict:
         try:
@@ -986,16 +1019,7 @@ class GraphHopper:
         body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
                 "elevation": True, "instructions": False, "details": DETAILS,
                 **({"pass_through": True} if pass_through else {})}
-        try:
-            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
-        except requests.RequestException as e:
-            self.last_error = f"requête échouée : {e}"
-            return None
-        if r.status_code != 200:
-            self.last_error = f"HTTP {r.status_code} : {r.text[:200]}"
-            return None
-        paths = r.json().get("paths") or []
-        return paths[0] if paths else None
+        return self._route(body)
 
     def round_trip(self, lon, lat, profile, dist_m, seed, heading=None, custom_model=None):
         body = {
@@ -1014,17 +1038,7 @@ class GraphHopper:
             body["heading"] = [heading]
         if custom_model:
             body["custom_model"] = custom_model
-        try:
-            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
-        except requests.RequestException as e:
-            self.last_error = f"requête échouée : {e}"
-            return None
-        if r.status_code != 200:
-            self.last_error = f"HTTP {r.status_code} : {r.text[:200]}"
-            return None
-        self.last_error = ""
-        paths = r.json().get("paths") or []
-        return paths[0] if paths else None
+        return self._route(body)
 
 
 # --------------------------------------------------------------------------- analyse d'une boucle
@@ -2422,7 +2436,8 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
                                                                        if reused_entry else set())),
              "compare": compare_block(options), "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "compute_seconds": round(time.time() - t0, 1), "compute_seconds_by_duration": dur_seconds}
-    log(f"  {len(options)} options, durées disponibles : {', '.join(by_dur)} h ({time.time() - t0:.0f} s)")
+    log(f"  {len(options)} options, durées disponibles : {', '.join(by_dur)} h ({time.time() - t0:.0f} s ; requêtes "
+        f"GraphHopper {gh.calls}, dont {gh.hits} déjà en mémoire)")
     return entry, buf, time.time() - t0
 
 
