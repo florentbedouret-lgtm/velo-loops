@@ -809,6 +809,8 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--v16", action="store_true", help="essai v16 : feux 0,30, industriel x2, options secondaires gardées, "
+                    "allers-retours seulement près de l'eau")
     ap.add_argument("--penalty", default=None, help="sonde « pénalités » (feux, zones industrielles) : départs séparés par ;")
     ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
@@ -827,6 +829,11 @@ def main() -> int:
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
     g.GH_MEMO = True                                    # mémoire des itinéraires (essai du 04/10/2026)
+    if args.v16:
+        g.WEIGHTS = dict(g.WEIGHTS, lights=0.30)
+        g.INDUSTRIAL_PENALTY, g.INDUSTRIAL_MAX_PENALTY = 1.0, 0.30
+        g.SECONDARY_GUARD = True
+        g.OUTBACK_NEAR_KM = 2.0
     if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
         g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()

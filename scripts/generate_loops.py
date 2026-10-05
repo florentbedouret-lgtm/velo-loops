@@ -102,6 +102,7 @@ MAX_UNPAVED = 0.12
 OUTBACK_OK = True
 OUTBACK_MAX_OVERLAP = 1.0        # un vrai aller-retour est répété à ~100 % (Sant Adrià 1 h : 72 %, note 65 contre 46)
 OUTBACK_MIN_CYCLE = 0.6          # part de piste cyclable / voie verte dans la partie répétée
+OUTBACK_NEAR_KM = None           # essai (O-38) : allers-retours seulement si l'eau est à moins de N km du départ
 OUTBACK_DRAWS = True             # tirages « aller-retour au bord de l'eau » (rivière, mer)
 # Repli (choix B de Florent, 28/09/2026, test v10 : Castellgalí, Gaià perdaient leurs boucles courtes) : s'il n'existe AUCUN
 # candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
@@ -184,6 +185,13 @@ LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km, le sous-score "feux" tombe à 
 # « au milieu des entrepôts, travaux et camions : pas agréable, un peu dangereux, pollué » ; 14 % du parcours -> −7 points
 INDUSTRIAL_PENALTY = 0.5
 INDUSTRIAL_MAX_PENALTY = 0.15
+# Options secondaires (Florent, 05/10/2026 : « Plus de pistes » par le port revenue en v15) : jamais nettement pire que la
+# recommandée sur les feux (+25 % et au moins +0,4 / km) ni à 10 % de zone industrielle ; une autre candidate est cherchée
+# (même règle que le filtre de l'appli). Essai : désactivé en production.
+SECONDARY_GUARD = False
+SECONDARY_MAX_LIGHTS_RATIO = 1.25
+SECONDARY_MAX_LIGHTS_GAP = 0.4
+SECONDARY_MAX_INDUSTRIAL = 0.10
 # Vérification de Florent (29/09/2026, Sant Andreu 2 h : 17 % « industriel », 13 tronçons jugés un par un) : la piste
 # cyclable au bord du fleuve qui longe une zone, un bâtiment isolé, une route en contrebas étaient comptés (règle « à 10 m »).
 # Règle : point DANS une zone industrielle ou portuaire (plus « à 10 m »), hors parc, et seulement sur un passage d'au moins
@@ -1390,6 +1398,8 @@ def outback_candidates(gh, st, level, profile, duration_h, log, detail=None) -> 
         tree = LANDSCAPE.trees.get(key)
         if tree is None:
             continue
+        if OUTBACK_NEAR_KM is not None and nearest_attraction(cat, lon, lat, OUTBACK_NEAR_KM) is None:
+            continue                                        # eau trop loin : pas d'aller-retour (économie de calcul)
         samples = []                                        # points de l'eau entre 15 % et 50 % de la longueur de boucle
         for i in tree.query(pt.buffer(0.5 * loop_km / 90.0)):
             gm = tree.geometries[int(i)]
@@ -1923,6 +1933,19 @@ def same_route(a: Loop, b: Loop) -> bool:
     return len(a.cells & b.cells) / max(1, len(a.cells), len(b.cells)) >= LEVEL_DUP_SIM
 
 
+def secondary_ok(l: Loop, best: Loop) -> bool:
+    """Option secondaire acceptable face à la recommandée (SECONDARY_GUARD)."""
+    if not SECONDARY_GUARD:
+        return True
+    if l.scenery is not None and l.scenery.get("industrial", 0.0) >= SECONDARY_MAX_INDUSTRIAL:
+        return False
+    if l.signals is None or best.signals is None:
+        return True
+    a = l.signals / max(l.distance_m / 1000.0, 0.1)
+    b = best.signals / max(best.distance_m / 1000.0, 0.1)
+    return not (a >= SECONDARY_MAX_LIGHTS_RATIO * b and a - b >= SECONDARY_MAX_LIGHTS_GAP)
+
+
 def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str, Loop]]:
     """avoid : boucles déjà proposées aux allures inférieures pour la même durée ; les options secondaires qui les
     répètent (same_route) sont écartées (O-18 A)."""
@@ -1933,7 +1956,7 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
     best = pool[0]
     chosen = [("equilibre", best)]
     rest = [l for l in pool[1:] if l.score >= 0.8 * best.score and similarity(l, best) < 0.6
-            and not any(same_route(l, a) for a in avoid)]
+            and not any(same_route(l, a) for a in avoid) and secondary_ok(l, best)]
     if rest:
         flat = min(rest, key=lambda l: l.dplus_per_km)
         if flat.dplus_per_km <= best.dplus_per_km - 3.0:
@@ -1946,7 +1969,7 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
     if len(chosen) == 1 and len(pool) > 1:      # pas de contraste de relief : on propose une variante
         for l in pool[1:]:                      # note d'au moins 70 % de la boucle recommandée (comme l'appli, 30/09/2026)
             if (l.score >= VARIANT_MIN_SCORE_RATIO * best.score and similarity(l, best) < 0.6
-                    and not any(same_route(l, a) for a in avoid)):
+                    and not any(same_route(l, a) for a in avoid) and secondary_ok(l, best)):
                 chosen.append(("variante", l))
                 break
     return chosen
