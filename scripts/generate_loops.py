@@ -2090,7 +2090,6 @@ def ar_candidates(gh, st, level, profile, duration_h, log) -> list:
         near = nearest_attraction(cat, lon, lat, 0.45 * loop_km)
         if not near:
             continue
-        b0 = bearing(lon, lat, near[0], near[1])
         samples = []
         for key in keys:
             tree = LANDSCAPE.trees.get(key)
@@ -2105,15 +2104,23 @@ def ar_candidates(gh, st, level, profile, duration_h, log) -> list:
                     n = max(2, int(part.length / 0.004))
                     for k in range(n + 1):
                         q = part.interpolate(k / n, normalized=True)
-                        if abs((bearing(lon, lat, q.x, q.y) - b0 + 180) % 360 - 180) <= 35:
-                            samples.append((q.x, q.y, haversine(lon, lat, q.x, q.y) / 1000.0))
-        if not samples:
-            continue
-        pick = lambda want: min(samples, key=lambda s: abs(s[2] - want))  # noqa: E731
-        loop = _fit_via(gh, level, profile, duration_h,
-                        lambda w: [[lon, lat], list(pick(w)[:2]), [lon, lat]], 0.32 * loop_km, 960)
-        if loop is not None:
-            found.append(loop)
+                        d = haversine(lon, lat, q.x, q.y) / 1000.0
+                        if 0.15 * loop_km <= d <= 0.45 * loop_km:
+                            samples.append((q.x, q.y, d, bearing(lon, lat, q.x, q.y)))
+        # deux directions bien distinctes (l'Hospitalet : l'endroit vert le plus proche, Montjuïc, n'est pas le delta)
+        dirs = []
+        for sm in sorted(samples, key=lambda s: abs(s[2] - 0.32 * loop_km)):
+            if all(abs((sm[3] - b + 180) % 360 - 180) > 60 for b in dirs):
+                dirs.append(sm[3])
+            if len(dirs) >= 2:
+                break
+        for b0 in dirs:
+            side = [sm for sm in samples if abs((sm[3] - b0 + 180) % 360 - 180) <= 30]
+            pick = lambda want, side=side: min(side, key=lambda s: abs(s[2] - want))  # noqa: E731
+            loop = _fit_via(gh, level, profile, duration_h,
+                            lambda w, pick=pick: [[lon, lat], list(pick(w)[:2]), [lon, lat]], 0.32 * loop_km, 960, tries=2)
+            if loop is not None:
+                found.append(loop)
     log(f"    allers-retours vers un endroit agréable : {len(found)} valide(s)")
     return found
 
