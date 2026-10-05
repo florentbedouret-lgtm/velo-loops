@@ -1344,10 +1344,13 @@ def score(l: Loop) -> float:
     return score_from(l, RELIEF_WEIGHTS.get(l.level))
 
 
-def score_from(l: Loop, relief_weight: float | None = None) -> float:
+def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float | None = None,
+               ind_penalty: float | None = None, ind_max: float | None = None) -> float:
     """Note de la boucle ; relief_weight : poids de la partie « relief » (None ou 0 = pas de bonus). Séparée de score()
     pour que la sonde « relief » compare plusieurs poids sans modifier le réglage global."""
     parts, weights = score_parts(l)
+    if lights_weight is not None and "lights" in weights:   # sonde « pénalités » (05/10/2026) : poids des feux essayé
+        weights["lights"] = lights_weight
     if relief_weight:
         parts["relief"] = min(1.0, l.dplus_per_km / RELIEF_FULL_M_PER_KM)
         weights["relief"] = relief_weight
@@ -1359,7 +1362,8 @@ def score_from(l: Loop, relief_weight: float | None = None) -> float:
     total += min(REMARKABLE_MAX_BONUS, REMARKABLE_BONUS * len(l.remarkable))   # Tibidabo, belvédères connus…
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
     if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
-        total -= min(INDUSTRIAL_MAX_PENALTY, INDUSTRIAL_PENALTY * l.scenery.get("industrial", 0.0))
+        total -= min(INDUSTRIAL_MAX_PENALTY if ind_max is None else ind_max,
+                     (INDUSTRIAL_PENALTY if ind_penalty is None else ind_penalty) * l.scenery.get("industrial", 0.0))
     return round(100 * max(0.0, total), 1)
 
 

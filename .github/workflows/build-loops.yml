@@ -264,7 +264,7 @@ jobs:
           # "soutenu:2:scripts/reference_plata_soutenu.json", "modere:2:scripts/reference_gracia.json")
           NATURE_COMPARE=""   # v15 (03/10/2026) : "facile:1:scripts/reference_sant_adria.json soutenu:1:scripts/reference_sarria_1h.json modere:2:scripts/reference_plata.json soutenu:2:scripts/reference_plata_soutenu.json"
           # Montserrat (03/10/2026) : "soutenu:5:scripts/reference_montserrat.json soutenu:6:scripts/reference_montserrat.json modere:6:scripts/reference_montserrat.json"
-          NATURE_PLACES="1"   # rapport « lieux remarquables » (accessibilité, points d'accès, passages), indépendant du reste
+          NATURE_PLACES=""   # rapport « lieux remarquables » (accessibilité, points d'accès, passages), indépendant du reste
           # avant (03/10/2026) : "soutenu:1:scripts/reference_sarria_1h.json soutenu:1:scripts/reference_gracia_turons.json facile:1:scripts/reference_sant_adria.json facile:1.5:scripts/reference_les_corts.json"
           NATURE_RELIEF=""   # sonde relief sportif (03/10/2026) : les 16 départs de NATURE_PROBE
           NATURE_WORKERS=3   # test #165 (01/10/2026) : 4 en parallèle ne gagnent que 2 %
@@ -284,7 +284,13 @@ jobs:
               cat "data/nature_compare_$TAG.md" >> "$GITHUB_STEP_SUMMARY"
             done
           fi
-          if [ -n "$NATURE_RELIEF" ]; then
+          NATURE_PENALTY="gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"   # sonde pénalités feux / zones industrielles (05/10/2026)
+          if [ -n "$NATURE_PENALTY" ]; then
+            python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+              --pbf data/region.osm.pbf --workdir data --penalty "$NATURE_PENALTY" --durations "1 2 4" \
+              --levels "facile modere soutenu" --workers "$NATURE_WORKERS" --out data/nature_check.json --out-md data/nature_check.md \
+              --note "sonde pénalités : poids des feux 0,22 -> 0,30, zones industrielles 0,5 -> 1 (plafond 15 -> 30 points)"
+          elif [ -n "$NATURE_RELIEF" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --relief "$NATURE_RELIEF" --durations "1 2 3" \
               --out data/nature_check.json --out-md data/nature_check.md \

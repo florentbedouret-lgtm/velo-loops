@@ -404,6 +404,79 @@ def run_probe(sid, site, gh_url, durations, levels):
             "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
+# ----------------------------------------------------------------------------- sonde « pénalités » (05/10/2026)
+# Florent : « Plus de pistes » par le port revenue en v15 (3,2 feux/km, 20 % de zone portuaire) ; feux et zones
+# industrielles plus pénalisés ? Mêmes candidats, notés avec chaque réglage, options choisies comme la production.
+PENALTY_VARIANTS = (("actuel", {}), ("feux 0,30", {"lights_weight": 0.30}),
+                    ("industriel x2", {"ind_penalty": 1.0, "ind_max": 0.30}),
+                    ("feux 0,30 + industriel x2", {"lights_weight": 0.30, "ind_penalty": 1.0, "ind_max": 0.30}))
+
+
+def penalty_row(l, label, sid):
+    o = g.to_json(l, label, sid, 1)
+    r = option_row(o)
+    r["main_roads_pct"] = round(100 * o["shares"]["main_roads"])
+    r["industrial"] = round((o.get("scenery") or {}).get("industrial", 0.0), 3)
+    return r
+
+
+def run_penalty(sid, site, gh_url, durations, levels):
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next((e for e in idx["starts"] if e["id"] == sid), None)
+    if entry is None:
+        return {"id": sid, "skipped": "départ absent de l'index publié"}
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1]}
+    rows = []
+    for d in durations:
+        for level in levels:
+            pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None)
+            row = {"duration_h": d, "level": level, "variants": {}}
+            for name, kw in PENALTY_VARIANTS:
+                for l in pool:
+                    l.score = g.score_from(l, g.RELIEF_WEIGHTS.get(l.level), **kw)
+                row["variants"][name] = [penalty_row(l, lab, sid) for lab, l in g.pick_options(pool)]
+            for l in pool:
+                l.score = g.score(l)
+            rows.append(row)
+    return {"id": sid, "name": entry.get("municipality", "") + " · " + entry["name"], "rows": rows}
+
+
+def report_penalty(results, out_json, out_md, note, t0):
+    import statistics as stt
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    ok = [r for r in results if not r.get("skipped")]
+    L = [f"# Sonde « pénalités » : feux et zones industrielles — {round((time.time() - t0) / 60)} min",
+         (f"\n**{note}**" if note else ""),
+         "\nMêmes candidats, notés avec chaque réglage. « Masquée par l'appli » = option secondaire que le filtre de l'appli "
+         "(05/10/2026) cacherait : +25 % de feux et au moins +0,4 / km, ou 10 % de zone industrielle.",
+         "\n| Réglage | feux/km médian (recommandée) | moyen | industriel moyen | recommandées ≥ 10 % industriel | D+ médian "
+         "| eau médiane | forêt médiane | routes princ. médiane | km médian | secondaires | masquées par l'appli |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for name, _ in PENALTY_VARIANTS:
+        mains = [row["variants"][name][0] for r in ok for row in r["rows"] if row["variants"].get(name)]
+        secs = [(row["variants"][name][0], o) for r in ok for row in r["rows"] if row["variants"].get(name)
+                for o in row["variants"][name][1:]]
+        if not mains:
+            continue
+        med = lambda k: stt.median([o[k] for o in mains if o.get(k) is not None])  # noqa: E731
+        lk = [o["lights_km"] for o in mains if o.get("lights_km") is not None]
+        hid = sum(1 for m, o in secs if o["industrial"] >= 0.10 or (
+            o.get("lights_km") is not None and m.get("lights_km") is not None and o["lights_km"] >= 1.25 * m["lights_km"]
+            and o["lights_km"] - m["lights_km"] >= 0.4))
+        L.append(f"| {name} | {med('lights_km'):.2f} | {stt.mean(lk):.2f} | {100 * stt.mean(o['industrial'] for o in mains):.1f} % | "
+                 f"{sum(o['industrial'] >= 0.10 for o in mains)}/{len(mains)} | {med('dplus_m'):.0f} m | {med('water_pct'):.0f} % | "
+                 f"{med('forest_pct'):.0f} % | {med('main_roads_pct'):.0f} % | {med('km'):.1f} | {len(secs)} | {hid} |")
+    changed = sum(1 for r in ok for row in r["rows"] if row["variants"].get("actuel") and
+                  row["variants"].get("feux 0,30 + industriel x2") and
+                  row["variants"]["actuel"][0]["km"] != row["variants"]["feux 0,30 + industriel x2"][0]["km"])
+    L.append(f"\nBoucles recommandées qui changent entre « actuel » et « feux 0,30 + industriel x2 » : {changed} sur "
+             f"{sum(len(r['rows']) for r in ok)}.")
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 # ----------------------------------------------------------------------------- sonde « relief » (O-18, option B)
 RELIEF_VARIANTS = (0.10, 0.20, 0.30, 0.40)   # poids du relief en sportif ; 0,10 = réglage actuel (RELIEF_WEIGHTS, 03/10/2026)
 
@@ -736,6 +809,7 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--penalty", default=None, help="sonde « pénalités » (feux, zones industrielles) : départs séparés par ;")
     ap.add_argument("--relief", default=None, help="sonde « relief » (O-18 B) : identifiants de départs publiés séparés par ;")
     ap.add_argument("--site", default="https://florentbedouret-lgtm.github.io/velo-loops")
     ap.add_argument("--retouch", action="store_true", help="mesure la retouche des meilleures boucles (RETOUCH)")
@@ -784,6 +858,13 @@ def main() -> int:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
         report_compare(res, args.out, args.out_md, args.note, t0)
+        return 0
+    if args.penalty:
+        ids = [x.strip() for x in args.penalty.split(";") if x.strip()]
+        durations = [float(x) for x in args.durations.split()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_penalty(sid, args.site, args.gh, durations, args.levels.split()), ids))
+        report_penalty(results, args.out, args.out_md, args.note, t0)
         return 0
     if args.relief:
         ids = [x.strip() for x in args.relief.split(";") if x.strip()]
