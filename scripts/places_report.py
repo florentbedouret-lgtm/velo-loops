@@ -165,7 +165,7 @@ def main():
         snap, road_pt = road_dist_m(rtree, rlines, lon, lat)
         row = {"qid": qid, "label": e["label"], "sitelinks": e["sitelinks"], "kind": kinds, "lon": round(lon, 6),
                "lat": round(lat, 6), "osm": bool(best_el), "osm_name": osm_name, "road_m": None if snap is None else round(snap),
-               "passes": sum(passes.get(n, 0) for n in {e["label"], osm_name} if n)}
+               "passes": sum(passes.get(n, 0) for n in {e["label"], osm_name, e.get("point_name")} if n)}
         if snap is not None and snap > ACCESS_MAX_M:      # inaccessible tel quel : chercher un point d'accès
             best = None
             for x, y, p in cands:
