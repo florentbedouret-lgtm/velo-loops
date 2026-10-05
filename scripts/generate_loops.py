@@ -206,7 +206,9 @@ SPUR_PLEASANT_SHARE = 0.6
 SPUR_PENALTY = 0.04             # 4 points par éperon injustifié…
 SPUR_PENALTY_PER_100M = 0.01    # … plus 1 point par 100 m
 SPUR_MAX_PENALTY = 0.20
-SPUR_TRIM_TOP = 6               # meilleures candidates dont on essaie de couper les éperons
+SPUR_TRIM_TOP = 3               # meilleures candidates dont on essaie de couper les éperons (6 : sonde 18 -> 30 min)
+AR_DRAWS = False                # essai : aller-retour vers le bord de mer, une rivière ou un espace vert (ar_candidates)
+LIEU_TOUR = False               # essai : monter à un lieu remarquable et en faire le tour (lieu_tour_candidates)
 # Mémoire des bonnes boucles (Florent, 05/10/2026 : « ne jamais régresser ») : les boucles publiées de la version
 # précédente sont recalculées et ajoutées aux candidates, notées avec les nouvelles règles. Essai : désactivé.
 KEEP_PREVIOUS = False
@@ -2019,6 +2021,92 @@ def previous_candidates(gh, st, level, duration_h) -> list:
     return out
 
 
+def _fit_via(gh, level, profile, duration_h, make_way, x0, seed, tries=3):
+    """Boucle par des points imposés, ajustée sur la durée : make_way(x) donne les points pour un réglage x (distance),
+    x est corrigé selon l'écart de durée (2 retouches au plus). Renvoie la dernière boucle valide ou None."""
+    target_s, x, loop = duration_h * 3600.0, x0, None
+    for _ in range(tries):
+        path = gh.via(make_way(x), profile)
+        loop = analyse(path, level, profile, duration_h, seed, None) if path else None
+        if loop is None:
+            return None
+        ratio = loop.time_s / target_s
+        if abs(ratio - 1.0) <= 0.05:
+            break
+        x = x / ratio
+    if (abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE or not overlap_ok(loop) or loop.u_turns > MAX_UTURNS
+            or loop.shares["unpaved"] > MAX_UNPAVED):
+        return None
+    return loop
+
+
+def ar_candidates(gh, st, level, profile, duration_h, log) -> list:
+    """Aller vers un endroit agréable proche (bord de mer, rivière, grand espace vert) puis rentrer (AR_DRAWS, Florent,
+    06/10/2026 : l'Hospitalet 1 h vers le delta, 41 contre 24) : point de l'endroit à la bonne distance, dans la
+    direction de son point le plus proche ; le calcul choisit librement l'aller et le retour."""
+    if LANDSCAPE is None:
+        return []
+    import shapely
+    lon, lat = st["lon"], st["lat"]
+    flat_ms = speed_from_power(level_watts(level, duration_h), 0.0) * REAL_WORLD_FACTOR
+    loop_km = 0.8 * flat_ms * duration_h * 3600.0 / 1000.0
+    pt = shapely.Point(lon, lat)
+    found = []
+    for cat, keys in (("mer", ("sea",)), ("riviere", ("river",)), ("vert", ("forest", "protected"))):
+        near = nearest_attraction(cat, lon, lat, 0.45 * loop_km)
+        if not near:
+            continue
+        b0 = bearing(lon, lat, near[0], near[1])
+        samples = []
+        for key in keys:
+            tree = LANDSCAPE.trees.get(key)
+            if tree is None:
+                continue
+            for i in tree.query(pt.buffer(0.45 * loop_km / 90.0)):
+                gm = tree.geometries[int(i)]
+                if cat == "vert" and (gm.geom_type not in ("Polygon", "MultiPolygon") or gm.area < TARGET_GREEN_MIN_DEG2):
+                    continue
+                line = gm.boundary if gm.geom_type in ("Polygon", "MultiPolygon") else gm
+                for part in getattr(line, "geoms", [line]):
+                    n = max(2, int(part.length / 0.004))
+                    for k in range(n + 1):
+                        q = part.interpolate(k / n, normalized=True)
+                        if abs((bearing(lon, lat, q.x, q.y) - b0 + 180) % 360 - 180) <= 35:
+                            samples.append((q.x, q.y, haversine(lon, lat, q.x, q.y) / 1000.0))
+        if not samples:
+            continue
+        pick = lambda want: min(samples, key=lambda s: abs(s[2] - want))  # noqa: E731
+        loop = _fit_via(gh, level, profile, duration_h,
+                        lambda w: [[lon, lat], list(pick(w)[:2]), [lon, lat]], 0.32 * loop_km, 960)
+        if loop is not None:
+            found.append(loop)
+    log(f"    allers-retours vers un endroit agréable : {len(found)} valide(s)")
+    return found
+
+
+def lieu_tour_candidates(gh, st, level, profile, duration_h, log) -> list:
+    """Monter au lieu remarquable puis en faire le tour avant de rentrer (LIEU_TOUR, Florent, 06/10/2026 : l'Eixample
+    1 h, Montjuïc seul durait 46 min) : un point à r km du lieu, de chaque côté, r ajusté sur la durée."""
+    if not (POIS and "lieu" in POIS):
+        return []
+    lon, lat = st["lon"], st["lat"]
+    flat_ms = speed_from_power(level_watts(level, duration_h), 0.0) * REAL_WORLD_FACTOR
+    loop_km = 0.8 * flat_ms * duration_h * 3600.0 / 1000.0
+    pts = attraction_points(lon, lat, TARGET_MAX_SHARE * loop_km)
+    found = []
+    for cat in [c for c in pts if c.startswith("lieu")]:
+        x, y, km = pts[cat]
+        b = bearing(lon, lat, x, y)
+        for side in (90.0, -90.0):
+            loop = _fit_via(gh, level, profile, duration_h,
+                            lambda r: [[lon, lat], [x, y], list(destination(x, y, b + side, max(0.3, r))), [lon, lat]],
+                            max(0.5, 0.12 * loop_km), 970)
+            if loop is not None:
+                found.append(loop)
+    log(f"    tours de lieux remarquables : {len(found)} valide(s)")
+    return found
+
+
 def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
     """Tous les candidats valides d'un départ pour une durée et un niveau : tirages ordinaires de chaque profil, plus
     les tirages « montée » en niveau sportif. Utilisé par la génération ET par le diagnostic (nature_check --probe)."""
@@ -2036,6 +2124,10 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
     pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))  # ciblés
     if OUTBACK_DRAWS:
         pool.extend(outback_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+    if AR_DRAWS:
+        pool.extend(ar_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+    if LIEU_TOUR:
+        pool.extend(lieu_tour_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
     if KEEP_PREVIOUS and st.get("previous"):
         pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:

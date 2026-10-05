@@ -842,6 +842,7 @@ def main() -> int:
         g.OUTBACK_NEAR_KM = 2.0
         g.SPUR_FIX = True
         g.KEEP_PREVIOUS = True
+        g.AR_DRAWS = g.LIEU_TOUR = True
     if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
         g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()
