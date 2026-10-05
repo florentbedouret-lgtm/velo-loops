@@ -1,0 +1,38 @@
+{
+ "_note": "Cornellà, sportif, 1 h : parc agricole et delta du Llobregat. Points de passage seulement (Nominatim, OSM). Utilisées par nature_check.py --compare-refs.",
+ "start": "cornella-de-llobregat",
+ "loops": [
+  {
+   "name": "Parc agricole, Sant Boi, delta (Can Camins)",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.04416,
+     41.35622
+    ],
+    [
+     2.05112,
+     41.3241
+    ],
+    [
+     2.10405,
+     41.28877
+    ]
+   ]
+  },
+  {
+   "name": "Parc agricole puis delta",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.04416,
+     41.35622
+    ],
+    [
+     2.10405,
+     41.28877
+    ]
+   ]
+  }
+ ]
+}

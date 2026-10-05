@@ -1,0 +1,42 @@
+{
+ "_note": "Horta-Guinardó, facile, 1 h : au pied des turons de Collserola, sans les monter. Points de passage seulement (Nominatim, OSM). Utilisées par nature_check.py --compare-refs.",
+ "start": "horta-guinardo",
+ "loops": [
+  {
+   "name": "Vall d'Hebron, Sant Genís, Laberint, Mundet",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.14135,
+     41.42218
+    ],
+    [
+     2.13749,
+     41.42645
+    ],
+    [
+     2.14539,
+     41.43997
+    ],
+    [
+     2.14838,
+     41.43554
+    ]
+   ]
+  },
+  {
+   "name": "Laberint et Mundet",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.14539,
+     41.43997
+    ],
+    [
+     2.14838,
+     41.43554
+    ]
+   ]
+  }
+ ]
+}

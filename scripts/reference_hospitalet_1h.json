@@ -1,0 +1,30 @@
+{
+ "_note": "L'Hospitalet, modéré, 1 h : vers le delta du Llobregat. Points de passage seulement (Nominatim, OSM). Utilisées par nature_check.py --compare-refs.",
+ "start": "l-hospitalet-de-llobregat",
+ "loops": [
+  {
+   "name": "Delta : Can Camins",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.10405,
+     41.28877
+    ]
+   ]
+  },
+  {
+   "name": "Delta : Can Camins puis la plage du Prat",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.10405,
+     41.28877
+    ],
+    [
+     2.098,
+     41.282
+    ]
+   ]
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "_note": "L'Eixample, sportif, 1 h : Montjuïc et / ou le bord de mer. Points de passage seulement (Nominatim, OSM). Utilisées par nature_check.py --compare-refs.",
+ "start": "l-eixample",
+ "loops": [
+  {
+   "name": "Montjuïc (Mirador de l'Alcalde, château)",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.16946,
+     41.36667
+    ],
+    [
+     2.16614,
+     41.36337
+    ]
+   ]
+  },
+  {
+   "name": "Montjuïc puis la Barceloneta",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.16946,
+     41.36667
+    ],
+    [
+     2.16614,
+     41.36337
+    ],
+    [
+     2.19216,
+     41.37893
+    ]
+   ]
+  },
+  {
+   "name": "Bord de mer : Barceloneta, Port Olímpic, Bogatell",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.19216,
+     41.37893
+    ],
+    [
+     2.19983,
+     41.38612
+    ],
+    [
+     2.216,
+     41.399
+    ]
+   ]
+  }
+ ]
+}
