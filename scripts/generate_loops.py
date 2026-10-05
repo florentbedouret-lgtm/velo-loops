@@ -192,6 +192,25 @@ SECONDARY_GUARD = False
 SECONDARY_MAX_LIGHTS_RATIO = 1.25
 SECONDARY_MAX_LIGHTS_GAP = 0.4
 SECONDARY_MAX_INDUSTRIAL = 0.10
+# Éperons (Florent, 05/10/2026 : allers-retours « sans raison » de quelques centaines de mètres, 62 % des boucles
+# publiées en ont au moins un de 100 m ou plus). Un éperon = la boucle repart en sens inverse dans un couloir de
+# SPUR_CORRIDOR_M ; il est justifié s'il monte d'au moins SPUR_JUSTIFIED_DPLUS_M, mène à un lieu remarquable ou un
+# belvédère, ou longe surtout l'eau, la forêt ou un parc. Les autres sont pénalisés et, pour les meilleures candidates,
+# coupés (boucle recalculée sans l'éperon). Essai : désactivé en production.
+SPUR_FIX = False
+SPUR_CORRIDOR_M = 40.0
+SPUR_MIN_M = 150.0              # éperon pris en compte à partir de cette longueur (aller seul)
+SPUR_END_M = 300.0              # au départ ou à l'arrivée (rue en cul-de-sac du départ) : ignoré
+SPUR_JUSTIFIED_DPLUS_M = 40.0
+SPUR_PLEASANT_SHARE = 0.6
+SPUR_PENALTY = 0.04             # 4 points par éperon injustifié…
+SPUR_PENALTY_PER_100M = 0.01    # … plus 1 point par 100 m
+SPUR_MAX_PENALTY = 0.20
+SPUR_TRIM_TOP = 6               # meilleures candidates dont on essaie de couper les éperons
+# Mémoire des bonnes boucles (Florent, 05/10/2026 : « ne jamais régresser ») : les boucles publiées de la version
+# précédente sont recalculées et ajoutées aux candidates, notées avec les nouvelles règles. Essai : désactivé.
+KEEP_PREVIOUS = False
+ROUTE_WAYPOINT_M = 2000.0       # points de passage pris tous les N m pour recalculer une boucle existante
 # Vérification de Florent (29/09/2026, Sant Andreu 2 h : 17 % « industriel », 13 tronçons jugés un par un) : la piste
 # cyclable au bord du fleuve qui longe une zone, un bâtiment isolé, une route en contrebas étaient comptés (règle « à 10 m »).
 # Règle : point DANS une zone industrielle ou portuaire (plus « à 10 m »), hors parc, et seulement sur un passage d'au moins
@@ -1080,6 +1099,7 @@ class Loop:
     doubt_ways: dict = field(default_factory=dict)
     remarkable: list = field(default_factory=list)
     views_passed: int = 0
+    spurs: list = field(default_factory=list)
     terrain: dict = field(default_factory=dict)
     u_turns: int = 0
     longest_repeat_m: float = 0.0
@@ -1317,6 +1337,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
+    loop.spurs = unjustified_spurs(coords) if SPUR_FIX else []
     loop.surface_seq = surface_seq(edges, cum)
     loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
     loop.doubt_ways = doubt_ways(det, coords, cum)
@@ -1369,6 +1390,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     total -= min(0.3, max(UNPAVED_PENALTY_PER_KM * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
     total += min(REMARKABLE_MAX_BONUS, REMARKABLE_BONUS * len(l.remarkable))   # Tibidabo, belvédères connus…
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
+    if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
+        total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
     if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
         total -= min(INDUSTRIAL_MAX_PENALTY if ind_max is None else ind_max,
                      (INDUSTRIAL_PENALTY if ind_penalty is None else ind_penalty) * l.scenery.get("industrial", 0.0))
@@ -1885,6 +1908,115 @@ class _SoftGH:
         return self.gh.round_trip(lon, lat, profile + "_souple", dist_m, seed, heading)
 
 
+def route_waypoints(coords, step_m=ROUTE_WAYPOINT_M, skip=()) -> list:
+    """Points de passage d'une boucle existante, tous les step_m m, sans ceux des intervalles d'indices skip (éperons) ;
+    le début et la fin de chaque intervalle sauté sont gardés."""
+    out, acc, cuts = [[coords[0][0], coords[0][1]]], 0.0, set()
+    for a, b in skip:
+        cuts.add(a)
+        cuts.add(b)
+    inside = lambda i: any(a < i < b for a, b in skip)  # noqa: E731
+    for i in range(1, len(coords) - 1):
+        acc += haversine(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1])
+        if inside(i):
+            continue
+        if i in cuts or acc >= step_m:
+            out.append([coords[i][0], coords[i][1]])
+            acc = 0.0
+    out.append([coords[-1][0], coords[-1][1]])
+    return out
+
+
+def spur_list(coords) -> list:
+    """Éperons : demi-tour (cap inversé >= 150°) suivi d'un retour dans le couloir SPUR_CORRIDOR_M de l'aller.
+    [{"a": indice d'entrée, "t": indice du demi-tour, "b": indice de sortie, "m": longueur de l'aller}]."""
+    idx = [0]
+    for i in range(1, len(coords)):
+        if haversine(coords[idx[-1]][0], coords[idx[-1]][1], coords[i][0], coords[i][1]) >= 8.0:
+            idx.append(i)
+    if len(idx) < 3:
+        return []
+    k_ = [coords[i] for i in idx]
+    cum = [0.0]
+    for a, b in zip(k_, k_[1:]):
+        cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
+    near = lambda p, q: haversine(p[0], p[1], q[0], q[1]) <= SPUR_CORRIDOR_M  # noqa: E731
+    out, i = [], 1
+    while i < len(k_) - 1:
+        d = abs((bearing(k_[i][0], k_[i][1], k_[i + 1][0], k_[i + 1][1]) -
+                 bearing(k_[i - 1][0], k_[i - 1][1], k_[i][0], k_[i][1]) + 180) % 360 - 180)
+        if d < 150:
+            i += 1
+            continue
+        a, b = i - 1, i + 1
+        while a > 0 and b < len(k_) - 1 and (near(k_[a - 1], k_[b + 1]) or
+                                              any(near(k_[a - 1], k_[x]) for x in range(b, min(len(k_), b + 4)))):
+            a -= 1
+            b += 1
+        out.append({"a": idx[a], "t": idx[i], "b": idx[b], "m": cum[i] - cum[a],
+                    "start_m": cum[a], "end_m": cum[-1] - cum[b]})
+        i = b
+    return out
+
+
+def unjustified_spurs(coords) -> list:
+    """Éperons d'au moins SPUR_MIN_M, hors départ et arrivée, qui n'apportent rien (voir SPUR_FIX)."""
+    import numpy as np
+    import shapely
+    out = []
+    for s in spur_list(coords):
+        if s["m"] < SPUR_MIN_M or s["start_m"] < SPUR_END_M or s["end_m"] < SPUR_END_M:
+            continue
+        seg = coords[s["a"]:s["t"] + 1]
+        if len(seg[0]) > 2 and max(c[2] for c in seg) - seg[0][2] >= SPUR_JUSTIFIED_DPLUS_M:
+            continue                                        # monte vraiment : ajoute du D+
+        tip = shapely.Point(coords[s["t"]][0], coords[s["t"]][1])
+        if POIS and "lieu" in POIS and len(POIS["lieu"][0].query(tip, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)):
+            continue                                        # mène à un lieu remarquable
+        if LANDSCAPE is not None:
+            tv = LANDSCAPE.trees.get("view")
+            if tv is not None and len(tv.query(tip, predicate="dwithin", distance=VIEW_NEAR_DEG)):
+                continue                                    # mène à un belvédère
+            pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 20)]]))
+            hit = np.zeros(len(pts), dtype=bool)
+            for key in ("water", "river", "sea", "forest", "protected"):
+                tr = LANDSCAPE.trees.get(key)
+                if tr is not None:
+                    hit[np.unique(tr.query(pts, predicate="dwithin", distance=0.0006)[0])] = True
+            if hit.mean() >= SPUR_PLEASANT_SHARE:
+                continue                                    # au bord de l'eau, en forêt ou dans un parc
+        out.append({"km": None, "m": round(s["m"]), "a": s["a"], "b": s["b"],
+                    "lon": round(coords[s["t"]][0], 5), "lat": round(coords[s["t"]][1], 5)})
+    return out
+
+
+def trim_spurs(gh, loop, level, duration_h):
+    """La même boucle, recalculée sans ses éperons injustifiés (points de passage pris de part et d'autre)."""
+    if not loop.spurs:
+        return None
+    way = route_waypoints(loop.coords, skip=[(s["a"], s["b"]) for s in loop.spurs])
+    path = gh.via(way, loop.profile, pass_through=True)
+    new = analyse(path, level, loop.profile, duration_h, loop.seed, loop.heading) if path else None
+    if (new is None or abs(new.time_s / (duration_h * 3600.0) - 1.0) > TIME_TOLERANCE or not overlap_ok(new)
+            or new.u_turns > MAX_UTURNS or new.shares["unpaved"] > MAX_UNPAVED or len(new.spurs) >= len(loop.spurs)):
+        return None
+    return new
+
+
+def previous_candidates(gh, st, level, duration_h) -> list:
+    """Boucles publiées de la version précédente pour ce départ, cette allure et cette durée (KEEP_PREVIOUS), recalculées
+    et notées avec les règles actuelles : une nouvelle version ne perd plus une bonne boucle par malchance."""
+    out = []
+    for profile, coords in (st.get("previous") or {}).get((level, round(duration_h * 60)), []):
+        path = gh.via(route_waypoints(coords), profile, pass_through=True)
+        loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
+        if (loop is None or abs(loop.time_s / (duration_h * 3600.0) - 1.0) > TIME_TOLERANCE or not overlap_ok(loop)
+                or loop.u_turns > MAX_UTURNS or loop.shares["unpaved"] > MAX_UNPAVED):
+            continue
+        out.append(loop)
+    return out
+
+
 def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
     """Tous les candidats valides d'un départ pour une durée et un niveau : tirages ordinaires de chaque profil, plus
     les tirages « montée » en niveau sportif. Utilisé par la génération ET par le diagnostic (nature_check --probe)."""
@@ -1902,8 +2034,15 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
     pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))  # ciblés
     if OUTBACK_DRAWS:
         pool.extend(outback_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+    if KEEP_PREVIOUS and st.get("previous"):
+        pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
+    if SPUR_FIX:                                             # couper les éperons des meilleures candidates
+        for l in sorted([x for x in pool if x.spurs], key=lambda x: x.score, reverse=True)[:SPUR_TRIM_TOP]:
+            t = trim_spurs(gh, l, level, duration)
+            if t is not None:
+                pool.append(t)
     if pool:
         return pool
     # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre
@@ -2139,7 +2278,9 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
         **({"targeted": True} if 900 <= l.seed < 1000 else {}),   # tirage ciblé (lieu attrayant), pour les diagnostics
-        **({"retouched": True} if l.seed >= 1000 else {}),        # retouche d'une meilleure boucle (RETOUCH)
+        **({"retouched": True} if 1000 <= l.seed < 2000 else {}), # retouche d'une meilleure boucle (RETOUCH)
+        **({"kept": True} if l.seed >= 2000 else {}),             # boucle de la version précédente (KEEP_PREVIOUS)
+        **({"spurs": len(l.spurs)} if l.spurs else {}),           # éperons injustifiés restants (SPUR_FIX)
         **({"remarkable": l.remarkable} if l.remarkable else {}),  # lieux remarquables traversés (appli, GPX)
         **({"views_passed": l.views_passed} if l.views_passed else {}),   # belvédères devant lesquels on passe
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
@@ -2430,6 +2571,17 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         log(f"- {st['name']} : pas de route à moins de 400 m, ignoré")
         return None, buf, time.time() - t0
     st = {**st, "lon0": st["lon"], "lat0": st["lat"], "lon": snapped[0], "lat": snapped[1]}
+    if KEEP_PREVIOUS and CARRY is not None:                  # boucles publiées de la version précédente (candidates)
+        try:
+            e_prev = CARRY["by_key"].get(key0)
+            if e_prev is not None:
+                prev_opts = _read_json(CARRY["src"], f"web/data/starts/{e_prev['id']}.json")["options"]
+                st["previous"] = {}
+                for o in prev_opts:
+                    st["previous"].setdefault((o["level"], round(o["duration_target_min"])), []).append(
+                        (o.get("profile") or LEVELS[o["level"]]["profiles"][0], o["coords"]))
+        except Exception as e:  # noqa: BLE001 : sans elles, on calcule comme avant
+            log(f"  boucles précédentes indisponibles ({type(e).__name__})")
     if reused_entry is None:
         log(f"- {st['name']}")
     dur_seconds: dict[str, float] = {}

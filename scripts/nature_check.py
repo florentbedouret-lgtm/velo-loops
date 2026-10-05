@@ -361,6 +361,7 @@ def option_row(o) -> dict:
             "fallback": bool(o.get("unpaved_fallback")), "targeted": bool(o.get("targeted")),
             "retouched": bool(o.get("retouched")),
             "outback": bool(o.get("out_and_back")),
+            "spurs": len(g.unjustified_spurs(o["coords"])) if o.get("coords") else None,
             "remarkable": [x["n"] for x in o.get("remarkable") or []], "views": o.get("views_passed", 0),
             "water_pct": round(100 * sc.get("water", 0)), "min": o.get("time_est_min"),
             "lights_km": o.get("traffic_lights_per_km"), "industrial_pct": round(100 * sc.get("industrial", 0))}
@@ -376,6 +377,11 @@ def run_probe(sid, site, gh_url, durations, levels):
     gh = GH(gh_url)
     snapped = gh.nearest(entry["lat"], entry["lon"])
     st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1]}
+    if g.KEEP_PREVIOUS:                                    # boucles publiées = version précédente (comme la production)
+        st_["previous"] = {}
+        for o in pub["options"]:
+            st_["previous"].setdefault((o["level"], round(o["duration_target_min"])), []).append(
+                (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
     rows = []
     for d in durations:
         prior = []                                         # comme la génération réelle (O-18 A)
@@ -834,6 +840,8 @@ def main() -> int:
         g.INDUSTRIAL_PENALTY, g.INDUSTRIAL_MAX_PENALTY = 1.0, 0.30
         g.SECONDARY_GUARD = True
         g.OUTBACK_NEAR_KM = 2.0
+        g.SPUR_FIX = True
+        g.KEEP_PREVIOUS = True
     if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
         g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()
