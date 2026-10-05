@@ -1,5 +1,5 @@
 {
- "_note": "Horta-Guinardó, facile, 1 h : au pied des turons de Collserola, sans les monter. Points de passage seulement (Nominatim, OSM). Utilisées par nature_check.py --compare-refs.",
+ "_note": "Horta-Guinardó, facile, 1 h : en passant au pied de quelques turons et / ou de Collserola, sans les monter (Florent, 05/10/2026). Points de passage seulement (Nominatim, OSM). Utilisées par nature_check.py --compare-refs.",
  "start": "horta-guinardo",
  "loops": [
   {
@@ -35,6 +35,42 @@
     [
      2.14838,
      41.43554
+    ]
+   ]
+  },
+  {
+   "name": "Au pied des turons : Guinardó, Carmel (Mare de Déu de Montserrat), Turó de la Peira",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.16598,
+     41.41233
+    ],
+    [
+     2.1619,
+     41.41392
+    ],
+    [
+     2.1705,
+     41.4325
+    ]
+   ]
+  },
+  {
+   "name": "Turons et Collserola : pied de la Creueta del Coll, Vall d'Hebron, Laberint",
+   "source": "Florent, 05/10/2026",
+   "waypoints": [
+    [
+     2.147,
+     41.4228
+    ],
+    [
+     2.14135,
+     41.42218
+    ],
+    [
+     2.14539,
+     41.43997
     ]
    ]
   }
