@@ -1033,6 +1033,13 @@
       // « Plus de pistes » notée 22 contre 52, proposée pour ses pistes cyclables malgré feux, ville et zone portuaire)
       if (shown.length > 1 && shown[0].score != null)
         shown = shown.filter((o, k) => k === 0 || o.score == null || o.score >= 0.7 * shown[0].score);
+      // ni nettement plus de feux (+25 % et au moins +0,4 / km), ni 10 % de zone industrielle ou portuaire (Florent,
+      // 05/10/2026 : la même « Plus de pistes » revenue en v15, 3,2 feux / km contre 2,4 et 20 % de zone portuaire)
+      if (shown.length > 1) {
+        const lpk = o => o.traffic_lights_per_km, ind = o => (o.scenery && o.scenery.industrial) || 0, m = shown[0];
+        shown = shown.filter((o, k) => k === 0 || (ind(o) < 0.10 && !(lpk(o) != null && lpk(m) != null &&
+          lpk(o) >= 1.25 * lpk(m) && lpk(o) - lpk(m) >= 0.4)));
+      }
       if (!shown.length) {
         const avail = [...new Set(startData.options.filter(o => o.level === levelSel.value)
           .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);
