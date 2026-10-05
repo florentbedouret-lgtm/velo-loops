@@ -29,6 +29,7 @@ def main() -> int:
     ap.add_argument("--site", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--extra", default=None, help="JSON de départs à ajouter s'ils manquent au site (même format, clé `key`)")
+    ap.add_argument("--moves", default=None, help="JSON de départs à déplacer : [{key, lon, lat, why}] (même clé, nouvelle position)")
     args = ap.parse_args()
     r = requests.get(f"{args.site.rstrip('/')}/web/data/index.json", timeout=60)
     r.raise_for_status()
@@ -43,6 +44,13 @@ def main() -> int:
                  for s in json.loads(Path(args.extra).read_text(encoding="utf-8")) if s.get("key") not in have]
         out += extra
         print(f"Départs rétablis depuis {args.extra} : {len(extra)}")
+    if args.moves and Path(args.moves).exists():          # départs mal placés (colline, parc…) : nouvelle position relue
+        moves = {m["key"]: m for m in json.loads(Path(args.moves).read_text(encoding="utf-8"))}
+        for s in out:
+            m = moves.get(s.get("key"))
+            if m:
+                s["lon"], s["lat"] = m["lon"], m["lat"]
+                print(f"Départ déplacé : {s['name']} -> {m['lat']}, {m['lon']} ({m.get('why', '')})")
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"Départs publiés repris : {len(out)} (sans clé : {sum(1 for s in out if 'key' not in s)})")
     return 0

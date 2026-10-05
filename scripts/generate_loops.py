@@ -2008,7 +2008,9 @@ def previous_candidates(gh, st, level, duration_h) -> list:
     et notées avec les règles actuelles : une nouvelle version ne perd plus une bonne boucle par malchance."""
     out = []
     for profile, coords in (st.get("previous") or {}).get((level, round(duration_h * 60)), []):
-        path = gh.via(route_waypoints(coords), profile, pass_through=True)
+        way = route_waypoints(coords)
+        way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
+        path = gh.via(way, profile, pass_through=True)
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
         if (loop is None or abs(loop.time_s / (duration_h * 3600.0) - 1.0) > TIME_TOLERANCE or not overlap_ok(loop)
                 or loop.u_turns > MAX_UTURNS or loop.shares["unpaved"] > MAX_UNPAVED):
