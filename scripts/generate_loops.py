@@ -95,6 +95,16 @@ PROFILE_STEP_M = 100.0        # pas de ré-échantillonnage du profil altimétri
 SMOOTH_WINDOW = 5             # moyenne mobile (5 pas = 500 m) : les données SRTM sont bruitées, surtout en ville
 ASCENT_THRESHOLD_M = 3.0      # une variation < 3 m n'est pas comptée comme montée ou descente (comme un GPS/baromètre)
 TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
+# Audit du 06/10/2026 (60 départs tirés au hasard) : une boucle « 6 h » de 5 h 25 à côté d'une « 5 h » de 5 h 31. Avec
+# DURATION_BINS, chaque durée garde sa plage jusqu'à mi-chemin des durées voisines (« 5 h » de 4 h 30 à 5 h 30), dans la
+# limite de TIME_TOLERANCE. Essai : désactivé en production.
+DURATION_BINS = False
+DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
+# Même audit : 12 % des boucles avaient plus de 3 km de terre (8,5 km à la Molina en 5 h : la limite était une PART du
+# parcours) ; les pentes de plus de 20 % étaient presque toutes sur des chemins de terre. Essai : désactivé.
+DIRT_MAX_KM = None              # plafond absolu de terre (notée ou probable) ; v16 : 4 km
+STEEP_DIRT_GRADE = 0.12         # terre raide : pénalité de la terre doublée sur ces tronçons (STEEP_DIRT_PENALTY)
+STEEP_DIRT_PENALTY = False
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
 # Aller-retour (Florent, 03/10/2026 : Sant Adrià 1 h, l'aller-retour sur la piste du Besòs note 59 contre 42) : accepté
@@ -1106,6 +1116,7 @@ class Loop:
     u_turns: int = 0
     longest_repeat_m: float = 0.0
     repeat_cycle_share: float = 0.0
+    steep_dirt_km: float = 0.0
     scenery: dict | None = None
 
     @property
@@ -1341,6 +1352,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.views_passed = views_passed(coords, cum)
     loop.spurs = unjustified_spurs(coords) if SPUR_FIX else []
     loop.surface_seq = surface_seq(edges, cum)
+    if STEEP_DIRT_PENALTY:                                # terre (notée ou probable) sur une pente d'au moins 12 %
+        n_ = min(len(loop.surface_seq), len(prof) - 1)
+        loop.steep_dirt_km = sum(1 for k in range(n_) if loop.surface_seq[k] in "up"
+                                 and abs(prof[k + 1] - prof[k]) / ds >= STEEP_DIRT_GRADE) * ds / 1000.0
     loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
     loop.doubt_ways = doubt_ways(det, coords, cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
@@ -1388,7 +1403,7 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     total = sum(weights[k] * parts[k] for k in weights) / sum(weights.values())
     # terre : dès le premier km, 3 points par km (Gràcia 2 h, 30/09/2026 : 1,9 km de piste en terre évitable ne coûtaient
     # que 4 points, la pénalité ne comptant qu'au-delà de 3 % du parcours) ; la part au-delà de 3 % reste pénalisée
-    dirt_km = l.shares["unpaved"] * l.distance_m / 1000.0
+    dirt_km = l.shares["unpaved"] * l.distance_m / 1000.0 + l.steep_dirt_km   # terre raide comptée deux fois
     total -= min(0.3, max(UNPAVED_PENALTY_PER_KM * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
     total += min(REMARKABLE_MAX_BONUS, REMARKABLE_BONUS * len(l.remarkable))   # Tibidabo, belvédères connus…
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
@@ -1401,6 +1416,25 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
 
 
 # --------------------------------------------------------------------------- génération
+def time_ok(time_s: float, duration_h: float) -> bool:
+    """Durée acceptable pour la durée visée (TIME_TOLERANCE, et plages sans chevauchement si DURATION_BINS)."""
+    r = time_s / (duration_h * 3600.0)
+    if abs(r - 1.0) > TIME_TOLERANCE:
+        return False
+    if not DURATION_BINS or duration_h not in DURATION_SET:
+        return True
+    i = DURATION_SET.index(duration_h)
+    lo = (DURATION_SET[i - 1] + duration_h) / 2.0 / duration_h if i > 0 else 0.0
+    hi = (DURATION_SET[i + 1] + duration_h) / 2.0 / duration_h if i + 1 < len(DURATION_SET) else 9.0
+    return lo <= r <= hi
+
+
+def dirt_ok(l) -> bool:
+    """Terre acceptable : part sous MAX_UNPAVED et, si DIRT_MAX_KM, pas plus de DIRT_MAX_KM km."""
+    return l.shares["unpaved"] <= MAX_UNPAVED and (DIRT_MAX_KM is None or
+                                                   l.shares["unpaved"] * l.distance_m / 1000.0 <= DIRT_MAX_KM)
+
+
 def overlap_ok(l) -> bool:
     """Part répétée acceptable : sous MAX_OVERLAP, ou aller-retour sur piste cyclable (OUTBACK_OK)."""
     return l.overlap <= MAX_OVERLAP or (OUTBACK_OK and l.overlap <= OUTBACK_MAX_OVERLAP
@@ -1466,8 +1500,8 @@ def outback_candidates(gh, st, level, profile, duration_h, log, detail=None) -> 
                 if abs(ratio - 1.0) <= 0.05:
                     break
                 want = s[2] / ratio
-            ok = (loop is not None and abs(loop.time_s / target_s - 1.0) <= TIME_TOLERANCE and overlap_ok(loop)
-                  and loop.u_turns <= MAX_UTURNS and loop.shares["unpaved"] <= MAX_UNPAVED)
+            ok = (loop is not None and time_ok(loop.time_s, duration_h) and overlap_ok(loop)
+                  and loop.u_turns <= MAX_UTURNS and dirt_ok(loop))
             if detail is not None:
                 detail.append(f"  aller-retour {cat} cap {b0:.0f}° -> " + ("pas de boucle" if loop is None else
                               f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, répété "
@@ -1528,10 +1562,10 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
             rejects["pas de boucle"] += 1
             continue
         ratio = cand.time_s / target_s
-        if abs(ratio - 1.0) > TIME_TOLERANCE:          # une seule retouche de la distance par candidat
+        if not time_ok(cand.time_s, duration_h):       # une seule retouche de la distance par candidat
             path = gh.round_trip(lon, lat, profile, min(250_000.0, max(3_000.0, dist / ratio)), seed, heading)
             cand = analyse(path, level, profile, duration_h, seed, heading) if path else None
-            if cand is None or abs(cand.time_s / target_s - 1.0) > TIME_TOLERANCE:
+            if cand is None or not time_ok(cand.time_s, duration_h):
                 rejects["durée"] += 1
                 continue
         if not overlap_ok(cand):
@@ -1540,7 +1574,7 @@ def fit_and_sample(gh: GraphHopper, start, level: str, profile: str, duration_h:
         if cand.u_turns > MAX_UTURNS:
             rejects["demi-tours"] += 1
             continue
-        if cand.shares["unpaved"] > MAX_UNPAVED:
+        if not dirt_ok(cand):
             rejects["non goudronné"] += 1
             if (fallback is not None and cand.shares["unpaved"] <= FALLBACK_UNPAVED_SHARE
                     and cand.shares["unpaved"] * cand.distance_m / 1000.0 <= FALLBACK_UNPAVED_KM):
@@ -1813,13 +1847,13 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
             why = None
             if loop is None:
                 why = f"pas d'itinéraire ({gh.last_error})" if path is None else "boucle invalide"
-            elif abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
+            elif not time_ok(loop.time_s, duration_h):
                 why = "durée"
             elif not overlap_ok(loop):
                 why = f"tronçons répétés ({loop.overlap:.0%})"
             elif loop.u_turns > MAX_UTURNS:
                 why = f"demi-tours ({loop.u_turns})"
-            elif loop.shares["unpaved"] > MAX_UNPAVED:
+            elif not dirt_ok(loop):
                 why = "terre"
             elif loop.score <= base.score:
                 why = "note plus basse"
@@ -1879,11 +1913,11 @@ def target_candidates(gh, st, level, profile, duration_h, log, fallback=None):
             if abs(ratio - 1.0) <= 0.05 or (s <= 1.0 and ratio > 1.0) or all(q in aims for q in plan):
                 break                                        # (tous les points visés exactement : rien à ajuster)
             s = max(1.0, s / ratio)
-        if loop is None or abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE:
+        if loop is None or not time_ok(loop.time_s, duration_h):
             continue
         if not overlap_ok(loop) or loop.u_turns > MAX_UTURNS:
             continue
-        if loop.shares["unpaved"] > MAX_UNPAVED:
+        if not dirt_ok(loop):
             if (fallback is not None and loop.shares["unpaved"] <= FALLBACK_UNPAVED_SHARE
                     and loop.shares["unpaved"] * loop.distance_m / 1000.0 <= FALLBACK_UNPAVED_KM):
                 loop.unpaved_fallback = True
@@ -1999,8 +2033,8 @@ def trim_spurs(gh, loop, level, duration_h):
     way = route_waypoints(loop.coords, skip=[(s["a"], s["b"]) for s in loop.spurs])
     path = gh.via(way, loop.profile, pass_through=True)
     new = analyse(path, level, loop.profile, duration_h, loop.seed, loop.heading) if path else None
-    if (new is None or abs(new.time_s / (duration_h * 3600.0) - 1.0) > TIME_TOLERANCE or not overlap_ok(new)
-            or new.u_turns > MAX_UTURNS or new.shares["unpaved"] > MAX_UNPAVED or len(new.spurs) >= len(loop.spurs)):
+    if (new is None or not time_ok(new.time_s, duration_h) or not overlap_ok(new)
+            or new.u_turns > MAX_UTURNS or not dirt_ok(new) or len(new.spurs) >= len(loop.spurs)):
         return None
     return new
 
@@ -2014,8 +2048,8 @@ def previous_candidates(gh, st, level, duration_h) -> list:
         way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
         path = gh.via(way, profile, pass_through=True)
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
-        if (loop is None or abs(loop.time_s / (duration_h * 3600.0) - 1.0) > TIME_TOLERANCE or not overlap_ok(loop)
-                or loop.u_turns > MAX_UTURNS or loop.shares["unpaved"] > MAX_UNPAVED):
+        if (loop is None or not time_ok(loop.time_s, duration_h) or not overlap_ok(loop)
+                or loop.u_turns > MAX_UTURNS or not dirt_ok(loop)):
             continue
         out.append(loop)
     return out
@@ -2034,8 +2068,8 @@ def _fit_via(gh, level, profile, duration_h, make_way, x0, seed, tries=3):
         if abs(ratio - 1.0) <= 0.05:
             break
         x = x / ratio
-    if (abs(loop.time_s / target_s - 1.0) > TIME_TOLERANCE or not overlap_ok(loop) or loop.u_turns > MAX_UTURNS
-            or loop.shares["unpaved"] > MAX_UNPAVED):
+    if (not time_ok(loop.time_s, duration_h) or not overlap_ok(loop) or loop.u_turns > MAX_UTURNS
+            or not dirt_ok(loop)):
         return None
     return loop
 

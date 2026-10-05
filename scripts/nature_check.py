@@ -843,6 +843,8 @@ def main() -> int:
         g.SPUR_FIX = True
         g.KEEP_PREVIOUS = True
         g.AR_DRAWS = g.LIEU_TOUR = True
+        g.DURATION_BINS = g.STEEP_DIRT_PENALTY = True
+        g.DIRT_MAX_KM = 4.0
     if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
         g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()
