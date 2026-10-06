@@ -410,6 +410,44 @@ def run_probe(sid, site, gh_url, durations, levels):
             "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
+# ----------------------------------------------------------------------------- mesure du coût par type de tirage (O-38)
+PHASES: dict = {}
+_PH_LOCK = __import__("threading").Lock()
+
+
+def _timed(name, fn, gh_pos):
+    """Enveloppe une fonction de génération : temps et requêtes GraphHopper cumulés dans PHASES[name]."""
+    def wrap(*a, **k):
+        gh = a[gh_pos] if len(a) > gh_pos else None
+        c0, t0 = getattr(gh, "calls", 0), time.time()
+        try:
+            return fn(*a, **k)
+        finally:
+            with _PH_LOCK:
+                e = PHASES.setdefault(name, [0, 0, 0.0])
+                e[0] += 1
+                e[1] += getattr(gh, "calls", 0) - c0
+                e[2] += time.time() - t0
+    return wrap
+
+
+def install_profiling():
+    for name in ("fit_and_sample", "target_candidates", "outback_candidates", "ar_candidates", "lieu_tour_candidates",
+                 "previous_candidates", "retouch_candidates", "trim_spurs"):
+        if hasattr(g, name):
+            setattr(g, name, _timed(name, getattr(g, name), 0))
+
+
+def profiling_report() -> list:
+    tot_t = sum(v[2] for v in PHASES.values()) or 1.0
+    tot_c = sum(v[1] for v in PHASES.values()) or 1
+    L = ["\n## Coût par type de tirage (temps cumulé, tous fils confondus)", "",
+         "| type | appels | requêtes GraphHopper | part des requêtes | temps (min) | part du temps |", "|---|---|---|---|---|---|"]
+    for k, (n, c, t) in sorted(PHASES.items(), key=lambda kv: -kv[1][2]):
+        L.append(f"| {k} | {n} | {c} | {100 * c / tot_c:.0f} % | {t / 60:.1f} | {100 * t / tot_t:.0f} % |")
+    return L
+
+
 # ----------------------------------------------------------------------------- sonde « pénalités » (05/10/2026)
 # Florent : « Plus de pistes » par le port revenue en v15 (3,2 feux/km, 20 % de zone portuaire) ; feux et zones
 # industrielles plus pénalisés ? Mêmes candidats, notés avec chaque réglage, options choisies comme la production.
@@ -815,6 +853,7 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--profile", action="store_true", help="mesure du coût de chaque type de tirage (O-38)")
     ap.add_argument("--v16", action="store_true", help="essai v16 : feux 0,30, industriel x2, options secondaires gardées, "
                     "allers-retours seulement près de l'eau")
     ap.add_argument("--penalty", default=None, help="sonde « pénalités » (feux, zones industrielles) : départs séparés par ;")
@@ -845,6 +884,8 @@ def main() -> int:
         g.AR_DRAWS = g.LIEU_TOUR = True
         g.DURATION_BINS = g.STEEP_DIRT_PENALTY = True
         g.DIRT_MAX_KM = 4.0
+    if args.profile:
+        install_profiling()
     if args.lieux:                                      # avant load_pois : les points d'accès sont chargés avec les lieux
         g.REMARKABLE_FAME = g.REMARKABLE_POINTS = True
     t0 = time.time()
@@ -901,6 +942,10 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             results = list(ex.map(lambda sid: run_probe(sid, args.site, args.gh, durations, args.levels.split()), ids))
         report_probe(results, args.out, args.out_md, args.note, t0)
+        if PHASES:
+            with open(args.out_md, "a", encoding="utf-8") as fh:
+                fh.write("\n".join(profiling_report()) + "\n")
+            print("\n".join(profiling_report()), flush=True)
         g.write_ways(str(Path(args.out).parent / "surface_ways_probe.csv"))
         return 0
     if args.references:

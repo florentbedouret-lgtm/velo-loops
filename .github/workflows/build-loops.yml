@@ -262,14 +262,14 @@ jobs:
           # avant / après sur ces départs ; les deux vides : calibrage v5
           # comparaisons « allure:durée en h:boucles de référence » (autres : "modere:2:scripts/reference_plata.json",
           # "soutenu:2:scripts/reference_plata_soutenu.json", "modere:2:scripts/reference_gracia.json")
-          NATURE_COMPARE="modere:1:scripts/reference_hospitalet_1h.json soutenu:1:scripts/reference_eixample_1h.json facile:1:scripts/reference_horta_1h.json"
+          NATURE_COMPARE=""   # 06/10/2026 : "modere:1:scripts/reference_hospitalet_1h.json soutenu:1:scripts/reference_eixample_1h.json facile:1:scripts/reference_horta_1h.json"
           # Montserrat (03/10/2026) : "soutenu:5:scripts/reference_montserrat.json soutenu:6:scripts/reference_montserrat.json modere:6:scripts/reference_montserrat.json"
           NATURE_PLACES=""   # rapport « lieux remarquables » (accessibilité, points d'accès, passages), indépendant du reste
           # avant (03/10/2026) : "soutenu:1:scripts/reference_sarria_1h.json soutenu:1:scripts/reference_gracia_turons.json facile:1:scripts/reference_sant_adria.json facile:1.5:scripts/reference_les_corts.json"
           NATURE_RELIEF=""   # sonde relief sportif (03/10/2026) : les 16 départs de NATURE_PROBE
           NATURE_WORKERS=3   # test #165 (01/10/2026) : 4 en parallèle ne gagnent que 2 %
-          NATURE_PROBE=""   # sonde de 16 départs : "gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"
-          NATURE_RETOUCH="--retouch --lacets --retouch-dedupe --retouch-prefilter 0.25 --retouch-worst-leg --outback --lieux --v16"   # --lacets : essai, lacets non comptés comme demi-tours ; retouche des meilleures boucles mesurée (02/10/2026) ; "" : production telle quelle
+          NATURE_PROBE="gracia;sant-andreu;terrassa;manresa;vic;castelldefels;sant-cugat-del-valles;sant-marti-sesgueioles"   # mesure du coût (O-38) ; sonde de 16 départs : "gracia;sarria-sant-gervasi;horta-guinardo;l-eixample;sant-andreu;can-rectoret-est;sant-cugat-del-valles;cerdanyola-del-valles;molins-de-rei;badalona;terrassa;manresa;castelldefels;sant-marti-sesgueioles;vic;granollers"
+          NATURE_RETOUCH="--retouch --lacets --retouch-dedupe --retouch-prefilter 0.25 --retouch-worst-leg --outback --lieux --v16 --profile"   # --lacets : essai, lacets non comptés comme demi-tours ; retouche des meilleures boucles mesurée (02/10/2026) ; "" : production telle quelle
           if [ -n "$NATURE_PLACES" ]; then
             python scripts/places_report.py --gh http://localhost:8989 --pbf data/region.osm.pbf --workdir data               --out data/places_report.json --out-md data/places_report.md
             cat data/places_report.md >> "$GITHUB_STEP_SUMMARY"
@@ -297,7 +297,7 @@ jobs:
               --note "sonde relief : poids 0 / 0,10 / 0,20 / 0,30 dans la note du niveau sportif (0 = réglage actuel)"
           elif [ -n "$NATURE_PROBE" ]; then
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "0.75 1 2 3 6" --workers "$NATURE_WORKERS" \
+              --pbf data/region.osm.pbf --workdir data --probe "$NATURE_PROBE" --durations "0.75 1 1.5 2 3 4 5 6" --workers "$NATURE_WORKERS" \
               --levels "facile modere soutenu" $NATURE_RETOUCH --out data/nature_check.json --out-md data/nature_check.md \
               --note "sonde v16 : feux 0,30, industriel x2, options secondaires gardées, allers-retours seulement près de l'eau"
           elif [ -z "$NATURE_COMPARE" ]; then
