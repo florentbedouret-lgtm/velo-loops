@@ -217,6 +217,7 @@ SPUR_PENALTY = 0.04             # 4 points par éperon injustifié…
 SPUR_PENALTY_PER_100M = 0.01    # … plus 1 point par 100 m
 SPUR_MAX_PENALTY = 0.20
 SPUR_TRIM_TOP = 3               # meilleures candidates dont on essaie de couper les éperons (6 : sonde 18 -> 30 min)
+TARGETED_GATE = None            # essai (O-38) : tirages ciblés seulement si la meilleure boucle ordinaire note moins que ça
 AR_DRAWS = True                 # essai : aller-retour vers le bord de mer, une rivière ou un espace vert (ar_candidates)
 LIEU_TOUR = True                # essai : monter à un lieu remarquable et en faire le tour (lieu_tour_candidates)
 # Mémoire des bonnes boucles (Florent, 05/10/2026 : « ne jamais régresser ») : les boucles publiées de la version
@@ -2148,7 +2149,7 @@ def lieu_tour_candidates(gh, st, level, profile, duration_h, log) -> list:
     return found
 
 
-def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
+def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defaut") -> list:
     """Tous les candidats valides d'un départ pour une durée et un niveau : tirages ordinaires de chaque profil, plus
     les tirages « montée » en niveau sportif. Utilisé par la génération ET par le diagnostic (nature_check --probe)."""
     pool: list = []
@@ -2162,14 +2163,24 @@ def level_pool(gh, st, level: str, duration: float, candidates, log) -> list:
         why = ", ".join(f"{k} {v}" for k, v in rejects.items() if v)
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
-    pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))  # ciblés
-    if OUTBACK_DRAWS:
-        pool.extend(outback_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
-    if AR_DRAWS:
-        pool.extend(ar_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
-    if LIEU_TOUR:
-        pool.extend(lieu_tour_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
-    if KEEP_PREVIOUS and st.get("previous"):
+    gate = TARGETED_GATE if gate == "defaut" else gate
+    targeted = True
+    if gate is not None:                                     # tirages ciblés « de rattrapage » (TARGETED_GATE)
+        if KEEP_PREVIOUS and st.get("previous"):
+            pool.extend(previous_candidates(gh, st, level, duration))
+        best = max((l.score for l in pool), default=0.0)
+        targeted = best < gate
+        if not targeted:
+            log(f"    tirages ciblés sautés (meilleure boucle {best:.1f} >= {gate:g})")
+    if targeted:
+        pool.extend(target_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log, fallback=spare))
+        if OUTBACK_DRAWS:
+            pool.extend(outback_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+        if AR_DRAWS:
+            pool.extend(ar_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+        if LIEU_TOUR:
+            pool.extend(lieu_tour_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+    if gate is None and KEEP_PREVIOUS and st.get("previous"):
         pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))

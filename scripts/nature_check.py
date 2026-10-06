@@ -410,6 +410,66 @@ def run_probe(sid, site, gh_url, durations, levels):
             "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
+# ----------------------------------------------------------------------------- test du rattrapage (O-38, 07/10/2026)
+def run_gate_test(sid, site, gh_url, durations, levels, gate):
+    """Mêmes départs produits deux fois : comme la production (tirages ciblés partout) et avec les tirages ciblés seulement
+    en rattrapage (meilleure boucle ordinaire < gate). Grâce à la mémoire des itinéraires, le 2e passage ne refait presque
+    aucune requête. Compare les options choisies."""
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next((e for e in idx["starts"] if e["id"] == sid), None)
+    if entry is None:
+        return {"id": sid, "skipped": "départ absent de l'index publié"}
+    pub = requests.get(f"{site}/web/data/starts/{sid}.json", timeout=60).json()
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1], "previous": {}}
+    for o in pub["options"]:
+        st_["previous"].setdefault((o["level"], round(o["duration_target_min"])), []).append(
+            (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
+    rows = []
+    for d in durations:
+        prior = {"A": [], "B": []}
+        for level in sorted(levels, key=list(g.LEVELS).index):
+            out = {}
+            for k, gt in (("A", None), ("B", gate)):
+                logs = []
+                c0, t0 = gh.calls, time.time()
+                pool = g.level_pool(gh, st_, level, d, g.CANDIDATES, logs.append, gate=gt)
+                pool = pool + g.retouch_candidates(gh, st_, level, d, pool, lambda *_: None)
+                picks = g.choose_options(gh, st_, level, d, pool, prior[k], lambda *_: None)
+                prior[k] += [l for _, l in picks]
+                out[k] = {"picks": [(lab, round(l.score, 1), g.route_key(l.coords)) for lab, l in picks],
+                          "skipped": any("tirages ciblés sautés" in x for x in logs),
+                          "calls": gh.calls - c0, "s": round(time.time() - t0, 1)}
+            same = [p[2] for p in out["A"]["picks"]] == [p[2] for p in out["B"]["picks"]]
+            rows.append({"duration_h": d, "level": level, "skipped": out["B"]["skipped"], "same": same,
+                         "A": out["A"]["picks"], "B": out["B"]["picks"]})
+    return {"id": sid, "rows": rows}
+
+
+def report_gate_test(results, out_json, out_md, gate, t0):
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    rows = [(r["id"], x) for r in results if not r.get("skipped") for x in r["rows"]]
+    sk = [x for _, x in rows if x["skipped"]]
+    L = [f"# Test du rattrapage : tirages ciblés seulement si la meilleure boucle ordinaire note moins de {gate:g} — "
+         f"{round((time.time() - t0) / 60)} min", "",
+         f"Durées × allures testées : {len(rows)} ; rattrapage non déclenché (tirages ciblés sautés) : {len(sk)}.",
+         f"Parmi celles-ci, options choisies **identiques** (même recommandée, mêmes secondaires, même tracé) : "
+         f"**{sum(x['same'] for x in sk)} sur {len(sk)}**.",
+         f"Cas où le rattrapage s'est déclenché : {len(rows) - len(sk)} ; identiques : "
+         f"{sum(x['same'] for _, x in rows if not x['skipped'])}.", "",
+         "## Différences quand les tirages ciblés sont sautés", "",
+         "| départ | durée | allure | v16 (recommandée, note) | rattrapage (recommandée, note) | écart de la recommandée |",
+         "|---|---|---|---|---|---|"]
+    for sid, x in rows:
+        if x["skipped"] and not x["same"]:
+            a, b = x["A"][0] if x["A"] else ("-", 0, ""), x["B"][0] if x["B"] else ("-", 0, "")
+            L.append(f"| {sid} | {x['duration_h']:g} h | {x['level']} | {a[0]} {a[1]} | {b[0]} {b[1]} | "
+                     f"{'même tracé' if a[2] == b[2] else f'{b[1] - a[1]:+.1f}'} |")
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 # ----------------------------------------------------------------------------- mesure du coût par type de tirage (O-38)
 PHASES: dict = {}
 _PH_LOCK = __import__("threading").Lock()
@@ -853,6 +913,7 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--gate-test", type=float, default=None, help="test du rattrapage : seuil de note (O-38)")
     ap.add_argument("--profile", action="store_true", help="mesure du coût de chaque type de tirage (O-38)")
     ap.add_argument("--v16", action="store_true", help="essai v16 : feux 0,30, industriel x2, options secondaires gardées, "
                     "allers-retours seulement près de l'eau")
@@ -931,6 +992,14 @@ def main() -> int:
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             results = list(ex.map(lambda sid: run_relief(sid, args.site, args.gh, durations), ids))
         report_relief(results, args.out, args.out_md, args.note, t0)
+        return 0
+    if args.probe and args.gate_test is not None:
+        ids = [x.strip() for x in args.probe.split(";") if x.strip()]
+        durations = [float(x) for x in args.durations.split()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_gate_test(sid, args.site, args.gh, durations, args.levels.split(),
+                                                            args.gate_test), ids))
+        report_gate_test(results, args.out, args.out_md, args.gate_test, t0)
         return 0
     if args.probe:
         global WAYS
