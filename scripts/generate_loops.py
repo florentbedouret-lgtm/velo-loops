@@ -98,13 +98,13 @@ TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 # Audit du 06/10/2026 (60 départs tirés au hasard) : une boucle « 6 h » de 5 h 25 à côté d'une « 5 h » de 5 h 31. Avec
 # DURATION_BINS, chaque durée garde sa plage jusqu'à mi-chemin des durées voisines (« 5 h » de 4 h 30 à 5 h 30), dans la
 # limite de TIME_TOLERANCE. Essai : désactivé en production.
-DURATION_BINS = False
+DURATION_BINS = True
 DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
 # Même audit : 12 % des boucles avaient plus de 3 km de terre (8,5 km à la Molina en 5 h : la limite était une PART du
 # parcours) ; les pentes de plus de 20 % étaient presque toutes sur des chemins de terre. Essai : désactivé.
-DIRT_MAX_KM = None              # plafond absolu de terre (notée ou probable) ; v16 : 4 km
+DIRT_MAX_KM = 4.0               # plafond absolu de terre (notée ou probable) ; v16 : 4 km
 STEEP_DIRT_GRADE = 0.12         # terre raide : pénalité de la terre doublée sur ces tronçons (STEEP_DIRT_PENALTY)
-STEEP_DIRT_PENALTY = False
+STEEP_DIRT_PENALTY = True
 MAX_OVERLAP = 0.25            # part max de tronçons empruntés 2 fois
 MAX_UNPAVED = 0.12
 # Aller-retour (Florent, 03/10/2026 : Sant Adrià 1 h, l'aller-retour sur la piste du Besòs note 59 contre 42) : accepté
@@ -112,7 +112,7 @@ MAX_UNPAVED = 0.12
 OUTBACK_OK = True
 OUTBACK_MAX_OVERLAP = 1.0        # un vrai aller-retour est répété à ~100 % (Sant Adrià 1 h : 72 %, note 65 contre 46)
 OUTBACK_MIN_CYCLE = 0.6          # part de piste cyclable / voie verte dans la partie répétée
-OUTBACK_NEAR_KM = None           # essai (O-38) : allers-retours seulement si l'eau est à moins de N km du départ
+OUTBACK_NEAR_KM = 2.0            # essai (O-38) : allers-retours seulement si l'eau est à moins de N km du départ
 OUTBACK_DRAWS = True             # tirages « aller-retour au bord de l'eau » (rivière, mer)
 # Repli (choix B de Florent, 28/09/2026, test v10 : Castellgalí, Gaià perdaient leurs boucles courtes) : s'il n'existe AUCUN
 # candidat sous MAX_UNPAVED pour un départ, une durée et un niveau, on garde les candidats les moins terreux jusqu'à
@@ -183,7 +183,7 @@ VIEW_MAX_BONUS = 0.04
 UNPAVED_PENALTY_PER_KM = 0.03    # note : 3 points par km de terre (notée, probable ou ICGC), 30 au plus
 FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
-WEIGHTS = {"calm": 0.22, "lights": 0.22, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}
+WEIGHTS = {"calm": 0.22, "lights": 0.30, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}   # feux 0,22 -> 0,30 (v16)
 # « ville » de la répartition du terrain (O-9.4) : au moins LANDCOVER_BLD_MIN bâtiments OSM à moins de ~75 m du point.
 # Les zones bâties « landuse » ne marchent pas à Barcelone (îlots dessinés sans les rues) ; calage : diagnostic
 # landcover_check n°2 du 26/09/2026 (Gràcia 1 h : 89 % ; Collserola 23-33 %). Partagé avec scripts/landcover.py.
@@ -193,12 +193,12 @@ FLOW_OVERLAP_FACTOR = 1.0     # pénalité des tronçons répétés (2.0 jusqu'�
 LIGHTS_PER_KM_ZERO_SCORE = 2.5  # à 2,5 feux/km, le sous-score "feux" tombe à 0 ; −1 à 5 feux/km
 # zones industrielles et portuaires (OSM landuse=industrial, port) : sortie de Florent, zone franche et port de Barcelone
 # « au milieu des entrepôts, travaux et camions : pas agréable, un peu dangereux, pollué » ; 14 % du parcours -> −7 points
-INDUSTRIAL_PENALTY = 0.5
-INDUSTRIAL_MAX_PENALTY = 0.15
+INDUSTRIAL_PENALTY = 1.0          # v16 (0,5 avant) : sonde « pénalités » du 05/10/2026
+INDUSTRIAL_MAX_PENALTY = 0.30      # v16 (0,15 avant)
 # Options secondaires (Florent, 05/10/2026 : « Plus de pistes » par le port revenue en v15) : jamais nettement pire que la
 # recommandée sur les feux (+25 % et au moins +0,4 / km) ni à 10 % de zone industrielle ; une autre candidate est cherchée
 # (même règle que le filtre de l'appli). Essai : désactivé en production.
-SECONDARY_GUARD = False
+SECONDARY_GUARD = True
 SECONDARY_MAX_LIGHTS_RATIO = 1.25
 SECONDARY_MAX_LIGHTS_GAP = 0.4
 SECONDARY_MAX_INDUSTRIAL = 0.10
@@ -207,7 +207,7 @@ SECONDARY_MAX_INDUSTRIAL = 0.10
 # SPUR_CORRIDOR_M ; il est justifié s'il monte d'au moins SPUR_JUSTIFIED_DPLUS_M, mène à un lieu remarquable ou un
 # belvédère, ou longe surtout l'eau, la forêt ou un parc. Les autres sont pénalisés et, pour les meilleures candidates,
 # coupés (boucle recalculée sans l'éperon). Essai : désactivé en production.
-SPUR_FIX = False
+SPUR_FIX = True
 SPUR_CORRIDOR_M = 40.0
 SPUR_MIN_M = 150.0              # éperon pris en compte à partir de cette longueur (aller seul)
 SPUR_END_M = 300.0              # au départ ou à l'arrivée (rue en cul-de-sac du départ) : ignoré
@@ -217,11 +217,11 @@ SPUR_PENALTY = 0.04             # 4 points par éperon injustifié…
 SPUR_PENALTY_PER_100M = 0.01    # … plus 1 point par 100 m
 SPUR_MAX_PENALTY = 0.20
 SPUR_TRIM_TOP = 3               # meilleures candidates dont on essaie de couper les éperons (6 : sonde 18 -> 30 min)
-AR_DRAWS = False                # essai : aller-retour vers le bord de mer, une rivière ou un espace vert (ar_candidates)
-LIEU_TOUR = False               # essai : monter à un lieu remarquable et en faire le tour (lieu_tour_candidates)
+AR_DRAWS = True                 # essai : aller-retour vers le bord de mer, une rivière ou un espace vert (ar_candidates)
+LIEU_TOUR = True                # essai : monter à un lieu remarquable et en faire le tour (lieu_tour_candidates)
 # Mémoire des bonnes boucles (Florent, 05/10/2026 : « ne jamais régresser ») : les boucles publiées de la version
 # précédente sont recalculées et ajoutées aux candidates, notées avec les nouvelles règles. Essai : désactivé.
-KEEP_PREVIOUS = False
+KEEP_PREVIOUS = True
 ROUTE_WAYPOINT_M = 2000.0       # points de passage pris tous les N m pour recalculer une boucle existante
 # Vérification de Florent (29/09/2026, Sant Andreu 2 h : 17 % « industriel », 13 tronçons jugés un par un) : la piste
 # cyclable au bord du fleuve qui longe une zone, un bâtiment isolé, une route en contrebas étaient comptés (règle « à 10 m »).
@@ -2489,7 +2489,10 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "15"  # 15 : lieux remarquables les plus célèbres visés (aller-retour au lieu compris) et points
+GENERATOR_VERSION = "16"  # 16 : feux 0,30 et zones industrielles x2 ; options secondaires jamais nettement pires ; éperons
+#                           coupés ou pénalisés ; boucles de la version précédente reprises ; allers-retours vers un endroit
+#                           agréable et tour des lieux ; plages de durée sans chevauchement ; terre plafonnée à 4 km, terre raide
+#                           x2 ; allers-retours au bord de l'eau seulement près de l'eau (05-06/10/2026). 15 : lieux remarquables les plus célèbres visés (aller-retour au lieu compris) et points
 #                           d'accès relus (monastère de Montserrat, Coll de Pal…), relief sportif 0,30, vitesse 0,93, allers-retours sur piste au bord de l'eau (03/10/2026). 14 : retouche sans doublons, préfiltre de durée (±25 %), tronçon le plus chargé en feux
 #                           d'abord (la Plata sportif 2 h : retour par le Besòs, 03/10/2026). 13 : retouche des meilleures boucles (rivière, mer, espace vert, lieu remarquable ;
 #                           10 essais triés par rentabilité) et lacets non comptés comme demi-tours (02/10/2026). 12 : ville −25 % (2e sortie de Florent) ; montées à la manière des compteurs (≥ 500 m, ≥ 3 %,
@@ -2561,7 +2564,12 @@ def params_hash(config_dir: str = "config") -> str:
                           RETOUCH_ON_ROUTE_DEG, RETOUCH_MAX_TRIALS, RETOUCH_ANCHOR_SHIFT_M, RETOUCH_KIND_ORDER],
               "uturns": [UTURN_LACETS_OK, UTURN_SAME_STREET_M],
               "retouch14": [RETOUCH_DEDUPE, RETOUCH_PREFILTER, RETOUCH_WORST_LEG_FIRST, RETOUCH_FAMILY_CAP],
-              "v15": [REMARKABLE_FAME, REMARKABLE_POINTS, OUTBACK_OK, OUTBACK_DRAWS, OUTBACK_MAX_OVERLAP, OUTBACK_MIN_CYCLE]}
+              "v15": [REMARKABLE_FAME, REMARKABLE_POINTS, OUTBACK_OK, OUTBACK_DRAWS, OUTBACK_MAX_OVERLAP, OUTBACK_MIN_CYCLE],
+              "v16": [INDUSTRIAL_PENALTY, INDUSTRIAL_MAX_PENALTY, SECONDARY_GUARD, SECONDARY_MAX_LIGHTS_RATIO,
+                      SECONDARY_MAX_LIGHTS_GAP, SECONDARY_MAX_INDUSTRIAL, SPUR_FIX, SPUR_CORRIDOR_M, SPUR_MIN_M, SPUR_END_M,
+                      SPUR_JUSTIFIED_DPLUS_M, SPUR_PLEASANT_SHARE, SPUR_PENALTY, SPUR_PENALTY_PER_100M, SPUR_MAX_PENALTY,
+                      SPUR_TRIM_TOP, KEEP_PREVIOUS, ROUTE_WAYPOINT_M, AR_DRAWS, LIEU_TOUR, OUTBACK_NEAR_KM, DURATION_BINS,
+                      DURATION_SET, DIRT_MAX_KM, STEEP_DIRT_GRADE, STEEP_DIRT_PENALTY]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     rp = Path(__file__).parent / "remarkable_places.json"   # liste des lieux (points d'accès) : change les boucles aussi
     if rp.exists():
