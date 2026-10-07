@@ -80,6 +80,9 @@ on:
       chain:
         description: "full : relances automatiques restantes tant que des départs restent à calculer (0 = aucune)"
         default: "4"
+      diag_part:
+        description: "nature_check : partie du diagnostic en cours (1 à 4), quand il est trop long pour un seul run"
+        default: "1"
 
 permissions:
   contents: read
@@ -315,10 +318,17 @@ jobs:
           # 8 périphérie, 17 campagne), toutes durées et allures, plages strictes puis marge ; boucles v15 remises en jeu
           MARGIN_DROPS="breda;sant-celoni;castellfollit-de-la-roca;sant-andreu;granollers;molins-de-rei;arbucies;sant-marti;palleja;abrera;gualba;gracia;la-pobla-de-claramunt;cerdanyola-del-valles;tordera;odena;can-salva;sant-boi-de-llobregat;castellfollit-de-riubregos;parets-del-valles;sants-montjuic;calella;moia;muntanyola;l-hospitalet-de-llobregat;vallromanes;torrelles-de-llobregat;l-eixample;ciutat-vella;el-pont-d-armentera"
           MARGIN_TEM="castellnou-can-mir-sud-est;canyet-sud;pineda-de-bages;can-rovira-nou-sud-ouest;la-palma-de-cervello;rocacrespa-est;vallirana;les-ginesteres-nord-est;sant-vicenc-de-castellet;barbera-del-valles;castelloli;sant-vicenc-de-montalt;torello;els-caus-els-pinetons-est;zona-franca-port-est;el-pla-de-sant-tirs;feners-est;sant-feliu-de-codines;argelaguer;el-collell-est;vilobi-del-penedes;mura;santa-coloma-de-farners;rossinyol-i-coforb-est;el-coll-est-2;sot-d-en-mola-est;rubio;masies-de-sansuies-est;el-pala-de-torroella-sud;can-servitge-est"
+          # en 4 parties de 15 départs (07/10/2026 : les 60 en un run dépassaient les 350 min)
+          case "${{ inputs.diag_part }}" in
+            1) MARGIN_IDS=$(echo "$MARGIN_DROPS" | cut -d';' -f1-15) ;;
+            2) MARGIN_IDS=$(echo "$MARGIN_DROPS" | cut -d';' -f16-30) ;;
+            3) MARGIN_IDS=$(echo "$MARGIN_TEM" | cut -d';' -f1-15) ;;
+            *) MARGIN_IDS=$(echo "$MARGIN_TEM" | cut -d';' -f16-30) ;;
+          esac
           if [ -n "$NATURE_MARGIN" ]; then
             gh run download 37270189071 --repo "$GITHUB_REPOSITORY" -n loops-data -D data/v15
             python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
-              --pbf data/region.osm.pbf --workdir data --probe "$MARGIN_DROPS;$MARGIN_TEM" --margin-test "$NATURE_MARGIN" \
+              --pbf data/region.osm.pbf --workdir data --probe "$MARGIN_IDS" --margin-test "$NATURE_MARGIN" \
               --margin-drops "$MARGIN_DROPS" --prev-dir data/v15/starts --durations "0.75 1 1.5 2 3 4 5 6" \
               --levels "facile modere soutenu" --workers "$NATURE_WORKERS" $NATURE_RETOUCH \
               --out data/margin.json --out-md data/margin.md
@@ -364,6 +374,7 @@ jobs:
             data/surface_ways_probe.csv
             data/margin.json
             data/margin.md
+            data/margin_*.json
             data/drops.json
             data/drops.md
             data/lm_base.json

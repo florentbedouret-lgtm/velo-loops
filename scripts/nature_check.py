@@ -449,8 +449,10 @@ def run_margin(sid, site, gh_url, durations, levels, margin, prev_dir):
     a = margin_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
     b = margin_generate(gh, st_, sid, durations, levels, margin)
-    return {"id": sid, "zone": entry.get("zone"), "strict": a, "margin": b,
-            "s": [round(t1 - t0), round(time.time() - t1)]}
+    res = {"id": sid, "zone": entry.get("zone"), "strict": a, "margin": b, "s": [round(t1 - t0), round(time.time() - t1)]}
+    Path(f"data/margin_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")  # au fil de l'eau
+    print(f"{sid} : {res['s']} s", flush=True)
+    return res
 
 
 def report_margin(results, out_json, out_md, margin, drop_ids, t0):
