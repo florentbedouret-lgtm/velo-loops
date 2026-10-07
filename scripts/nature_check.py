@@ -410,6 +410,116 @@ def run_probe(sid, site, gh_url, durations, levels):
             "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
+# ----------------------------------------------------------------------------- baisses v16 (07/10/2026)
+def drops_rebuild(gh, st_, c):
+    """Boucle recommandée v15 recalculée par ses points de passage (comme KEEP_PREVIOUS) et contrôlée filtre par filtre."""
+    way = [list(p) for p in c["way"]]
+    way[0] = way[-1] = [st_["lon"], st_["lat"]]
+    path = gh.via(way, c["profile"], pass_through=True)
+    loop = g.analyse(path, c["level"], c["profile"], c["duration_h"], 2000, None) if path else None
+    if loop is None:
+        return {"rebuilt": False, "fails": ["non recalculée"]}
+    target = c["duration_h"] * 3600.0
+    fails = []
+    if abs(loop.time_s / target - 1.0) > g.TIME_TOLERANCE:
+        fails.append("durée hors tolérance")
+    elif not g.time_ok(loop.time_s, c["duration_h"]):
+        fails.append("plage de durée")
+    if not g.overlap_ok(loop):
+        fails.append("répétition")
+    if loop.u_turns > g.MAX_UTURNS:
+        fails.append("demi-tours")
+    if not g.dirt_ok(loop):
+        fails.append("terre")
+    return {"rebuilt": True, "fails": fails, "min": round(loop.time_s / 60), "score_v16": loop.score,
+            "score_v15_weights": g.score_from(loop, g.RELIEF_WEIGHTS.get(loop.level), lights_weight=0.22,
+                                              ind_penalty=0.5, ind_max=0.15),
+            "dirt_km": round(loop.shares["unpaved"] * loop.distance_m / 1000.0, 1), "overlap": round(loop.overlap, 2),
+            "u_turns": loop.u_turns, "spurs": len(loop.spurs), "lights_km": None if loop.signals is None else round(loop.signals / max(loop.distance_m / 1000.0, 0.1), 2)}
+
+
+def drops_best(gh, st_, c):
+    """Recommandée produite pour ce cas (réglages globaux du moment), sans les autres allures (prior vide)."""
+    pool = g.level_pool(gh, st_, c["level"], c["duration_h"], g.CANDIDATES, lambda *_: None)
+    pool = pool + g.retouch_candidates(gh, st_, c["level"], c["duration_h"], pool, lambda *_: None)
+    picks = g.choose_options(gh, st_, c["level"], c["duration_h"], pool, [], lambda *_: None)
+    if not picks:
+        return None
+    l = picks[0][1]
+    return {"score": l.score, "min": round(l.time_s / 60), "key": g.route_key(l.coords)}
+
+
+def run_drops(cases_file, site, gh_url, workers):
+    """Baisses de note v15 -> v16 > 10 points : la boucle v15 passe-t-elle encore les filtres ? Que donne la v16 avec et
+    sans les plages de durée (DURATION_BINS) ?"""
+    cases = json.loads(Path(cases_file).read_text(encoding="utf-8"))
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entries = {e["id"]: e for e in idx["starts"]}
+    by = {}
+    for c in cases:
+        by.setdefault(c["id"], []).append(c)
+    ctx = {}
+
+    def setup(sid):
+        gh = GH(gh_url)
+        e = entries[sid]
+        snapped = gh.nearest(e["lat"], e["lon"])
+        st_ = {"name": e["name"], "lon": snapped[0], "lat": snapped[1], "previous": {}}
+        for c in by[sid]:
+            st_["previous"].setdefault((c["level"], round(c["duration_h"] * 60)), []).append((c["profile"], c["way"]))
+        ctx[sid] = (gh, st_)
+        for c in by[sid]:
+            c["zone"] = e.get("zone")
+            c["rebuild"] = drops_rebuild(gh, st_, c)
+
+    def phase(key):
+        def one(sid):
+            gh, st_ = ctx[sid]
+            for c in by[sid]:
+                c[key] = drops_best(gh, st_, c)
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            list(ex.map(one, list(by)))
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(setup, list(by)))
+    phase("v16")
+    bins = g.DURATION_BINS
+    g.DURATION_BINS = False                                 # globales partagées : une phase à la fois
+    phase("no_bins")
+    g.DURATION_BINS = bins
+    for c in cases:
+        c.pop("way", None)
+    return cases
+
+
+def report_drops(cases, out_json, out_md, t0):
+    Path(out_json).write_text(json.dumps(cases, ensure_ascii=False, indent=1), encoding="utf-8")
+    fails = Counter(f for c in cases for f in c["rebuild"]["fails"])
+    ok = [c for c in cases if c["rebuild"]["rebuilt"] and not c["rebuild"]["fails"]]
+    sc = lambda c, k: (c.get(k) or {}).get("score", 0.0)  # noqa: E731
+    L = [f"# Baisses de note v15 -> v16 (> 10 points) : {len(cases)} cas — {round((time.time() - t0) / 60)} min", "",
+         "## La boucle v15 recalculée passe-t-elle les filtres v16 ?", "",
+         f"Filtres qui l'écartent : {dict(fails)} ; elle passe tous les filtres dans {len(ok)} cas.", "",
+         f"Quand elle passe : note v16 de la boucle v15 en moyenne "
+         f"{sum(c['rebuild']['score_v16'] for c in ok) / max(1, len(ok)):.1f} (avec les poids v15 : "
+         f"{sum(c['rebuild']['score_v15_weights'] for c in ok) / max(1, len(ok)):.1f}) ; "
+         f"note v15 publiée {sum(c['v15_score'] for c in ok) / max(1, len(ok)):.1f}.", "",
+         "## Sans les plages de durée", "",
+         f"Recommandée moyenne : v15 publiée {sum(c['v15_score'] for c in cases) / len(cases):.1f} ; v16 publiée "
+         f"{sum(c['v16_score'] for c in cases) / len(cases):.1f} ; v16 refaite {sum(sc(c, 'v16') for c in cases) / len(cases):.1f}"
+         f" ; v16 sans plages {sum(sc(c, 'no_bins') for c in cases) / len(cases):.1f}.", "",
+         "| départ | durée | allure | v15 | v16 publiée | v16 refaite | sans plages | v15 recalculée (note v16, filtres) |",
+         "|---|---|---|---|---|---|---|---|"]
+    for c in sorted(cases, key=lambda c: c["v16_score"] - c["v15_score"]):
+        r = c["rebuild"]
+        rb = (f"{r['score_v16']} ({r['min']} min{', ' + ', '.join(r['fails']) if r['fails'] else ''})"
+              if r["rebuilt"] else "non recalculée")
+        L.append(f"| {c['id']} | {c['duration_h']:g} h | {c['level']} | {c['v15_score']} | {c['v16_score']} | "
+                 f"{sc(c, 'v16')} | {sc(c, 'no_bins')} | {rb} |")
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 # ----------------------------------------------------------------------------- test du rattrapage (O-38, 07/10/2026)
 def run_gate_test(sid, site, gh_url, durations, levels, gate):
     """Mêmes départs produits deux fois : comme la production (tirages ciblés partout) et avec les tirages ciblés seulement
@@ -913,6 +1023,7 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--drops", default=None, help="baisses v15 -> v16 : fichier des cas (scripts/diag_v16_drops.json)")
     ap.add_argument("--gate-test", type=float, default=None, help="test du rattrapage : seuil de note (O-38)")
     ap.add_argument("--profile", action="store_true", help="mesure du coût de chaque type de tirage (O-38)")
     ap.add_argument("--v16", action="store_true", help="essai v16 : feux 0,30, industriel x2, options secondaires gardées, "
@@ -978,6 +1089,9 @@ def main() -> int:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
         report_compare(res, args.out, args.out_md, args.note, t0)
+        return 0
+    if args.drops:
+        report_drops(run_drops(args.drops, args.site, args.gh, args.workers), args.out, args.out_md, t0)
         return 0
     if args.penalty:
         ids = [x.strip() for x in args.penalty.split(";") if x.strip()]
