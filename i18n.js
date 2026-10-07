@@ -7,6 +7,9 @@ const LANG_KEY = 'oyan-lang';
 
 const I18N = {
   // ---------- réglages
+  page_title: ['Oyan · Boucles vélo autour de Barcelone, export GPX', 'Oyan · Bike loops around Barcelona, GPX download',
+    'Oyan · Rutas en bici alrededor de Barcelona, GPX', 'Oyan · Rutes en bici al voltant de Barcelona, GPX'],
+  how_link: ['Comment ça marche', 'How it works', 'Cómo funciona', 'Com funciona'],
   app_title: ['Oyan : boucles à vélo autour de Barcelone', 'Oyan: bike loops around Barcelona',
     'Oyan: rutas en bici alrededor de Barcelona', 'Oyan: rutes en bici al voltant de Barcelona'],
   settings_toggle: ['Afficher ou masquer les réglages', 'Show or hide settings', 'Mostrar u ocultar los ajustes', 'Mostra o amaga els ajustos'],

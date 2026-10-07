@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://florentbedouret-lgtm.github.io/velo-loops/</loc>
+    <lastmod>2026-10-08</lastmod>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://florentbedouret-lgtm.github.io/velo-loops/com-funciona.html</loc>
+    <lastmod>2026-10-08</lastmod>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="ca" href="https://florentbedouret-lgtm.github.io/velo-loops/com-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://florentbedouret-lgtm.github.io/velo-loops/como-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://florentbedouret-lgtm.github.io/velo-loops/comment-ca-marche.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://florentbedouret-lgtm.github.io/velo-loops/how-it-works.html"/>
+  </url>
+  <url>
+    <loc>https://florentbedouret-lgtm.github.io/velo-loops/como-funciona.html</loc>
+    <lastmod>2026-10-08</lastmod>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="ca" href="https://florentbedouret-lgtm.github.io/velo-loops/com-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://florentbedouret-lgtm.github.io/velo-loops/como-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://florentbedouret-lgtm.github.io/velo-loops/comment-ca-marche.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://florentbedouret-lgtm.github.io/velo-loops/how-it-works.html"/>
+  </url>
+  <url>
+    <loc>https://florentbedouret-lgtm.github.io/velo-loops/comment-ca-marche.html</loc>
+    <lastmod>2026-10-08</lastmod>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="ca" href="https://florentbedouret-lgtm.github.io/velo-loops/com-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://florentbedouret-lgtm.github.io/velo-loops/como-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://florentbedouret-lgtm.github.io/velo-loops/comment-ca-marche.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://florentbedouret-lgtm.github.io/velo-loops/how-it-works.html"/>
+  </url>
+  <url>
+    <loc>https://florentbedouret-lgtm.github.io/velo-loops/how-it-works.html</loc>
+    <lastmod>2026-10-08</lastmod>
+    <priority>0.6</priority>
+    <xhtml:link rel="alternate" hreflang="ca" href="https://florentbedouret-lgtm.github.io/velo-loops/com-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://florentbedouret-lgtm.github.io/velo-loops/como-funciona.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://florentbedouret-lgtm.github.io/velo-loops/comment-ca-marche.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://florentbedouret-lgtm.github.io/velo-loops/how-it-works.html"/>
+  </url>
+  <url>
+    <loc>https://florentbedouret-lgtm.github.io/velo-loops/mentions.html</loc>
+    <lastmod>2026-10-08</lastmod>
+    <priority>0.2</priority>
+  </url>
+</urlset>

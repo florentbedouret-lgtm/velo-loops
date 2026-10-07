@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Oyan</title>
+  <title>Oyan · Boucles vélo autour de Barcelone, export GPX</title>
+  <link rel="canonical" href="https://florentbedouret-lgtm.github.io/velo-loops/">
+  <!-- données structurées (audit SEO du 08/10/2026) : l'app, gratuite, en 4 langues -->
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Oyan","url":"https://florentbedouret-lgtm.github.io/velo-loops/","description":"Des boucles à vélo calculées à l'avance autour de Barcelone depuis environ 860 départs : peu de feux, sortie rapide de la ville, trace GPX à télécharger.","applicationCategory":"SportsApplication","operatingSystem":"Web","inLanguage":["fr","ca","es","en"],"isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"areaServed":{"@type":"AdministrativeArea","name":"Província de Barcelona"},"image":"https://florentbedouret-lgtm.github.io/velo-loops/brand/png/oyan-icone-512.png"}</script>
   <meta name="description" content="Des boucles à vélo calculées à l'avance autour de Barcelone : peu de feux, sortie rapide de la ville, trace GPX à télécharger.">
   <!-- aperçu des liens partagés (WhatsApp, Signal, réseaux) -->
   <meta property="og:type" content="website">
@@ -359,10 +362,10 @@
         </button>
       </div>
       <div id="results"></div>
-      <div class="k-label" id="levelLabel" data-i18n="pace">ALLURE</div>
+      <div class="k-label" id="levelLabel" data-i18n="pace">Allure</div>
       <div class="seg" id="levelSeg" role="group" aria-labelledby="levelLabel"></div>
       <div id="paceHint" class="hint"></div>
-      <div class="k-label" id="durLabel" data-i18n="duration">DURÉE DE LA BOUCLE</div>
+      <div class="k-label" id="durLabel" data-i18n="duration">Durée de la boucle</div>
       <div class="stepper" role="group" aria-labelledby="durLabel">
         <button type="button" id="durMinus" aria-label="Durée plus courte" data-i18n-aria="dur_minus">−</button>
         <div id="durVal" aria-live="polite"></div>
@@ -1102,7 +1105,7 @@
       const lvl = levelSel.options[levelSel.selectedIndex];
       document.getElementById('pillSum').innerHTML = esc(name) + ' <i>·</i> ' + esc(lvl ? lvl.text : '') +
         ' <i>·</i> ' + hm(Number(durSel.value) * 60);
-      document.title = s ? name + ' · ' + hm(Number(durSel.value) * 60) + ' · Oyan' : 'Oyan';   // onglet : la boucle affichée
+      document.title = s ? name + ' · ' + hm(Number(durSel.value) * 60) + ' · Oyan' : t('page_title');   // onglet : la boucle affichée
     }
 
     async function loadStart() {
@@ -1467,7 +1470,7 @@
         ${longer}${natureNeighbour(o)}${trainStart(o)}
         ${others}
         <small class="notes">${esc(t('notes'))}</small>
-        <div id="legal">${esc(t('legal_line'))} · <a href="mentions.html" target="_blank" rel="noopener">${esc(t('legal_link'))}</a></div>`;
+        <div id="legal">${esc(t('legal_line'))} · <a href="${HOW_PAGE[LANG] || HOW_PAGE.fr}" target="_blank" rel="noopener">${esc(t('how_link'))}</a> · <a href="mentions.html" target="_blank" rel="noopener">${esc(t('legal_link'))}</a></div>`;
     }
 
     // écart d'une autre boucle avec la boucle affichée, sous son segment (brief v3) : « −10,2 km · +80 m »
@@ -1634,6 +1637,8 @@
       fitRoute();
     }
 
+    // pages « Comment ça marche » (FAQ lisible sans JavaScript, audit SEO du 08/10/2026), une par langue
+    const HOW_PAGE = { fr: 'comment-ca-marche.html', ca: 'com-funciona.html', es: 'como-funciona.html', en: 'how-it-works.html' };
     // ---------- panel d'utilisateurs (27/09/2026) : lien partageable, mémoire des réglages, explications
     // lien partageable : ?s=<départ>&d=<durée en h>&l=<allure>&o=<option> (bouton Partager)
     function loopUrl() {
