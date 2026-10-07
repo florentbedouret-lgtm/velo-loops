@@ -327,12 +327,12 @@ jobs:
           esac
           if [ -n "$NATURE_MARGIN" ]; then
             gh run download 37270189071 --repo "$GITHUB_REPOSITORY" -n loops-data -D data/v15
-            python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
+            timeout 290m python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
               --pbf data/region.osm.pbf --workdir data --probe "$MARGIN_IDS" --margin-test "$NATURE_MARGIN" \
               --margin-drops "$MARGIN_DROPS" --prev-dir data/v15/starts --durations "0.75 1 1.5 2 3 4 5 6" \
               --levels "facile modere soutenu" --workers "$NATURE_WORKERS" $NATURE_RETOUCH \
-              --out data/margin.json --out-md data/margin.md
-            cat data/margin.md >> "$GITHUB_STEP_SUMMARY"
+              --out data/margin.json --out-md data/margin.md || echo "diagnostic interrompu : résultats partiels (data/margin_*.json)"
+            [ -f data/margin.md ] && cat data/margin.md >> "$GITHUB_STEP_SUMMARY" || true
           fi
           # Baisses v15 -> v16 (07/10/2026) : recommandées v15 perdant plus de 10 points sur les 375 premiers départs v16
           NATURE_DROPS=""   # 07/10/2026 : fait (64 cas sur 123 : plages de durée)
