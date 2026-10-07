@@ -106,7 +106,8 @@ Contrastes WCAG vérifiés dans la charte : basalte/surface 15,9:1, galet/chaux 
 
 ### 13.3 Typographies (étape 2)
 - **Hanken Grotesk** 300/400 (500 ponctuel) : textes et chiffres. Chiffres mesurés en Light (ex. distance en 300 · 48 px).
-- **IBM Plex Mono** 400 : libellés en capitales, 10 px, espacement 0,12 em.
+- **IBM Plex Mono** 400 : seulement pour les mesures alignées en liste (km, %, écarts entre boucles), jamais pour un libellé.
+- **Libellés** (07/10/2026, passe « impeccable ») : Hanken Grotesk 500, 13 px, casse normale (« Allure », « Distance »), couleur galet. Les capitales mono espacées faisaient « interface générée » ; pas de surtitre au-dessus d'un bloc, la phrase porte le message.
 - Licence OFL (gratuite). À **héberger dans le dépôt** plutôt que charger depuis Google Fonts (évite d'envoyer l'IP des visiteurs à Google, règle 13).
 
 ### 13.4 Logo (étape 3)
@@ -120,7 +121,7 @@ Anneau ouvert à 45° en haut à droite, trait 5,5 à bouts arrondis (grille 48)
 Fond chaux, anneau basalte, point argile. Signe à 60 % du carré pour l'icône d'app ; à 80 % avec trait 7 pour le favicon.
 
 ### 13.6 Règles d'usage
-**À faire** : argile réservée au tracé, au bouton principal et au point du logo ; tracé toujours avec liseré blanc sur la carte ; chiffres réels en Hanken Light, libellés en mono capitales ; photos larges, cycliste petit, de dos ou de loin, femmes et hommes, personnes blanches et non blanches ; une information principale par écran.
+**À faire** : argile réservée au tracé, au bouton principal et au point du logo ; tracé toujours avec liseré blanc sur la carte ; chiffres réels en Hanken Light, libellés en Hanken 500 casse normale ; deux arrondis seulement (8 px contrôles, 20 px feuille et carte des réglages), une ombre seulement pour ce qui flotte sur la carte ; blocs secondaires séparés par des filets, pas d'encarts beiges ; photos larges, cycliste petit, de dos ou de loin, femmes et hommes, personnes blanches et non blanches ; une information principale par écran.
 
 **À éviter** : déformer, pivoter, fermer l'anneau ou déplacer l'ouverture ; une 2ᵉ couleur d'accent, ou du vert/bleu pour le tracé ; noir pur et rouge, typos grasses ; chiffres de performance ; imagerie de souffrance ; vélo ou roue dans le logo.
 

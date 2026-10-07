@@ -4,6 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Oyan</title>
+  <meta name="description" content="Des boucles à vélo calculées à l'avance autour de Barcelone : peu de feux, sortie rapide de la ville, trace GPX à télécharger.">
+  <!-- aperçu des liens partagés (WhatsApp, Signal, réseaux) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Oyan">
+  <meta property="og:title" content="Oyan : boucles à vélo autour de Barcelone">
+  <meta property="og:description" content="Peu de feux, sortie rapide de la ville, trace GPX à télécharger.">
+  <meta property="og:image" content="https://florentbedouret-lgtm.github.io/velo-loops/brand/png/oyan-icone-512.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
+  <link rel="preload" href="fonts/HankenGrotesk-VF.woff2" as="font" type="font/woff2" crossorigin>
   <meta name="theme-color" content="#F6F4F0">
   <link rel="icon" href="brand/svg/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="brand/png/favicon-32.png" type="image/png" sizes="32x32">
@@ -22,18 +32,63 @@
     body { font-family: var(--font-sans); background: var(--color-bg); color: var(--color-text); }
     a { color: var(--color-text); }
     b, strong { font-weight: var(--fw-medium); } /* charte : pas de typographie grasse */
-    .label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    /* finitions du navigateur aux couleurs d'Oyan : sélection, curseur, focus clavier, police des contrôles, défilement */
+    button, input, select, textarea { font-family: inherit; }
+    ::selection { background: rgba(168, 82, 47, .2); color: var(--color-text); }
+    input, textarea { caret-color: var(--color-accent); }
+    :focus-visible { outline: 2px solid var(--color-text); outline-offset: 2px; }
+    * { scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; }
+    /* base mobile (07/10/2026, mobile-native) : pas de flash au toucher, pas de délai, pas de sélection du texte des
+       contrôles, pas de grossissement du texte en paysage */
+    html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+    button, a, summary, [role=button], label { touch-action: manipulation; }
+    button, summary, [role=button], #grip { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    /* appui : le bouton répond dès que le doigt se pose (Emil Kowalski : 97 %, ~120 ms, ease-out) */
+    :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); }
+    button { transition: transform 120ms var(--ease-out), background-color 150ms ease, border-color 150ms ease; }
+    button:not(:disabled):active { transform: scale(0.97); }
+    .keys div[data-hl]:active, .rows summary:active, #history summary:active { background: var(--color-bg); }
+    /* survol : seulement avec une souris (au doigt, il resterait « collé » après le toucher) */
+    @media (hover: hover) and (pointer: fine) {
+      .btn:hover, .stepper button:not(:disabled):hover, .share:hover, .vcard:hover, #me:hover { border-color: var(--color-text-2); }
+      .seg button:not([aria-pressed=true]):hover, .optseg .alt:not([aria-pressed=true]):hover { color: var(--color-text); }
+      .btn-accent:hover { background: #95482A; border-color: #95482A; }
+      .suggest button:hover, .rows summary:hover, #history summary:hover, .keys div[data-hl]:hover { background: var(--color-bg); }
+      #change:hover { text-decoration-thickness: 2px; }
+    }
+    /* zones de toucher d'au moins 44 px sans changer le dessin (Vercel, ui-ux-pro-max) */
+    .k .qm, .keys .qm, .lang-btn, .round, #historyList .h-del { position: relative; }
+    .k .qm::before { content: ''; position: absolute; inset: -14px; }
+    .keys .qm::before { content: ''; position: absolute; inset: -11px; }
+    .lang-btn::before { content: ''; position: absolute; inset: -6px -2px; }
+    .round::before, #historyList .h-del::before { content: ''; position: absolute; inset: -4px; }
+    /* lignes : pas de mot seul en fin de ligne */
+    .tip-h, .empty-msg, .suggest p, #where { text-wrap: balance; }
+    .how p, .tip p, .keys .txt, .gpx-help, .row-help { text-wrap: pretty; }
+    /* mouvement réduit : plus de glissement, la feuille et les boutons changent d'état sans bouger */
+    @media (prefers-reduced-motion: reduce) {
+      #sheet, #locate, .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right, button, summary::after { transition: none !important; }
+      button:not(:disabled):active { transform: none; }
+    }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    /* allure : km/h lisible par tous, FTP en repère discret pour ceux qui la connaissent */
+    #paceHint { color: var(--color-text); }
+    #paceHint .ftp { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); margin-left: 8px; white-space: nowrap; }
+    /* chiffres alignés (km, %, durées) */
+    .figs, .sum-line, .keys .fig, #durVal, .terrain-legend b, .tip-fig, .vd, .dlt, #pfRead, #pill .sum { font-variant-numeric: tabular-nums; }
+    /* libellés : casse normale, Hanken medium (07/10/2026 : les capitales mono espacées faisaient « interface générée ») */
+    .label { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); }
     input, select { font: inherit; font-size: 16px; padding: 8px; color: var(--color-text); background: var(--color-surface);
                     border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
     .btn { font: inherit; font-size: 16px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer;
            background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-text); }
     .btn-accent { background: var(--color-accent); color: var(--color-on-accent); border-color: var(--color-accent); }
     .warn { font-weight: 500; }
-    .warn::before { content: '⚠️ '; }
+    .warn svg { vertical-align: -3px; margin-right: 6px; }
 
     /* ---------- carte plein écran ; les crédits de la carte restent visibles au-dessus du panneau (--sheet-h) */
     #map { position: fixed; inset: 0; }
-    .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-h, 0px); transition: bottom .25s ease; }
+    .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-h, 0px); transition: bottom 300ms var(--ease-drawer); }
     .maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib { font-size: 10px; line-height: 1.35; margin: 0; max-width: calc(100vw - 72px); }
 
     /* marqueurs : départ = point argile du logo ; position = point basalte à halo ; étiquette de l'autre boucle */
@@ -48,12 +103,12 @@
     .mk-alt::before { content: ''; width: 14px; border-top: 2px dashed var(--color-text-2); }
     #locate { position: fixed; z-index: 3; right: 12px; bottom: calc(var(--sheet-h, 0px) + var(--attr-h, 24px) + 12px); width: 44px; height: 44px; border-radius: 22px;
               border: 0; padding: 0; background: var(--color-surface); box-shadow: 0 2px 10px rgba(36, 34, 31, .15); cursor: pointer;
-              display: flex; align-items: center; justify-content: center; transition: bottom .25s ease; }
+              display: flex; align-items: center; justify-content: center; transition: bottom 300ms var(--ease-drawer); }
     html:not([data-sheet]) #locate, html[data-sheet=high] #locate, html[data-sheet=mid] #locate, html[data-sheet=peek] #locate { display: none; }
 
     /* ---------- réglages : carte flottante en haut, repliée en une barre « Gràcia · Modéré · 2 h 00 » */
     #top { position: fixed; z-index: 3; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px;
-           max-width: 520px; margin: 0 auto; background: var(--color-surface); border-radius: 26px;
+           max-width: 520px; margin: 0 auto; background: var(--color-surface); border-radius: var(--radius-sheet);
            box-shadow: 0 6px 24px rgba(36, 34, 31, .12); }
     #top.open { border-radius: var(--radius-sheet); }
     html[data-sheet=high] #top { display: none; }        /* panneau ouvert : la carte ne garde qu'un bandeau (maquette 5d) */
@@ -68,30 +123,30 @@
     #top.open #pill .round svg { transform: rotate(180deg); }
     /* menu des langues (dans la barre des réglages, à côté du chevron) */
     .lang-wrap { position: relative; flex: none; }
-    .lang-btn { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; height: 32px; padding: 0 8px 0 10px;
+    .lang-btn { font-size: 13px; font-weight: var(--fw-medium); height: 32px; padding: 0 8px 0 10px;
                 border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); color: var(--color-text);
                 display: flex; align-items: center; gap: 5px; cursor: pointer; }
     .lang-menu { position: absolute; right: 0; top: 40px; z-index: 10; min-width: 150px; padding: 4px; background: var(--color-surface);
-                 border: 1px solid var(--color-border); border-radius: 12px; box-shadow: 0 6px 24px rgba(36, 34, 31, .12); }
+                 border: 1px solid var(--color-border); border-radius: var(--radius-sm); box-shadow: 0 6px 24px rgba(36, 34, 31, .12); }
     .lang-menu button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 10px 12px; border: 0;
-                        border-radius: 8px; background: none; color: var(--color-text); cursor: pointer; }
+                        border-radius: 4px; background: none; color: var(--color-text); cursor: pointer; }
     .lang-menu button[aria-checked=true] { background: var(--color-bg); }
     #settings { display: none; padding: 0 16px 16px; max-height: calc(100dvh - 128px - 90px); overflow-y: auto; }
     #top.open #settings { display: block; }
-    .k-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--color-text-2); margin: 16px 0 8px; }
+    .k-label { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); margin: 18px 0 8px; }
     #search { display: flex; gap: 8px; }
     .field { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 6px;
-             padding: 0 4px 0 2px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg); }
+             padding: 0 4px 0 2px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); }
     .field:focus-within { border-color: var(--color-text-2); }
     #addr { flex: 1; min-width: 0; border: 0; background: transparent; padding: 8px 4px; outline: none; }
     .icon-btn { width: 40px; height: 40px; flex: none; border: 0; background: transparent; padding: 0; cursor: pointer;
-                display: flex; align-items: center; justify-content: center; border-radius: 10px; }
-    #me { width: 48px; height: 48px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); }
+                display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); }
+    #me { width: 48px; height: 48px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); }
     /* allure : 3 segments */
-    .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: var(--color-bg); border-radius: 12px; }
-    .seg button { font: inherit; font-size: 15px; height: 40px; border: 0; border-radius: 10px; background: transparent;
+    .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; background: var(--color-bg); border-radius: var(--radius-sm); }
+    .seg button { font: inherit; font-size: 15px; height: 40px; border: 1px solid transparent; border-radius: 5px; background: transparent;
                   color: var(--color-text-2); cursor: pointer; padding: 0; }
-    .seg button[aria-pressed=true] { background: var(--color-surface); color: var(--color-text); box-shadow: 0 1px 3px rgba(36, 34, 31, .12); }
+    .seg button[aria-pressed=true] { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
     /* durée : − 2 h 00 + */
     .stepper { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .stepper button { width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--color-border); background: var(--color-surface);
@@ -106,14 +161,14 @@
     #change { white-space: nowrap; }
     #top:not(.open) .lang-wrap { display: none; }          /* langue : seulement dans les réglages dépliés (brief v2) */
     #history { margin-top: 12px; border-top: 1px solid var(--color-border); padding-top: 10px; }
-    #history summary { cursor: pointer; font-size: 15px; list-style: none; display: flex; align-items: center; min-height: 36px; }
+    #history summary { cursor: pointer; font-size: 15px; list-style: none; display: flex; align-items: center; min-height: 44px; }
     #history summary::-webkit-details-marker { display: none; }
     #history summary::after { content: ''; margin-left: auto; margin-right: 4px; width: 7px; height: 7px; flex: none;
                               border-right: 1.6px solid var(--color-text-2); border-bottom: 1.6px solid var(--color-text-2);
                               transform: rotate(-45deg); transition: transform .2s; }
     #history[open] summary::after { transform: rotate(45deg); }
     #undo { position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(var(--sheet-h, 0px) + 16px);
-            background: var(--color-text); color: #fff; border-radius: 12px; padding: 10px 14px; font-size: 14px;
+            background: var(--color-text); color: #fff; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 14px;
             display: flex; gap: 14px; align-items: center; box-shadow: 0 4px 16px rgba(36, 34, 31, .25); }
     #undo[hidden] { display: none; }
     #undo button { font: inherit; font-size: 14px; color: #fff; background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
@@ -127,7 +182,14 @@
     #historyList .h-clear { font: inherit; font-size: 13px; background: none; border: 0; padding: 8px 0 0; color: var(--color-text-2);
                             text-decoration: underline; cursor: pointer; align-self: flex-start; }
     .empty-msg { font-size: 15px; color: var(--color-text-2); padding: 2px 0 6px; }
-    #change { font: inherit; font-size: 14px; color: var(--color-accent); background: none; border: 0; padding: 4px 0; cursor: pointer;
+    /* accueil : départs proposés (07/10/2026), une ligne par départ, comme la liste « Mes boucles » */
+    .suggest { margin-top: 14px; }
+    .suggest p { margin: 0 0 4px; font-size: 15px; }
+    .suggest button { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 12px; text-align: left;
+                      font: inherit; font-size: 16px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--color-border);
+                      background: none; color: var(--color-text); cursor: pointer; }
+    .suggest button small { font-size: 13px; color: var(--color-text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #change { font: inherit; font-size: 14px; color: var(--color-accent); background: none; border: 0; padding: 0; min-height: 44px; cursor: pointer;
               text-decoration: underline; text-underline-offset: 3px; flex: none; }
     #where .w2 { font-size: 13px; color: var(--color-text-2); }
     #results button { display: block; width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 8px; margin-top: 4px;
@@ -142,11 +204,11 @@
 
     /* ---------- panneau coulissant : peek (réglages ouverts), low (replié), mid (mi-hauteur), high (ouvert) */
     #sheet { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; height: 250px; max-width: 640px; margin: 0 auto;
-             background: var(--color-surface); border-radius: 24px 24px 0 0; box-shadow: 0 -6px 24px rgba(36, 34, 31, .10);
-             display: flex; flex-direction: column; transition: height .25s ease; }
+             background: var(--color-surface); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; box-shadow: 0 -6px 24px rgba(36, 34, 31, .10);
+             display: flex; flex-direction: column; transition: height 300ms var(--ease-drawer); }   /* courbe des tiroirs iOS */
     #sheet[hidden] { display: none; }
     #grip { flex: none; padding: 10px 20px 12px; touch-action: none; cursor: grab; position: relative; z-index: 1;
-            background: var(--color-surface); border-radius: 24px 24px 0 0; }
+            background: var(--color-surface); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; }
     #sheet[data-state=high] #sheetHead { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
     #sheet[data-state=high] .head-row { min-height: 0; flex: none; }
     #sheet[data-state=high] .sum-line { margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -154,8 +216,8 @@
     .handle { width: 36px; height: 4px; border-radius: 2px; background: var(--color-border); margin: 0 auto 12px; }
     .head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
     .optseg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; padding: 3px; width: 100%;
-              background: var(--color-bg); border-radius: 12px; }
-    .optseg .alt { font: inherit; font-size: 14px; height: 36px; min-width: 0; padding: 0 8px; border: 0; border-radius: 10px;
+              background: var(--color-bg); border-radius: var(--radius-sm); }
+    .optseg .alt { font: inherit; font-size: 14px; height: 36px; min-width: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 5px;
                    background: transparent; color: var(--color-text-2); display: flex; align-items: center; justify-content: center;
                    gap: 8px; cursor: pointer; }
     .optseg .alt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -163,17 +225,17 @@
     .optseg .alt .l1 { display: flex; align-items: center; gap: 8px; max-width: 100%; }
     .optseg .alt .dlt { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); white-space: nowrap;
                         max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-    .optseg .alt[aria-pressed=true] { background: var(--color-surface); color: var(--color-text); box-shadow: 0 1px 3px rgba(36, 34, 31, .12); }
+    .optseg .alt[aria-pressed=true] { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
     .optseg .sw { flex: none; width: 14px; border-top: 2px dashed var(--color-text-2); }
     .optseg .sw.on { border-top: 3px solid var(--color-accent); }
     .head-row.has-seg .opt-label { display: none; }
     #sheet[data-state=high] .head-row.has-seg .opt-label { display: inline; }
     #sheet[data-state=high] .optseg { display: none; }
-    .opt-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--color-accent); }
+    .opt-label { font-size: 15px; font-weight: var(--fw-medium); color: var(--color-accent); }
     .sum-line { font-size: 22px; font-weight: var(--fw-light); margin-top: 10px; }
     #sheet[data-state=high] .sum-line { font-size: 16px; font-weight: var(--fw-regular); margin-top: 8px; }
     .figs { display: grid; grid-template-columns: 1.3fr 1fr 1fr; column-gap: 12px; row-gap: 2px; align-items: baseline; margin-top: 14px; }
-    .figs .k { font-family: var(--font-mono); font-size: 11px; color: var(--color-text-2); }
+    .figs .k { font-size: 13px; color: var(--color-text-2); }
     .figs .big { font-size: 40px; font-weight: var(--fw-light); line-height: 1; }
     .figs .big span { font-size: 18px; }
     .figs .v { font-size: 24px; font-weight: var(--fw-light); line-height: 1.2; }
@@ -188,10 +250,10 @@
     #sheet[data-state=peek] #sheetBody, #sheet[data-state=peek] #sheetFoot { display: none; }
     #sheetFoot { flex: none; padding: 12px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); }
     .foot-row { display: flex; gap: 10px; }
-    .gpx { flex: 1; min-width: 0; height: 52px; border-radius: 14px; font-size: 17px; }
-    .share { flex: none; width: 52px; height: 52px; border-radius: 14px; border: 1px solid var(--color-border);
+    .gpx { flex: 1; min-width: 0; height: 52px; border-radius: var(--radius-sm); font-size: 17px; font-weight: var(--fw-medium); }
+    .share { flex: none; width: 52px; height: 52px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);
              background: var(--color-surface); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .gpx-help { font-size: 14px; line-height: 1.45; background: var(--color-bg); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+    .gpx-help { font-size: 14px; line-height: 1.45; border-left: 1px solid var(--color-border); padding: 2px 0 2px 12px; margin-bottom: 12px; }
     .gpx-help b { font-weight: var(--fw-medium); }
     .gpx-help button { font: inherit; font-size: 13px; background: none; border: 0; padding: 0; margin-left: 6px; color: var(--color-text-2);
                        text-decoration: underline; cursor: pointer; }
@@ -206,7 +268,7 @@
     .dplus-help { grid-column: 1 / -1; font-size: 13px; color: var(--color-text-2); margin-top: 6px; }
     #sheetBody small, #sheetBody .sub { color: var(--color-text-2); }
     .badge { display: inline-block; font-size: 13px; background: var(--color-border); color: var(--color-text); padding: 2px 6px; border-radius: 6px; }
-    .sec-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; color: var(--color-text-2); }
+    .sec-label { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); }
     /* barre de terrain (charte §13.2 : couleurs terrain réservées à cette barre) et légende en grille 2 × 2 */
     .terrain { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; margin: 8px 0 10px; }
     .terrain span { display: block; height: 100%; min-width: 2px; }
@@ -234,12 +296,14 @@
     .pf-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
     #pfRead { font-family: var(--font-mono); font-size: 12px; color: var(--color-text); }
     /* cartes : suggestion (fond chaux) et autres boucles (filet) */
-    .tip { background: var(--color-bg); border-radius: 16px; padding: 14px 16px; margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .tip { border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); padding: 16px 0; margin-top: 18px;
+           display: flex; flex-direction: column; gap: 8px; }
     .tip p { margin: 0; font-size: 15px; line-height: 1.45; }
+    .tip .tip-h { font-size: 16px; font-weight: var(--fw-medium); }
     .tip .tip-fig { font-family: var(--font-mono); font-size: 13px; color: var(--color-text); }
     .tip .tip-note { font-size: 13px; color: var(--color-text-2); line-height: 1.4; }
-    .tip .btn { align-self: flex-start; font-size: 15px; height: 36px; padding: 0 14px; border-radius: 12px; }
-    .vcard { font: inherit; text-align: left; width: 100%; margin-top: 12px; border: 1px solid var(--color-border); border-radius: 16px;
+    .tip .btn { align-self: flex-start; font-size: 15px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); }
+    .vcard { font: inherit; text-align: left; width: 100%; margin-top: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
              padding: 14px 16px; display: flex; align-items: center; gap: 12px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
     .vcard .vc { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     .vcard .vs { font-size: 17px; }
@@ -264,6 +328,8 @@
   </style>
 </head>
 <body>
+  <h1 class="sr-only" data-i18n="app_title">Oyan : boucles à vélo autour de Barcelone</h1>
+  <div id="srStatus" class="sr-only" role="status" aria-live="polite"></div>
   <div id="map"></div>
   <div id="top" class="open">
     <div id="pill" role="button" tabindex="0" aria-expanded="true" aria-controls="settings">
@@ -312,6 +378,7 @@
         <div id="where">Tape une adresse, touche un point sur la carte ou utilise ta position.</div>
         <button type="button" id="change" aria-expanded="false" aria-controls="adv">Choisir dans la liste</button>
       </div>
+      <div id="suggestBox"></div>
       <details id="history" hidden><summary id="historySum"></summary><div id="historyList"></div></details>
       <div id="adv" hidden>
         <input id="startFilter" type="search" placeholder="Filtrer : ville, quartier, gare…" aria-label="Filtrer les départs" autocomplete="off" data-i18n-ph="filter_ph" data-i18n-aria="filter_aria">
@@ -460,7 +527,7 @@
       let drag = null, justDragged = false;
       grip.addEventListener('pointerdown', e => {
         if (e.target.closest('button') || !startData) return;  // pastilles = boutons ; sans départ, rien à ouvrir
-        drag = { y: e.clientY, h: sheet.getBoundingClientRect().height, moved: false, t: Date.now() };
+        drag = { y: e.clientY, h: sheet.getBoundingClientRect().height, moved: false, t: Date.now(), pts: [[Date.now(), e.clientY]] };
         grip.setPointerCapture(e.pointerId);                   // le doigt peut sortir de l'en-tête sans perdre le panneau
       });
       grip.addEventListener('pointermove', e => {
@@ -468,8 +535,12 @@
         const dy = drag.y - e.clientY;
         if (!drag.moved && Math.abs(dy) < 6) return;
         if (!drag.moved) { drag.moved = true; sheet.style.transition = 'none'; }
-        const hs = sheetHeights();
-        setSheetHeight(Math.max(hs.peek, Math.min(hs.high, drag.h + dy)));
+        const hs = sheetHeights(), raw = drag.h + dy;
+        drag.pts.push([Date.now(), e.clientY]);
+        if (drag.pts.length > 6) drag.pts.shift();
+        // au-delà des butées, la feuille résiste au lieu de s'arrêter net (Emil Kowalski : friction, pas de mur)
+        const rub = x => Math.sign(x) * 40 * (1 - Math.exp(-Math.abs(x) / 120));
+        setSheetHeight(raw > hs.high ? hs.high + rub(raw - hs.high) : raw < hs.peek ? hs.peek + rub(raw - hs.peek) : raw);
       });
       const end = e => {
         if (!drag) return;
@@ -478,10 +549,11 @@
         if (!d.moved) return;
         justDragged = true; setTimeout(() => { justDragged = false; }, 0);
         const hs = sheetHeights(), h = sheet.getBoundingClientRect().height;
-        const v = (d.y - e.clientY) / Math.max(1, Date.now() - d.t);          // px/ms, positif vers le haut
+        const p0 = d.pts.find(p => Date.now() - p[0] <= 120) || d.pts[d.pts.length - 1];   // vitesse des 120 dernières ms
+        const v = (p0[1] - e.clientY) / Math.max(1, Date.now() - p0[0]);      // px/ms, positif vers le haut
         const order = ['low', 'mid', 'high'];
         let best = order.reduce((a, b) => Math.abs(hs[b] - h) < Math.abs(hs[a] - h) ? b : a);
-        if (Math.abs(v) > 0.5) {                                                 // geste rapide : cran suivant dans ce sens
+        if (Math.abs(v) > 0.3) {                                                 // petit coup de pouce : cran suivant dans ce sens
           best = v > 0 ? (order.find(k => hs[k] > h + 1) || 'high')
                        : ([...order].reverse().find(k => hs[k] < h - 1) || 'low');
         }
@@ -524,7 +596,7 @@
     const km = n => dec(n.toFixed(1));
     function hm(min) {
       const t = Math.round(min);
-      return Math.floor(t / 60) + ' h ' + String(t % 60).padStart(2, '0');
+      return Math.floor(t / 60) + '\u00a0h\u00a0' + String(t % 60).padStart(2, '0');   // insécables : « 2 h 00 » jamais coupé
     }
     // neutralise le HTML dans un texte (bonne habitude)
     const esc = s => String(s).replace(/[&<>"]/g,
@@ -688,14 +760,14 @@
       approachMin = med;
 
       if (med > 30) {
-        setWhere(() => '<span class="warn">' + esc(t('too_far', { min: med, range: range() })) + '</span><br>' + startLine(s) +
+        setWhere(() => '<span class="warn">' + WARN_ICON_() + esc(t('too_far', { min: med, range: range() })) + '</span><br>' + startLine(s) +
           '<br><button type="button" class="btn" id="see">' + esc(t('see_anyway')) + '</button>' +
           ' <a href="' + nav + '" target="_blank" rel="noopener">' + esc(t('route')) + '</a>',
           () => { document.getElementById('see').onclick = () => chooseStart(s.id); });
         map.fitBounds(new maplibregl.LngLatBounds([lon, lat], [s.lon, s.lat]), { padding: 60, duration: 500 });
         return;
       }
-      setWhere(() => startLine(s, (med > portee ? '<span class="warn">' + esc(t('bit_far')) + '</span>' : '') +
+      setWhere(() => startLine(s, (med > portee ? '<span class="warn">' + WARN_ICON_() + esc(t('bit_far')) + '</span>' : '') +
         esc(t('approach', { min: med, range: range() })) +
         (med > portee ? ' · <a href="' + nav + '" target="_blank" rel="noopener">' + esc(t('route')) + '</a>' : '')));
       chooseStart(s.id);
@@ -911,12 +983,43 @@
     // panneau sans départ choisi (brief v2) : « Choisis un départ pour voir la boucle. »
     function showEmptySheet() {
       sheetHead.innerHTML = '<div class="empty-msg">' + esc(t('empty_sheet')) + '</div>';
+      renderSuggest();
       sheetBody.textContent = '';
       sheetFoot.hidden = true;
       sheet.hidden = false;
       setSheet(topCard.classList.contains('open') ? 'peek' : 'low');
     }
 
+    // accueil (07/10/2026) : trois quartiers ou villes autour de Barcelone (10 km autour de la plaça de Catalunya) qui sortent le plus vite de
+    // la ville, pour l'allure et la durée réglées ; affichés sous la ligne du départ tant qu'aucun départ n'est choisi
+    const BCN = [2.1700, 41.3870], SUGGEST_KM = 10;
+    function renderSuggest() {
+      const box = document.getElementById('suggestBox');
+      if (box) box.innerHTML = startData ? '' : suggestHtml();
+    }
+    function suggestHtml() {
+      if (!indexData) return '';
+      const dur = String(Number(durSel.value)), lvl = levelSel.value, seen = new Set();
+      const picks = indexData.starts
+        .map(s => ({ s, c: s.compare && s.compare[dur] && s.compare[dur][lvl] }))
+        .filter(x => x.s.zone === 'dense' && x.s.kind === 'place' && x.c && compareExit(x.c) != null &&
+                     crowKm(BCN[0], BCN[1], x.s.lon, x.s.lat) <= SUGGEST_KM)
+        .sort((a, b) => compareExit(a.c) - compareExit(b.c) || (b.c.score || 0) - (a.c.score || 0))
+        .filter(x => { const k = startLabel(x.s); if (seen.has(k)) return false; seen.add(k); return true; })
+        .slice(0, 3);
+      if (!picks.length) return '';
+      return '<div class="suggest"><p>' + esc(t('suggest_intro')) + '</p>' + picks.map(x => {
+        const ex = compareExit(x.c);
+        return '<button type="button" onclick="pickSuggested(\'' + x.s.id + '\')"><span>' + esc(startLabel(x.s)) + '</span><small>' +
+          esc(ex === 0 ? t('train_exit0') : t('train_exit', { km: km(ex) })) + '</small></button>';
+      }).join('') + '</div>';
+    }
+    function pickSuggested(id) {
+      const s = indexData.starts.find(x => x.id === id);
+      setWhere(() => startLine(s, esc(t('suggested_where'))));
+      approachMin = null;
+      chooseStart(id);
+    }
     // libellés triés de la liste des départs (dans la langue choisie)
     function buildStartItems() {
       startItems = indexData.starts.map(s => {
@@ -999,6 +1102,7 @@
       const lvl = levelSel.options[levelSel.selectedIndex];
       document.getElementById('pillSum').innerHTML = esc(name) + ' <i>·</i> ' + esc(lvl ? lvl.text : '') +
         ' <i>·</i> ' + hm(Number(durSel.value) * 60);
+      document.title = s ? name + ' · ' + hm(Number(durSel.value) * 60) + ' · Oyan' : 'Oyan';   // onglet : la boucle affichée
     }
 
     async function loadStart() {
@@ -1025,6 +1129,7 @@
 
     function showLevel() {
       updatePill();
+      renderSuggest();                                    // accueil : les départs proposés suivent l'allure et la durée
       if (!startData) return;
       shown = startData.options.filter(o => o.level === levelSel.value &&
         (o.duration_target_min == null ||
@@ -1107,7 +1212,7 @@
       }
       lastNeighbourId = best ? best.s.id : null;
       if (!best) return '';
-      return '<div class="tip"><div class="sec-label">' + esc(t('tip_nature')) + '</div><p>' +
+      return '<div class="tip"><p class="tip-h">' +
         t('tip_nature_txt', { name: esc(startLabel(best.s)), min: best.min, dur: hm(o.duration_target_min),
           exit: esc(best.exit === 0 ? t('exit0') : t('exitX', { km: km(best.exit) })) }) +
         '</p><button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">' +
@@ -1122,11 +1227,12 @@
       const cur = indexData.starts.find(s => s.id === startSel.value);
       if (!cur || cur.kind === 'station') return '';
       const ex = exitKm(o), lights = o.traffic_lights_per_km || 0;
+      const airport = s => /aeroport|aeropuerto|airport/.test(fold(s.name + ' ' + (s.municipality || '')));   // pas de boucle depuis un terminal
       if (cur.zone !== 'dense' && ex != null && ex <= 5 && lights < 2.5) return '';   // départ déjà hors de la ville
       const dur = String(Math.round(o.duration_target_min) / 60);
       let best = null;
       for (const s of indexData.starts) {
-        if (s.kind !== 'station' || s.id === cur.id || s.id === lastNeighbourId) continue;
+        if (s.kind !== 'station' || s.id === cur.id || s.id === lastNeighbourId || airport(s)) continue;
         const c = s.compare && s.compare[dur] && s.compare[dur][o.level];
         if (!c || c.score == null || o.score == null || c.score < o.score + TRAIN_SCORE_GAIN) continue;
         if ((c.lights_per_km || 0) > lights) continue;
@@ -1136,10 +1242,10 @@
       }
       if (!best) return '';
       const cx = compareExit(best.c);                    // brief v3 : chiffres en mono, phrase courte, note en galet
-      return '<div class="tip"><div class="sec-label">' + esc(t('tip_train')) + '</div>' +
-        '<div class="tip-fig">' + esc(t('tip_train_fig', { km: km(best.d), l1: km1(best.c.lights_per_km || 0), l0: km1(lights),
-          exit: cx == null ? t('train_stays') : cx === 0 ? t('train_exit0') : t('train_exit', { km: km(cx) }) })) + '</div>' +
-        '<p>' + t('tip_train_txt2', { name: esc(startLabel(best.s)), dur: hm(o.duration_target_min) }) + '</p>' +
+      return '<div class="tip"><p class="tip-h">' + t('tip_train_txt2', { name: esc(startLabel(best.s)), km: km(best.d),
+          dur: hm(o.duration_target_min) }) + '</p>' +
+        '<p>' + esc(t('tip_train_why', { l1: km1(best.c.lights_per_km || 0), l0: km1(lights),
+          exit: cx == null ? t('train_stays') : cx === 0 ? t('train_exit0') : t('train_exit', { km: km(cx) }) })) + '</p>' +
         '<small class="tip-note">' + esc(t('tip_train_note')) + '</small>' +
         '<button type="button" class="btn" onclick="goTrain(\'' + best.s.id + '\')">' + esc(t('go_from', { name: trName(best.s.name) })) +
         '</button></div>';
@@ -1334,13 +1440,13 @@
       let longer = '';
       if (exitKm(o) == null) {
         const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
-        if (hasLonger) longer = '<div class="tip"><div class="sec-label">' + esc(t('longer_label')) + '</div><p>' + esc(t('longer_txt')) + '</p>' +
+        if (hasLonger) longer = '<div class="tip"><p class="tip-h">' + esc(t('longer_txt')) + '</p>' +
           '<button type="button" class="btn" onclick="nextDuration()">' + esc(t('longer_btn')) + '</button></div>';
       }
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       const others = shown.map((x, k) => k === current ? '' :
         '<button type="button" class="vcard" data-i="' + k + '"><span class="vc"><span class="sec-label">' +
-        esc(optName(x).toUpperCase()) + '</span><span class="vs">' + km(x.distance_km) + ' km · ' +
+        esc(optName(x)) + '</span><span class="vs">' + km(x.distance_km) + ' km · ' +
         esc(t('dplus_inline', { m: Math.round(x.ascend_m) })) + ' · ≈ ' + hm(x.time_est_min) + '</span><span class="vd">' + deltas(x, o) + '</span></span>' +
         '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" fill="none" stroke="#625D55" stroke-width="1.6" stroke-linecap="round"/></svg></button>').join('');
       const pf = profileSvg(o);
@@ -1396,6 +1502,8 @@
         ? t('total_approach', { t: hm(o.time_est_min + 2 * approachMin) })   // aller ET retour (remarque de Florent)
         : '';
       sheetHead.innerHTML = headHtml(o);
+      document.getElementById('srStatus').textContent = optName(o) + ' : ' + km(o.distance_km) + ' km, ' +
+        t('dplus_inline', { m: Math.round(o.ascend_m) }) + ', ≈ ' + hm(o.time_est_min);   // annoncé aux lecteurs d'écran
       sheetFoot.hidden = false;
       sheetBody.innerHTML = detailHtml(o);
       sheetBody.scrollTop = 0;
@@ -1667,8 +1775,8 @@
       const p = PACE[levelSel.value];
       if (!p) return;
       const w = p[0] * 75 * (p[1] - (Number(durSel.value) >= 3 ? 0.05 : 0));
-      document.getElementById('paceHint').textContent =
-        t('pace_hint', { f: dec(p[0].toFixed(1)), v: Math.round(flatKmh(w)) });
+      document.getElementById('paceHint').innerHTML = esc(t('pace_hint_v', { v: Math.round(flatKmh(w)) })) +
+        '<span class="ftp">' + esc(t('pace_ftp', { f: dec(p[0].toFixed(1)) })) + '</span>';
     }
 
     // cadre la boucle dans la partie de la carte laissée libre par les réglages (en haut) et le panneau (en bas)
