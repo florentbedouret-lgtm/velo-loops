@@ -21,6 +21,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass, field
@@ -100,6 +101,17 @@ TIME_TOLERANCE = 0.15         # écart accepté sur la durée cible
 # limite de TIME_TOLERANCE. Essai : désactivé en production.
 DURATION_BINS = True
 DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
+# Diagnostic du 07/10/2026 (123 recommandées v15 perdant plus de 10 points) : 64 boucles écartées à 1-6 % de la limite de
+# leur plage (Sant Celoni 5 h : 4 h 24, Breda 6 h : 5 h 22). DURATION_BIN_MARGIN élargit chaque plage de cette part de la
+# durée visée (0,05 : « 5 h » de 4 h 15 à 5 h 45) ; l'ordre reste garanti : à une allure donnée, toute boucle d'une durée
+# est plus longue que celles de la durée inférieure et plus courte que celles de la durée supérieure (order_bounds).
+# None : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash, "v16").
+DURATION_BIN_MARGIN = None
+_TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
+
+
+def bin_margin():
+    return getattr(_TL, "bin_margin", DURATION_BIN_MARGIN)
 # Même audit : 12 % des boucles avaient plus de 3 km de terre (8,5 km à la Molina en 5 h : la limite était une PART du
 # parcours) ; les pentes de plus de 20 % étaient presque toutes sur des chemins de terre. Essai : désactivé.
 DIRT_MAX_KM = 4.0               # plafond absolu de terre (notée ou probable) ; v16 : 4 km
@@ -1427,7 +1439,30 @@ def time_ok(time_s: float, duration_h: float) -> bool:
     i = DURATION_SET.index(duration_h)
     lo = (DURATION_SET[i - 1] + duration_h) / 2.0 / duration_h if i > 0 else 0.0
     hi = (DURATION_SET[i + 1] + duration_h) / 2.0 / duration_h if i + 1 < len(DURATION_SET) else 9.0
-    return lo <= r <= hi
+    m = bin_margin() or 0.0
+    return lo - m <= r <= hi + m
+
+
+def order_bounds(options: list, level: str, duration_h: float) -> tuple:
+    """Bornes de durée (s) d'une nouvelle boucle pour garder l'ordre des durées à cette allure (DURATION_BIN_MARGIN) :
+    plus longue que les options déjà choisies aux durées inférieures, plus courte que celles des durées supérieures."""
+    lo, hi, dm = 0.0, float("inf"), round(duration_h * 60)
+    for o in options:
+        if o["level"] != level:
+            continue
+        if o["duration_target_min"] < dm:
+            lo = max(lo, o["time_est_min"] * 60.0)
+        elif o["duration_target_min"] > dm:
+            hi = min(hi, o["time_est_min"] * 60.0)
+    return lo, hi
+
+
+def keep_order(pool: list, options: list, level: str, duration_h: float) -> list:
+    """Pool restreint aux boucles qui respectent l'ordre des durées (seulement si DURATION_BIN_MARGIN est actif)."""
+    if not bin_margin():
+        return pool
+    lo, hi = order_bounds(options, level, duration_h)
+    return [l for l in pool if lo < l.time_s < hi]
 
 
 def dirt_ok(l) -> bool:
@@ -2743,7 +2778,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         t_dur = time.time()
         prior: list = []                                  # options des allures inférieures (O-18 A)
         for level in sorted(levels, key=list(LEVELS).index):
-            pool = level_pool(gh, st, level, duration, candidates, log)
+            pool = keep_order(level_pool(gh, st, level, duration, candidates, log), options, level, duration)
             picks = choose_options(gh, st, level, duration, pool, prior, log)
             prior += [l for _, l in picks]
             for i, (label, loop) in enumerate(picks, start=1):

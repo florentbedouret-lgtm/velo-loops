@@ -410,6 +410,78 @@ def run_probe(sid, site, gh_url, durations, levels):
             "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
+# ----------------------------------------------------------------------------- marge des plages de durée (07/10/2026)
+def margin_generate(gh, st_, sid, durations, levels, margin):
+    """Toutes les durées et allures d'un départ comme la génération réelle, avec la marge des plages donnée (None = v16)."""
+    g._TL.bin_margin = margin
+    options, out = [], {}
+    for d in durations:
+        prior = []
+        for level in sorted(levels, key=list(g.LEVELS).index):
+            pool = g.keep_order(g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None), options, level, d)
+            picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
+            prior += [l for _, l in picks]
+            opts = [g.to_json(l, lab, sid, i) for i, (lab, l) in enumerate(picks, start=1)]
+            options += opts
+            out[f"{d:g}|{level}"] = [{"score": o["score"], "min": o["time_est_min"], "key": o["route_key"],
+                                      "label": o["label"], "lights_km": o["traffic_lights_per_km"],
+                                      "dirt_km": round(o["distance_km"] * o["shares"]["unpaved"], 1)} for o in opts]
+    del g._TL.bin_margin
+    return out
+
+
+def run_margin(sid, site, gh_url, durations, levels, margin, prev_dir):
+    """Même départ avec les plages strictes (v16) puis avec la marge ; boucles v15 (prev_dir) remises en jeu comme en
+    production v16 (KEEP_PREVIOUS)."""
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next((e for e in idx["starts"] if e["id"] == sid), None)
+    if entry is None:
+        return {"id": sid, "skipped": "départ absent de l'index publié"}
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1], "previous": {}}
+    pf = Path(prev_dir) / f"{sid}.json"                     # fichier du départ dans les données v15 (loops-data)
+    if pf.exists():
+        for o in json.loads(pf.read_text(encoding="utf-8"))["options"]:
+            st_["previous"].setdefault((o["level"], round(o["duration_target_min"])), []).append(
+                (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
+    t0 = time.time()
+    a = margin_generate(gh, st_, sid, durations, levels, None)
+    t1 = time.time()
+    b = margin_generate(gh, st_, sid, durations, levels, margin)
+    return {"id": sid, "zone": entry.get("zone"), "strict": a, "margin": b,
+            "s": [round(t1 - t0), round(time.time() - t1)]}
+
+
+def report_margin(results, out_json, out_md, margin, drop_ids, t0):
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    res = [r for r in results if not r.get("skipped")]
+
+    def stats(rs):
+        d = [(r, k, r["strict"][k][0]["score"] if r["strict"].get(k) else 0.0,
+              r["margin"][k][0]["score"] if r["margin"].get(k) else 0.0) for r in rs for k in set(r["strict"]) | set(r["margin"])]
+        n = len(d)
+        return d, (f"{n} combinaisons ; recommandée moyenne {sum(x[2] for x in d) / max(1, n):.1f} -> "
+                   f"{sum(x[3] for x in d) / max(1, n):.1f} ; identique {sum(abs(x[3] - x[2]) < 0.05 for x in d)}, "
+                   f"mieux (> +3) {sum(x[3] - x[2] > 3 for x in d)}, moins bien (< -3) {sum(x[3] - x[2] < -3 for x in d)}, "
+                   f"(< -10) {sum(x[3] - x[2] < -10 for x in d)}")
+    dd, sd = stats([r for r in res if r["id"] in drop_ids])
+    dt, stt = stats([r for r in res if r["id"] not in drop_ids])
+    opts = lambda k: sum(len(v) for r in res for v in r[k].values())  # noqa: E731
+    L = [f"# Marge des plages de durée ({margin:g}) — {round((time.time() - t0) / 60)} min", "",
+         f"- Départs des baisses v16 : {sd}", f"- Départs témoins (tirés au hasard) : {stt}",
+         f"- Options : {opts('strict')} -> {opts('margin')}", "",
+         "## Pertes de plus de 3 points avec la marge (toutes)", "", "| départ | durée/allure | strict | marge |", "|---|---|---|---|"]
+    for r, k, a, b in sorted(dd + dt, key=lambda x: x[3] - x[2]):
+        if b - a < -3:
+            L.append(f"| {r['id']} | {k} | {a} | {b} |")
+    L += ["", "## Plus forts gains", "", "| départ | durée/allure | strict | marge |", "|---|---|---|---|"]
+    for r, k, a, b in sorted(dd + dt, key=lambda x: x[2] - x[3])[:25]:
+        L.append(f"| {r['id']} | {k} | {a} | {b} |")
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 # ----------------------------------------------------------------------------- baisses v16 (07/10/2026)
 def drops_rebuild(gh, st_, c):
     """Boucle recommandée v15 recalculée par ses points de passage (comme KEEP_PREVIOUS) et contrôlée filtre par filtre."""
@@ -1023,6 +1095,9 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
+    ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
+    ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")
     ap.add_argument("--drops", default=None, help="baisses v15 -> v16 : fichier des cas (scripts/diag_v16_drops.json)")
     ap.add_argument("--gate-test", type=float, default=None, help="test du rattrapage : seuil de note (O-38)")
     ap.add_argument("--profile", action="store_true", help="mesure du coût de chaque type de tirage (O-38)")
@@ -1089,6 +1164,15 @@ def main() -> int:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
         report_compare(res, args.out, args.out_md, args.note, t0)
+        return 0
+    if args.probe and args.margin_test is not None:
+        ids = [x.strip() for x in args.probe.split(";") if x.strip()]
+        durations = [float(x) for x in args.durations.split()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_margin(sid, args.site, args.gh, durations, args.levels.split(),
+                                                         args.margin_test, args.prev_dir), ids))
+        report_margin(results, args.out, args.out_md, args.margin_test,
+                      {x.strip() for x in args.margin_drops.split(";") if x.strip()}, t0)
         return 0
     if args.drops:
         report_drops(run_drops(args.drops, args.site, args.gh, args.workers), args.out, args.out_md, t0)
