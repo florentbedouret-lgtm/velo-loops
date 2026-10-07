@@ -1,0 +1,5 @@
+MapLibre GL JS 5.24.0, copie du paquet npm officiel (maplibre-gl-5.24.0.tgz),
+empreinte sha512 vérifiée le 08/10/2026 contre celle publiée par npm :
+sha512-ALyFxgtd5R+65UqZ/++lOqwWcC0SNho9c27fYSyLmG7AfnAul2o46F05aDJGPbFU57wos9dgcIySHs0Xe6ia3A==
+Hébergée ici plutôt que chargée depuis unpkg : version figée, aucun appel à un tiers (audit sécurité M1).
+Licence BSD-3-Clause : LICENSE.txt.
