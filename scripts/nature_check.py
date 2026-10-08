@@ -411,6 +411,14 @@ def run_probe(sid, site, gh_url, durations, levels):
 
 
 # ----------------------------------------------------------------------------- relief par allure (08/10/2026)
+def corridor_col(coords) -> dict:
+    """Répétition par couloir d'une boucle publiée (mesurée de la même façon avec ou sans CORRIDOR_OVERLAP)."""
+    cum = [0.0]
+    for a, b in zip(coords, coords[1:]):
+        cum.append(cum[-1] + g.haversine(a[0], a[1], b[0], b[1]))
+    return {"corridor": round(sum(g.corridor_repeats(coords, cum)) / max(cum[-1], 1.0), 3)}
+
+
 def detour_cols(coords) -> dict:
     """Détours en pâté de maisons d'une boucle publiée (mesurés de la même façon avec ou sans DETOUR_FIX)."""
     ds = g.block_detours(coords)
@@ -444,7 +452,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "fallback": bool(getattr(l, "relief_fallback", False)), "key": o["route_key"],
                              "dirt": round(o["distance_km"] * o["shares"]["unpaved"], 1),
                              "dirt_fallback": bool(o.get("unpaved_fallback")),
-                             **detour_cols(o["coords"])})
+                             **detour_cols(o["coords"]), **corridor_col(o["coords"]),
+                             "overlap": o["overlap"], "outback": bool(o.get("out_and_back"))})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
     del g._TL.dirt_rules
@@ -471,7 +480,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "detour":                                # détours en pâté de maisons v17 seuls
+    if variant == "corridor":                              # répétition par couloir v17 seule
+        g._TL.corridor_overlap = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.corridor_overlap
+    elif variant == "detour":                              # détours en pâté de maisons v17 seuls
         g._TL.detour_fix = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.detour_fix
@@ -520,6 +533,18 @@ def report_relief_test(results, out_json, out_md, t0):
             L.append(f"| {lv} | {sum(x.get('detours', 0) > 0 for x in a)} -> {sum(x.get('detours', 0) > 0 for x in b)} "
                      f"/ {len(a)} | {sum(x.get('detours', 0) for x in a)} -> {sum(x.get('detours', 0) for x in b)} | "
                      f"{sum(x.get('detour_m', 0) for x in a)} -> {sum(x.get('detour_m', 0) for x in b)} | "
+                     f"{sum(x['score'] for x in a) / len(a):.1f} -> {sum(x['score'] for x in b) / max(1, len(b)):.1f} |")
+    L += ["", "Répétition par couloir (boucles recommandées ; mesure par couloir sur les deux versions) :", "",
+          "| allure | > 25 % | > 15 % | médiane | allers-retours | note moyenne |", "|---|---|---|---|---|---|"]
+    for lv in ("facile", "modere", "soutenu"):
+        a = [rows[0] for r in res for key, rows in r["v16"].items() if key.endswith("|" + lv) and rows]
+        b = [rows[0] for r in res for key, rows in r["relief"].items() if key.endswith("|" + lv) and rows]
+        if a and "corridor" in a[0]:
+            md = lambda v: sorted(v)[len(v) // 2] if v else 0  # noqa: E731
+            L.append(f"| {lv} | {sum(x['corridor'] > .25 for x in a)} -> {sum(x['corridor'] > .25 for x in b)} / {len(a)} | "
+                     f"{sum(x['corridor'] > .15 for x in a)} -> {sum(x['corridor'] > .15 for x in b)} | "
+                     f"{md([x['corridor'] for x in a])} -> {md([x['corridor'] for x in b])} | "
+                     f"{sum(x.get('outback', False) for x in a)} -> {sum(x.get('outback', False) for x in b)} | "
                      f"{sum(x['score'] for x in a) / len(a):.1f} -> {sum(x['score'] for x in b) / max(1, len(b)):.1f} |")
     L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
              f"{sum(r.get('heading_retries', 0) for r in res)} fois")
@@ -1216,7 +1241,8 @@ def main() -> int:
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
     ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
     ap.add_argument("--relief-variant", default="v17",
-                    help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17) ou detour (DETOUR_FIX)")
+                    help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17), detour (DETOUR_FIX) "
+                         "ou corridor (CORRIDOR_OVERLAP)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")

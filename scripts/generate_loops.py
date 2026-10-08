@@ -136,6 +136,11 @@ def dirt_rules() -> dict:
     return getattr(_TL, "dirt_rules", DIRT_RULES) or {}
 
 
+def corridor_overlap() -> bool:
+    """Répétition mesurée par couloir (CORRIDOR_OVERLAP), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
+
+
 def detour_fix() -> bool:
     """Détours en pâté de maisons (DETOUR_FIX), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "detour_fix", DETOUR_FIX))
@@ -276,6 +281,19 @@ SPUR_MAX_PENALTY = 0.20
 # les laisse en place et ils restent donc sans effet.
 # False : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
 DETOUR_FIX = False
+# Répétition mesurée par couloir (Florent, 08/10/2026, Gràcia Modéré 1 h « plus de relief » : trois passages sur la
+# carretera de Sant Cugat, 4 % de répétition mesurée). La mesure v16 compte un tronçon répété seulement s'il passe par les
+# mêmes points de la carte : l'autre chaussée, une voie parallèle ou un triangle de carrefour ne comptent pas (Gràcia :
+# 46 % par couloir ; 1 229 recommandées v16 : 23 au-delà de 25 %, 76 par couloir). CORRIDOR_OVERLAP : un passage à moins
+# de CORRIDOR_R_M d'un passage antérieur (au moins CORRIDOR_GAP_M de chemin plus tôt, à moins de CORRIDOR_DZ_M
+# d'altitude : les lacets d'une côte, superposés sur la carte mais à des altitudes différentes, ne comptent pas) est
+# répété, les deux passages comptant. Sert à MAX_OVERLAP, à la note « fluidité » et aux allers-retours (OUTBACK_OK).
+# False : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
+CORRIDOR_OVERLAP = False
+CORRIDOR_R_M = 25.0
+CORRIDOR_GAP_M = 200.0
+CORRIDOR_DZ_M = 6.0
+CORRIDOR_STEP_M = 10.0
 DETOUR_MIN_M, DETOUR_MAX_M = 200.0, 1500.0
 DETOUR_GAP_M = 120.0             # retour à moins de 120 m…
 DETOUR_RATIO = 0.25              # … et à moins du quart du chemin parcouru
@@ -1304,6 +1322,41 @@ def write_ways(path: str) -> int:
     return len(rows)
 
 
+def corridor_repeats(coords, cum) -> list:
+    """Longueur répétée de chaque tronçon, mesurée par couloir (voir CORRIDOR_OVERLAP) : tronçons découpés en morceaux de
+    CORRIDOR_STEP_M, un morceau est répété s'il passe à moins de CORRIDOR_R_M (et CORRIDOR_DZ_M d'altitude) d'un morceau
+    franchi au moins CORRIDOR_GAP_M plus tôt ; ce morceau antérieur l'est aussi."""
+    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
+    ky = 110540.0
+    pts = []                                                 # (x, y, z, position sur la boucle, tronçon, longueur)
+    for i in range(len(coords) - 1):
+        a, b = coords[i], coords[i + 1]
+        L = cum[i + 1] - cum[i]
+        n = max(1, int(math.ceil(L / CORRIDOR_STEP_M)))
+        za, zb = (a[2], b[2]) if len(a) > 2 and len(b) > 2 else (0.0, 0.0)
+        for k in range(n):
+            f = (k + 0.5) / n
+            pts.append(((a[0] + (b[0] - a[0]) * f) * kx, (a[1] + (b[1] - a[1]) * f) * ky, za + (zb - za) * f,
+                        cum[i] + f * L, i, L / n))
+    rep = [False] * len(pts)
+    grid: dict = {}
+    r, r2 = CORRIDOR_R_M, CORRIDOR_R_M ** 2
+    for p, (x, y, z, s, _, _) in enumerate(pts):
+        gx, gy = int(x // r), int(y // r)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for q in grid.get((gx + dx, gy + dy), ()):
+                    qx, qy, qz, qs, _, _ = pts[q]
+                    if qs < s - CORRIDOR_GAP_M and (qx - x) ** 2 + (qy - y) ** 2 < r2 and abs(qz - z) < CORRIDOR_DZ_M:
+                        rep[p] = rep[q] = True
+        grid.setdefault((gx, gy), []).append(p)
+    out = [0.0] * (len(coords) - 1)
+    for p, pt in enumerate(pts):
+        if rep[p]:
+            out[pt[4]] += pt[5]
+    return out
+
+
 def road_edges(det, n) -> list:
     """Par tronçon : 'm' route principale, 'c' piste cyclable ou voie verte (même définition que dedicated_cycleway),
     '-' sinon (surlignage dans l'appli)."""
@@ -1350,12 +1403,16 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         k = (a, b) if a <= b else (b, a)
         keys.append(k)
         seen[k] = seen.get(k, 0) + 1
-    repeated = sum(cum[i + 1] - cum[i] for i, k in enumerate(keys) if seen[k] > 1)
+    if corridor_overlap():                           # par couloir (CORRIDOR_OVERLAP) : longueur répétée de chaque tronçon
+        rep_m = corridor_repeats(coords, cum)
+    else:                                            # mêmes points de la carte (v16)
+        rep_m = [cum[i + 1] - cum[i] if seen[k] > 1 else 0.0 for i, k in enumerate(keys)]
+    repeated = sum(rep_m)
     rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
-    rep_cycle = sum(cum[i + 1] - cum[i] for i, k in enumerate(keys) if seen[k] > 1 and rc_rep[i] == "c")
+    rep_cycle = sum(m for i, m in enumerate(rep_m) if rc_rep[i] == "c")
     longest_repeat, run = 0.0, 0.0
-    for i, k in enumerate(keys):                     # plus long tronçon consécutif emprunté deux fois
-        run = run + (cum[i + 1] - cum[i]) if seen[k] > 1 else 0.0
+    for i, m in enumerate(rep_m):                    # plus long tronçon consécutif emprunté deux fois
+        run = run + m if m > 0.5 * (cum[i + 1] - cum[i]) else 0.0
         longest_repeat = max(longest_repeat, run)
 
     # répartition des caps (8 secteurs) sur la 1re / 2e moitié : score de vent calculé côté navigateur

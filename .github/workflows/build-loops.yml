@@ -90,8 +90,9 @@ permissions:
 
 concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
-  # diag_part=surf (carte seule, quelques minutes) : file à part, ne prend pas la place d'un diagnostic en attente
-  group: ${{ (inputs.mode == 'nature_check' && inputs.diag_part == 'surf') && 'diagnostic-carte' || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
+  # diag_part=surf (carte seule) et les parties lancées depuis le 08/10/2026 au soir (o1, o2, cmp3) : chacune dans sa file,
+  # elles tournent en parallèle sans prendre la place d'un diagnostic en attente
+  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp3"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
@@ -295,6 +296,7 @@ jobs:
           # "soutenu:2:scripts/reference_plata_soutenu.json", "modere:2:scripts/reference_gracia.json")
           NATURE_COMPARE=""   # 06/10/2026 : "modere:1:scripts/reference_hospitalet_1h.json soutenu:1:scripts/reference_eixample_1h.json facile:1:scripts/reference_horta_1h.json"
           [ "$DIAG_PART" = "cmp" ] && NATURE_COMPARE="modere:2:scripts/reference_gracia_besos.json"   # 08/10/2026 : boucle appréciée par Florent
+          [ "$DIAG_PART" = "cmp3" ] && NATURE_COMPARE="modere:1.5:scripts/reference_plata_besos.json"   # 08/10/2026 : retour par le Besòs (Florent)
           [ "$DIAG_PART" = "cmp2" ] && NATURE_COMPARE="soutenu:1:scripts/reference_eixample_1h.json facile:1:scripts/reference_horta_1h.json modere:1:scripts/reference_hospitalet_1h.json soutenu:1:scripts/reference_cornella_1h.json modere:1:scripts/reference_sarria_1h_modere.json modere:6:scripts/reference_ciutat_vella_6h.json"   # propositions du 05/10, règles v16
           # Montserrat (03/10/2026) : "soutenu:5:scripts/reference_montserrat.json soutenu:6:scripts/reference_montserrat.json modere:6:scripts/reference_montserrat.json"
           NATURE_MARGIN="0.05"   # marge des plages de durée essayée (bloc plus bas) ; non vide : pas de calibrage v5
@@ -347,7 +349,7 @@ jobs:
           MARGIN_DROPS="breda;sant-celoni;castellfollit-de-la-roca;sant-andreu;granollers;molins-de-rei;arbucies;sant-marti;palleja;abrera;gualba;gracia;la-pobla-de-claramunt;cerdanyola-del-valles;tordera;odena;can-salva;sant-boi-de-llobregat;castellfollit-de-riubregos;parets-del-valles;sants-montjuic;calella;moia;muntanyola;l-hospitalet-de-llobregat;vallromanes;torrelles-de-llobregat;l-eixample;ciutat-vella;el-pont-d-armentera"
           MARGIN_TEM="castellnou-can-mir-sud-est;canyet-sud;pineda-de-bages;can-rovira-nou-sud-ouest;la-palma-de-cervello;rocacrespa-est;vallirana;les-ginesteres-nord-est;sant-vicenc-de-castellet;barbera-del-valles;castelloli;sant-vicenc-de-montalt;torello;els-caus-els-pinetons-est;zona-franca-port-est;el-pla-de-sant-tirs;feners-est;sant-feliu-de-codines;argelaguer;el-collell-est;vilobi-del-penedes;mura;santa-coloma-de-farners;rossinyol-i-coforb-est;el-coll-est-2;sot-d-en-mola-est;rubio;masies-de-sansuies-est;el-pala-de-torroella-sud;can-servitge-est"
           # relief par allure (08/10/2026) : parties r1 / r2 ; le test de la marge ne tourne pas dans ce cas
-          case "$DIAG_PART" in r*|f*|d*|t*|pages|cmp*|places) NATURE_MARGIN="" ;; esac
+          case "$DIAG_PART" in r*|f*|d*|t*|o[12]|pages|cmp*|places) NATURE_MARGIN="" ;; esac
           if [ "$DIAG_PART" = "pages" ]; then              # essai des pages par départ sur toutes les données publiées
             mkdir -p data/pages_test
             python scripts/build_start_pages.py --data "https://florentbedouret-lgtm.github.io/velo-loops/web/data"               --out data/pages_test | tee data/pages_test.txt
@@ -357,12 +359,13 @@ jobs:
           fi
           RELIEF_P1="gracia;la-muntanyesa-sud-est;egara-nord-ouest;ximelis-nord;callus;cornella-de-llobregat;castellgali;sant-cugat-del-valles;cesalpina-sud;sant-just-desvern;prats-de-llucanes;martorell;castelldefels;el-pont-de-vilomara;bellavista"
           RELIEF_P2="can-massuet-del-far-sud;sant-andreu-de-llavaneres;cal-tico-nou-est;arenys-de-mar;la-valldan-est;sant-esteve-de-llemena;sant-feliu-de-pallerols;riells;camprodon;gosol;sant-miquel-d-olerdola;llongarriu-est;la-rapita;vallgorguina;la-pineda-est"
-          if [ "$DIAG_PART" = "r1" ] || [ "$DIAG_PART" = "r2" ] || [ "$DIAG_PART" = "f1" ] || [ "$DIAG_PART" = "f2" ] || [ "$DIAG_PART" = "d1" ] || [ "$DIAG_PART" = "d2" ] || [ "$DIAG_PART" = "t1" ] || [ "$DIAG_PART" = "t2" ]; then
+          if [ "$DIAG_PART" = "r1" ] || [ "$DIAG_PART" = "r2" ] || [ "$DIAG_PART" = "f1" ] || [ "$DIAG_PART" = "f2" ] || [ "$DIAG_PART" = "d1" ] || [ "$DIAG_PART" = "d2" ] || [ "$DIAG_PART" = "t1" ] || [ "$DIAG_PART" = "t2" ] || [ "$DIAG_PART" = "o1" ] || [ "$DIAG_PART" = "o2" ]; then
             case "$DIAG_PART" in *1) RELIEF_IDS="$RELIEF_P1" ;; *) RELIEF_IDS="$RELIEF_P2" ;; esac
-            case "$DIAG_PART" in f*) RELIEF_VARIANT=flat ;; d*) RELIEF_VARIANT=dirt ;; t*) RELIEF_VARIANT=detour ;; *) RELIEF_VARIANT=v17 ;; esac
+            case "$DIAG_PART" in f*) RELIEF_VARIANT=flat ;; d*) RELIEF_VARIANT=dirt ;; t*) RELIEF_VARIANT=detour ;; o*) RELIEF_VARIANT=corridor ;; *) RELIEF_VARIANT=v17 ;; esac
             # détours (08/10/2026) : Sants-Montjuïc (boucle signalée par Florent) ajouté à la partie t1
             [ "$DIAG_PART" = "t1" ] && RELIEF_IDS="sants-montjuic;$RELIEF_IDS"
-            RELIEF_LEVELS="facile modere"; case "$DIAG_PART" in d*|t*) RELIEF_LEVELS="facile modere soutenu" ;; esac   # terre : 3 allures
+            # répétition par couloir (08/10/2026) : Gràcia (boucle signalée par Florent) est déjà dans la partie 1
+            RELIEF_LEVELS="facile modere"; case "$DIAG_PART" in d*|t*|o*) RELIEF_LEVELS="facile modere soutenu" ;; esac   # terre : 3 allures
             timeout 290m python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json               --pbf data/region.osm.pbf --workdir data --probe "$RELIEF_IDS" --relief-test --relief-variant "$RELIEF_VARIANT" --prev-dir "https://florentbedouret-lgtm.github.io/velo-loops/web/data/starts"               --durations "0.75 1 1.5 2 3 4 5 6" --levels "$RELIEF_LEVELS" --workers "$NATURE_WORKERS" $NATURE_RETOUCH --out data/relief.json --out-md data/relief.md || echo "diagnostic interrompu : résultats partiels (data/relief_*.json)"
             [ -f data/relief.md ] && cat data/relief.md >> "$GITHUB_STEP_SUMMARY" || true
           fi

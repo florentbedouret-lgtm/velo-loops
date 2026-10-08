@@ -1,0 +1,76 @@
+{
+ "_note": "Boucle proposée par Florent (08/10/2026) : la Plata (sud-ouest), Modéré 1 h 30, comme la boucle publiée (v16) jusqu'à Santa Coloma, puis retour le long du Besòs et par le bord de mer (moins de feux selon lui). Points de passage tirés des deux boucles publiées par Oyan (1 h 30 jusqu'à Santa Coloma ; 2 h, qui longe le Besòs, à rebours). Utilisée par nature_check.py --compare-refs (diag_part=cmp3).",
+ "start": "la-plata-sud-ouest",
+ "loops": [
+  {
+   "name": "Florent : Collserola, Santa Coloma, retour par le Besòs et la mer",
+   "source": "boucles Oyan v16 (points de passage)",
+   "waypoints": [
+    [
+     2.18697,
+     41.40507
+    ],
+    [
+     2.18692,
+     41.42018
+    ],
+    [
+     2.17443,
+     41.43004
+    ],
+    [
+     2.15648,
+     41.43775
+    ],
+    [
+     2.156,
+     41.4447
+    ],
+    [
+     2.15627,
+     41.45185
+    ],
+    [
+     2.1568,
+     41.46409
+    ],
+    [
+     2.16175,
+     41.4726
+    ],
+    [
+     2.17259,
+     41.46564
+    ],
+    [
+     2.18809,
+     41.46043
+    ],
+    [
+     2.20082,
+     41.44917
+    ],
+    [
+     2.21247,
+     41.43296
+    ],
+    [
+     2.21984,
+     41.42733
+    ],
+    [
+     2.21878,
+     41.42018
+    ],
+    [
+     2.21516,
+     41.40675
+    ],
+    [
+     2.21266,
+     41.40015
+    ]
+   ]
+  }
+ ]
+}
