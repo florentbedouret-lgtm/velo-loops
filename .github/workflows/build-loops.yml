@@ -95,7 +95,7 @@ concurrency:
 
 env:
   GH_VERSION: "11.0"
-  START_PAGES: "0"   # pages HTML par départ et sitemap complet (O-44) : "1" à la fin de la v16
+  START_PAGES: "1"   # pages HTML par départ et sitemap complet (O-44) : allumées le 08/10/2026, fin de la v16
   REGION_FILE: config/region_barcelona.json
 
 jobs:
