@@ -1,3 +1,4 @@
-requests>=2.31
-shapely>=2.0
-osmium>=3.7
+# versions figées (audit du 08/10/2026), celles du dernier calcul complet v16
+requests==2.34.2
+shapely==2.2.0
+osmium==4.3.1
