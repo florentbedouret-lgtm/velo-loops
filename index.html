@@ -1330,10 +1330,9 @@
     }
 
     // change pour la durée disponible suivante, sans changer le niveau (bouton "Essayer plus long")
-    function nextDuration() {
-      const durs = indexData.durations_h.map(Number).sort((a, b) => a - b);
-      const next = durs.find(d => d > Number(durSel.value));
-      if (next != null) { durSel.value = String(next); showLevel(); }
+    function goDuration(min) {                             // « aller plus loin » : la durée dont la boucle sort de la ville
+      const v = String(min / 60);
+      if ([...durSel.options].some(x => x.value === v)) { durSel.value = v; showLevel(); }
     }
 
     // ---------- O-9.5 : pitch au ton Oyan (brand.md §8), construit ici à partir des mêmes mesures que le pitch du
@@ -1506,11 +1505,15 @@
     function detailHtml(o) {
       const facts = factsHtml(o);
       // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
+      // 08/10/2026 (Florent, Gràcia Tranquille 45 min : « Essayer plus long » menait à une boucle d'1 h encore en ville) :
+      // la promesse s'appuie sur les données, la première durée plus longue dont la boucle recommandée sort vraiment
       let longer = '';
       if (exitKm(o) == null) {
-        const hasLonger = startData.options.some(x => x.level === o.level && x.duration_target_min > o.duration_target_min);
-        if (hasLonger) longer = '<div class="tip"><p class="tip-h">' + esc(t('longer_txt')) + '</p>' +
-          '<button type="button" class="btn" onclick="nextDuration()">' + esc(t('longer_btn')) + '</button></div>';
+        const out = startData.options.filter(x => x.level === o.level && x.duration_target_min > o.duration_target_min
+          && /-1$/.test(x.id) && exitKm(x) != null).map(x => x.duration_target_min).sort((a, b) => a - b)[0];
+        if (out != null) longer = '<div class="tip"><p class="tip-h">' + esc(t('longer_txt_d', { d: hm(out) })) + '</p>' +
+          '<button type="button" class="btn" onclick="goDuration(' + out + ')">' + esc(t('longer_btn_d', { d: hm(out) })) +
+          '</button></div>';
       }
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       const others = shown.map((x, k) => k === current ? '' :

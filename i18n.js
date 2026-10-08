@@ -293,6 +293,9 @@ const I18N = {
   longer_txt: ['Une sortie plus longue sort de la ville.', 'A longer ride gets out of town.', 'Una ruta más larga sale de la ciudad.',
     'Una ruta més llarga surt de la ciutat.'],
   longer_btn: ['Essayer plus long', 'Try longer', 'Probar más larga', "Prova'n una de més llarga"],
+  longer_txt_d: ['En {d}, la boucle sort de la ville.', 'At {d}, the loop gets out of town.', 'En {d}, la ruta sale de la ciudad.',
+    'En {d}, la ruta surt de la ciutat.'],
+  longer_btn_d: ['Voir la boucle de {d}', 'See the {d} loop', 'Ver la ruta de {d}', 'Veure la ruta de {d}'],
 
   // ---------- tous les chiffres
   relief_0: ['plat', 'flat', 'llano', 'pla'], relief_1: ['peu vallonné', 'gently rolling', 'poco ondulado', 'poc ondulat'],
