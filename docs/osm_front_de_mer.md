@@ -11,7 +11,18 @@ permet pas au vélo d'y circuler en continu. Cette liste dit quoi regarder sur p
 
 Chaque voie s'ouvre sur `https://www.openstreetmap.org/way/<numéro>`.
 
-## Le long de l'avinguda del Litoral, côté parc (ton passage goudronné)
+## Mise à jour du 08/10/2026 au soir (vérifié par Florent dans OSM)
+
+OSM est juste ici, rien à modifier. Le passage goudronné passe par :
+1. les voies de service de Nova Icària (fermées aux voitures ou réservées aux livraisons, donc ouvertes au vélo) ;
+2. la chaussée de l'avinguda del Litoral, sur environ 800 m, tant que le passeig del Bogatell est en travaux ;
+3. la piste cyclable de Bac de Roda ([359544125](https://www.openstreetmap.org/way/359544125)), jusqu'à la piste du
+   front de mer de la Mar Bella.
+
+Les deux chemins piétons du tableau ci-dessous (697164702, 217581788) ne sont **pas** ce passage : ils sont bien notés.
+Pourquoi Oyan n'y passe pas malgré tout : en cours d'étude (comparaison diag_part=cmp4).
+
+## Le long de l'avinguda del Litoral, côté parc (hypothèse de départ, écartée)
 
 | voie | ce qu'OSM dit aujourd'hui | à regarder sur place | si c'est le cas |
 |---|---|---|---|

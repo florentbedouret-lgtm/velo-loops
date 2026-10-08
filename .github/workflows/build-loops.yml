@@ -484,7 +484,7 @@ jobs:
           if [ "$MODE" = "full" ]; then                  # O-13 : garder les départs déjà publiés (pas de nouveau plan)
             OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
             python scripts/published_starts.py --site "https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}" --out data/published_starts.json \
-              --extra scripts/restore_starts.json --moves scripts/start_moves.json   # départs à rétablir, départs déplacés
+              --extra scripts/restore_starts.json --moves scripts/start_moves.json --drops scripts/start_drops.json   # départs à rétablir, déplacés, retirés
             EXTRA="--starts-file data/published_starts.json"
           fi
           if [ "${MODE#full}" != "$MODE" ]; then          # budget épuisé : les départs non recalculés gardent leur version publiée

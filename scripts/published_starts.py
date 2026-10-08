@@ -10,6 +10,7 @@ retrouver l'entrée publiée, car lon/lat publiés sont la position recalée sur
 
 Usage : python scripts/published_starts.py --site https://<compte>.github.io/<dépôt> --out data/published_starts.json
         [--extra scripts/restore_starts.json]   (départs à rétablir, ajoutés s'ils manquent au site : même format)
+        [--drops scripts/start_drops.json]      (départs retirés : [{key, name, why}], plus jamais recalculés ni gardés)
 Échoue (code 1) si l'index publié est introuvable ou vide : mieux vaut s'arrêter que générer un site vide.
 """
 from __future__ import annotations
@@ -30,6 +31,7 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--extra", default=None, help="JSON de départs à ajouter s'ils manquent au site (même format, clé `key`)")
     ap.add_argument("--moves", default=None, help="JSON de départs à déplacer : [{key, lon, lat, why}] (même clé, nouvelle position)")
+    ap.add_argument("--drops", default=None, help="JSON de départs à retirer : [{key, name, why}]")
     args = ap.parse_args()
     r = requests.get(f"{args.site.rstrip('/')}/web/data/index.json", timeout=60)
     r.raise_for_status()
@@ -44,6 +46,11 @@ def main() -> int:
                  for s in json.loads(Path(args.extra).read_text(encoding="utf-8")) if s.get("key") not in have]
         out += extra
         print(f"Départs rétablis depuis {args.extra} : {len(extra)}")
+    if args.drops and Path(args.drops).exists():          # départs retirés (sommet sans habitants…), décision relue
+        drops = {d["key"]: d for d in json.loads(Path(args.drops).read_text(encoding="utf-8"))}
+        for s in [s for s in out if s.get("key") in drops]:
+            print(f"Départ retiré : {s['name']} ({drops[s['key']].get('why', '')})")
+        out = [s for s in out if s.get("key") not in drops]
     if args.moves and Path(args.moves).exists():          # départs mal placés (colline, parc…) : nouvelle position relue
         moves = {m["key"]: m for m in json.loads(Path(args.moves).read_text(encoding="utf-8"))}
         for s in out:

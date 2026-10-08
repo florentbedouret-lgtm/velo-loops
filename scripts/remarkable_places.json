@@ -210,7 +210,13 @@
    "coord": [
     2.52722,
     41.9792
-   ]
+   ],
+   "point": [
+    2.529464,
+    41.979615
+   ],
+   "via": "belvédère au bout de la carretera de Querós (OSM node 6157347288), choisi par Florent le 08/10/2026",
+   "point_name": "Pantà de Susqueda"
   },
   "Q1140094": {
    "label": "Pantà de Sau",
