@@ -1,0 +1,30 @@
+name: Tests
+
+# Tests des règles de calcul (tests/), à chaque envoi qui touche les scripts ou les tests. Workflow séparé : il ne passe
+# pas dans la file d'attente des calculs (« build-loops ») et ne publie rien.
+on:
+  push:
+    branches: [main]
+    paths: ['scripts/**', 'tests/**', 'config/**', '.github/workflows/tests.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Dépendances
+        run: pip install -q requests pytest
+      - name: Tests
+        run: python -m pytest -q tests

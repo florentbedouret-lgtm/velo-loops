@@ -202,6 +202,7 @@ def page(s: dict, data: dict, lang: str, near: list):
           **({"containedInPlace": {"@type": "Place", "name": s["municipality"]}} if s.get("municipality") else {}),
           "url": f'{BASE}{DIRS[lang]}/{s["id"]}.html'}
     title = d["title"].format(**head)
+    ld_json = json.dumps(ld, ensure_ascii=False).replace("<", "\\u003c")   # un nom OSM ne sort pas du script
     return f'''<!DOCTYPE html>
 <html lang="{lang}">
 <head>
@@ -221,7 +222,7 @@ def page(s: dict, data: dict, lang: str, near: list):
   <link rel="icon" href="{rel}brand/svg/favicon.svg" type="image/svg+xml">
   <link href="{rel}brand/oyan-tokens.css" rel="stylesheet">
   <link href="{rel}fonts/oyan-fonts.css" rel="stylesheet">
-  <script type="application/ld+json">{json.dumps(ld, ensure_ascii=False)}</script>
+  <script type="application/ld+json">{ld_json}</script>
   <style>
     body {{ max-width: 640px; margin: 0 auto; padding: 16px; font-family: var(--font-sans); line-height: 1.5;
            background: var(--color-bg); color: var(--color-text); -webkit-text-size-adjust: 100%; }}
