@@ -284,6 +284,7 @@ jobs:
           # comparaisons « allure:durée en h:boucles de référence » (autres : "modere:2:scripts/reference_plata.json",
           # "soutenu:2:scripts/reference_plata_soutenu.json", "modere:2:scripts/reference_gracia.json")
           NATURE_COMPARE=""   # 06/10/2026 : "modere:1:scripts/reference_hospitalet_1h.json soutenu:1:scripts/reference_eixample_1h.json facile:1:scripts/reference_horta_1h.json"
+          [ "$DIAG_PART" = "cmp" ] && NATURE_COMPARE="modere:2:scripts/reference_gracia_besos.json"   # 08/10/2026 : boucle appréciée par Florent
           # Montserrat (03/10/2026) : "soutenu:5:scripts/reference_montserrat.json soutenu:6:scripts/reference_montserrat.json modere:6:scripts/reference_montserrat.json"
           NATURE_MARGIN="0.05"   # marge des plages de durée essayée (bloc plus bas) ; non vide : pas de calibrage v5
           NATURE_PLACES=""   # rapport « lieux remarquables » (accessibilité, points d'accès, passages), indépendant du reste
@@ -334,7 +335,7 @@ jobs:
           MARGIN_DROPS="breda;sant-celoni;castellfollit-de-la-roca;sant-andreu;granollers;molins-de-rei;arbucies;sant-marti;palleja;abrera;gualba;gracia;la-pobla-de-claramunt;cerdanyola-del-valles;tordera;odena;can-salva;sant-boi-de-llobregat;castellfollit-de-riubregos;parets-del-valles;sants-montjuic;calella;moia;muntanyola;l-hospitalet-de-llobregat;vallromanes;torrelles-de-llobregat;l-eixample;ciutat-vella;el-pont-d-armentera"
           MARGIN_TEM="castellnou-can-mir-sud-est;canyet-sud;pineda-de-bages;can-rovira-nou-sud-ouest;la-palma-de-cervello;rocacrespa-est;vallirana;les-ginesteres-nord-est;sant-vicenc-de-castellet;barbera-del-valles;castelloli;sant-vicenc-de-montalt;torello;els-caus-els-pinetons-est;zona-franca-port-est;el-pla-de-sant-tirs;feners-est;sant-feliu-de-codines;argelaguer;el-collell-est;vilobi-del-penedes;mura;santa-coloma-de-farners;rossinyol-i-coforb-est;el-coll-est-2;sot-d-en-mola-est;rubio;masies-de-sansuies-est;el-pala-de-torroella-sud;can-servitge-est"
           # relief par allure (08/10/2026) : parties r1 / r2 ; le test de la marge ne tourne pas dans ce cas
-          case "$DIAG_PART" in r*|f*|d*|pages) NATURE_MARGIN="" ;; esac
+          case "$DIAG_PART" in r*|f*|d*|pages|cmp) NATURE_MARGIN="" ;; esac
           if [ "$DIAG_PART" = "pages" ]; then              # essai des pages par départ sur toutes les données publiées
             mkdir -p data/pages_test
             python scripts/build_start_pages.py --data "https://florentbedouret-lgtm.github.io/velo-loops/web/data"               --out data/pages_test | tee data/pages_test.txt

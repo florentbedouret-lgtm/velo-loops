@@ -1,0 +1,68 @@
+{
+ "_note": "Boucle d'Oyan appréciée par Florent (Gràcia, modéré, 2 h ; recommandée jusqu'à la v14, 2-3/10/2026 ; 34,9 km, D+ 327 m) : turons d'Horta, Montcada, retour par le Besòs. Points de passage tous les 2 km, tirés de la boucle publiée par Oyan. Utilisée par nature_check.py --compare-refs (diagnostic du 08/10/2026 : pourquoi n'est-elle plus proposée ?).",
+ "start": "gracia",
+ "loops": [
+  {
+   "name": "Oyan v14 : turons d'Horta, Montcada, Besòs (34,9 km)",
+   "source": "Oyan, boucle publiée en v14 (points de passage)",
+   "waypoints": [
+    [
+     2.17126,
+     41.41352
+    ],
+    [
+     2.17729,
+     41.43177
+    ],
+    [
+     2.20322,
+     41.44962
+    ],
+    [
+     2.18853,
+     41.46866
+    ],
+    [
+     2.19115,
+     41.48609
+    ],
+    [
+     2.18992,
+     41.50791
+    ],
+    [
+     2.19511,
+     41.50671
+    ],
+    [
+     2.18864,
+     41.49099
+    ],
+    [
+     2.16545,
+     41.48064
+    ],
+    [
+     2.15614,
+     41.47024
+    ],
+    [
+     2.15505,
+     41.45332
+    ],
+    [
+     2.1563,
+     41.44314
+    ],
+    [
+     2.15897,
+     41.42965
+    ],
+    [
+     2.1711,
+     41.41719
+    ]
+   ]
+  }
+ ]
+}
