@@ -243,6 +243,7 @@
     .figs .big { font-size: 40px; font-weight: var(--fw-light); line-height: 1; }
     .figs .big span { font-size: 18px; }
     .figs .v { font-size: 24px; font-weight: var(--fw-light); line-height: 1.2; }
+    .figs .rel { display: block; font-size: 13px; font-weight: var(--fw-regular); color: var(--color-text-2); margin-top: 2px; }   /* relief (08/10/2026) */
     #sheet[data-state=peek] .figs, #sheet[data-state=high] .figs { display: none; }
     /* alerte routes principales dès le panneau replié (même seuil que le point clé : 10 %) */
     .roadwarn { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 12px; }
@@ -1521,7 +1522,7 @@
         <div class="sum-line">${km(o.distance_km)} km · ${esc(t('dplus_inline', { m: Math.round(o.ascend_m) }))} · ≈ ${hm(o.time_est_min)}</div>
         <div class="figs">
           <div class="k">${esc(t('fig_distance'))}</div><div class="k">${esc(t('fig_dplus'))}<button type="button" class="qm" aria-expanded="false" aria-label="${esc(t('dplus_help_btn'))}" onclick="toggleDplusHelp(this)">?</button></div><div class="k">${esc(t('fig_duration'))}</div>
-          <div class="big">${km(o.distance_km)}<span> km</span></div><div class="v">${Math.round(o.ascend_m)} m</div><div class="v">≈ ${hm(o.time_est_min)}</div>
+          <div class="big">${km(o.distance_km)}<span> km</span></div><div class="v">${Math.round(o.ascend_m)} m<small class="rel">${esc(reliefCategory(100 * o.ascend_m / Math.max(o.distance_km, 0.1)))}</small></div><div class="v">≈ ${hm(o.time_est_min)}</div>
           <div class="dplus-help" hidden>${esc(t('dplus_help'))}</div>
         </div>${o.shares.main_roads > 0.10 ? '<div class="roadwarn">' + WARN_ICON_() + '<span><b>' + pc(o.shares.main_roads) +
           '</b> ' + esc(t('k_main_short')) + '</span></div>' : ''}`;

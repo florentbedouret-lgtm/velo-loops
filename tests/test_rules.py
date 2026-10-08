@@ -177,3 +177,13 @@ def test_page_echappee():
     html_ = sp.page(s, {"options": [o]}, "fr", [])
     assert "<img src=x" not in html_ and "&lt;img" in html_
     assert "</script>" not in html_.split("application/ld+json")[1].split("</script>")[0]   # pas de sortie du JSON-LD
+
+
+def test_mots_du_relief():
+    """Mêmes seuils que l'app et relief_category() : Tranquille vise « peu vallonné », Modéré « vallonné »."""
+    w = lambda km, d: sp.relief_word({"distance_km": km, "ascend_m": d}, "fr")  # noqa: E731
+    assert w(40, 150) == "plat"                      # 3,8 m/km
+    assert w(40, 300) == "peu vallonné"              # 7,5 m/km
+    assert w(40, 500) == "vallonné"                  # 12,5 m/km
+    assert w(39, 676) == "très vallonné"             # 17,3 m/km : Gràcia 3 h tranquille (v16)
+    assert g.relief_category(1000) == "vallonné" and g.relief_category(999) == "peu vallonné"

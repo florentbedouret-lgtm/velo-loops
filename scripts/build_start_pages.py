@@ -84,7 +84,13 @@ T = {
         "app": "← Open the app", "langs": "Languages", "note": "Moving times, without breaks. Routes are indicative: check them before you ride.",
         "data": "Data: © OpenStreetMap contributors (ODbL), surface © ICGC (CC BY 4.0), routing by GraphHopper (Apache 2.0)."},
 }
+RELIEF = {'fr': ['plat', 'peu vallonné', 'vallonné', 'très vallonné'], 'ca': ['pla', 'poc ondulat', 'ondulat', 'molt ondulat'], 'es': ['llano', 'poco ondulado', 'ondulado', 'muy ondulado'], 'en': ['flat', 'gently rolling', 'hilly', 'very hilly']}   # mêmes seuils que relief_category() et l'app (D+ pour 100 km)
 e = html.escape
+
+
+def relief_word(o: dict, lang: str) -> str:
+    per100 = 100.0 * o["ascend_m"] / max(o["distance_km"], 0.1)
+    return RELIEF[lang][0 if per100 < 500 else 1 if per100 < 1000 else 2 if per100 < 1600 else 3]
 
 
 def dec(x: float, lang: str, nd: int = 1) -> str:
@@ -163,7 +169,7 @@ def loop_line(o: dict, s: dict, lang: str, rel: str) -> str:
         facts.append(d["dirt"].format(km=dec(dirt, lang)))
     q = f"?s={s['id']}&d={round(o['duration_target_min']) / 60:g}&l={o['level']}"
     return (f'<li><span class="lvl">{e(d["lvl"][o["level"]])}</span> '
-            f'<span class="fig">{dec(o["distance_km"], lang)} km · {e(d["dplus"].format(m=round(o["ascend_m"])))} · '
+            f'<span class="fig">{dec(o["distance_km"], lang)} km · {e(d["dplus"].format(m=round(o["ascend_m"])))} ({e(relief_word(o, lang))}) · '
             f'{e(d["time"].format(t=hm(o["time_est_min"])))}</span>'
             f'<span class="facts">{e(" · ".join(facts))}</span>'
             f'<a href="{rel}index.html{e(q)}">{e(d["see"])}</a></li>')
