@@ -107,6 +107,7 @@ DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
 # est plus longue que celles de la durée inférieure et plus courte que celles de la durée supérieure (order_bounds).
 # None : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash, "v16").
 DURATION_BIN_MARGIN = None
+ORDER_GAP_S = 180.0              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
 _TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
 
 
@@ -1445,24 +1446,30 @@ def time_ok(time_s: float, duration_h: float) -> bool:
 
 def order_bounds(options: list, level: str, duration_h: float) -> tuple:
     """Bornes de durée (s) d'une nouvelle boucle pour garder l'ordre des durées à cette allure (DURATION_BIN_MARGIN) :
-    plus longue que les options déjà choisies aux durées inférieures, plus courte que celles des durées supérieures."""
+    plus longue que la boucle RECOMMANDÉE des durées inférieures, plus courte que celle des durées supérieures.
+    08/10/2026 : seulement les recommandées (une secondaire un peu longue bloquait toute la durée suivante : Argelaguer
+    4 h, Castellfollit 5 h, Sant Celoni et Calella 6 h perdus) et un écart d'au moins ORDER_GAP_S."""
     lo, hi, dm = 0.0, float("inf"), round(duration_h * 60)
     for o in options:
-        if o["level"] != level:
+        if o["level"] != level or not str(o.get("id", "")).endswith("-1"):   # -1 : boucle recommandée (to_json)
             continue
         if o["duration_target_min"] < dm:
-            lo = max(lo, o["time_est_min"] * 60.0)
+            lo = max(lo, o["time_est_min"] * 60.0 + ORDER_GAP_S)
         elif o["duration_target_min"] > dm:
-            hi = min(hi, o["time_est_min"] * 60.0)
+            hi = min(hi, o["time_est_min"] * 60.0 - ORDER_GAP_S)
     return lo, hi
 
 
 def keep_order(pool: list, options: list, level: str, duration_h: float) -> list:
-    """Pool restreint aux boucles qui respectent l'ordre des durées (seulement si DURATION_BIN_MARGIN est actif)."""
+    """Pool restreint aux boucles qui respectent l'ordre des durées et ne sont pas déjà proposées à une autre durée de
+    cette allure (08/10/2026 : à Pallejà, la même boucle de 5 h 41 en « 5 h » et en « 6 h ») ; seulement si
+    DURATION_BIN_MARGIN est actif."""
     if not bin_margin():
         return pool
     lo, hi = order_bounds(options, level, duration_h)
-    return [l for l in pool if lo < l.time_s < hi]
+    dm = round(duration_h * 60)
+    taken = {o.get("route_key") for o in options if o["level"] == level and o["duration_target_min"] != dm}
+    return [l for l in pool if lo <= l.time_s <= hi and route_key(simplify(l.coords, 10.0)) not in taken]   # comme to_json
 
 
 def dirt_ok(l) -> bool:
