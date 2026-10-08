@@ -304,6 +304,13 @@
            display: flex; flex-direction: column; gap: 8px; }
     .tip p { margin: 0; font-size: 15px; line-height: 1.45; }
     .tip .tip-h { font-size: 16px; font-weight: var(--fw-medium); }
+    .tip + .rows, .tip + .tip { border-top: 0; margin-top: 0; }
+    .tip + .tip { padding-top: 0; }
+    .tip-train { flex-direction: row; align-items: flex-start; gap: 12px; }
+    .tip-train .tip-ico { flex: none; margin-top: 1px; }
+    .tip-train .tip-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+    .tip-train .tip-here { color: var(--color-text-2); white-space: nowrap; }
+    .tip-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 4px; }
     .tip .tip-fig { font-family: var(--font-mono); font-size: 13px; color: var(--color-text); }
     .tip .tip-note { font-size: 13px; color: var(--color-text-2); line-height: 1.4; }
     .tip .btn { align-self: flex-start; font-size: 15px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); }
@@ -1224,16 +1231,41 @@
     }
     // ---------- panel 30/09/2026 : depuis le centre-ville, suggérer un départ en gare (on y va en train, vélo compris) dont
     // la boucle de même durée et même allure est nettement meilleure (note, feux, sortie de ville : bloc compare de l'index)
-    const TRAIN_MAX_KM = 30;             // gare à 30 km au plus (à vol d'oiseau) du départ actuel
+    const TRAIN_MAX_KM = 20;             // gare à 20 km au plus (à vol d'oiseau) du départ actuel (30 avant le 08/10/2026)
+    const TRAIN_MIN_H = 1.5;             // pas de train pour une sortie de moins de 1 h 30 : le trajet pèserait plus que la boucle
     const TRAIN_SCORE_GAIN = 10;         // boucle notée au moins 10 points de plus
+    const TRAIN_EXIT_GAIN_KM = 3;        // et un écart visible : nature au moins 3 km plus tôt,
+    const TRAIN_CITY_GAIN = 0.15;        // ou 15 points de ville en moins,
+    const TRAIN_LIGHTS_RATIO = 0.5;      // ou au moins deux fois moins de feux
+    const TRAIN_ICON = '<svg class="tip-ico" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="5" y="2.5" width="12" height="13" rx="3" ' +
+      'fill="none" stroke="#24221F" stroke-width="1.5"/><path d="M5 9.5h12M8.5 5.5h5" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<circle cx="8.5" cy="12.5" r="1" fill="#24221F"/><circle cx="13.5" cy="12.5" r="1" fill="#24221F"/>' +
+      '<path d="M8 15.5l-2.5 4M14 15.5l2.5 4" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/></svg>';
     function trainStart(o) {
-      if (o.duration_target_min == null || !indexData) return '';
+      if (o.duration_target_min == null || !indexData || o.duration_target_min < TRAIN_MIN_H * 60) return '';
       const cur = indexData.starts.find(s => s.id === startSel.value);
       if (!cur || cur.kind === 'station') return '';
       const ex = exitKm(o), lights = o.traffic_lights_per_km || 0;
       const airport = s => /aeroport|aeropuerto|airport/.test(fold(s.name + ' ' + (s.municipality || '')));   // pas de boucle depuis un terminal
       if (cur.zone !== 'dense' && ex != null && ex <= 5 && lights < 2.5) return '';   // départ déjà hors de la ville
       const dur = String(Math.round(o.duration_target_min) / 60);
+      // 08/10/2026 : la gare n'est proposée que si l'écart se voit, et la carte montre cette raison face à la boucle actuelle
+      const curCity = (o.shares.urban.city || 0) + (o.shares.urban.residential || 0);   // même mesure que compare.urban_share
+      const reasonOf = c => {
+        const cx = compareExit(c), cxv = cx == null ? Infinity : cx, exv = ex == null ? Infinity : ex;
+        const cand = [];
+        if (cx != null && exv - cxv >= TRAIN_EXIT_GAIN_KM)
+          cand.push({ k: 'exit', w: Math.min(1, (exv - cxv) / 10), there: cx === 0 ? t('train_exit0') : t('train_exit', { km: km(cx) }),
+                      here: ex == null ? t('train_here_stays') : t('train_here_km', { km: km(ex) }) });
+        if (c.urban_share != null && curCity - c.urban_share >= TRAIN_CITY_GAIN)
+          cand.push({ k: 'city', w: (curCity - c.urban_share) * 2, there: t('train_city', { p: pctStr(Math.round(c.urban_share * 100)) }),
+                      here: t('train_here_pct', { p: pctStr(Math.round(curCity * 100)) }) });
+        const cl = c.lights_per_km || 0;
+        if (lights >= 0.5 && cl <= lights * TRAIN_LIGHTS_RATIO)
+          cand.push({ k: 'lights', w: 1 - cl / lights, there: cl < 0.05 ? t('train_lights0') : t('train_lights', { l: km1(cl) }),
+                      here: t('train_here_l', { l: km1(lights) }) });
+        return cand.sort((a, b) => b.w - a.w)[0] || null;
+      };
       let best = null;
       for (const s of indexData.starts) {
         if (s.kind !== 'station' || s.id === cur.id || s.id === lastNeighbourId || airport(s)) continue;
@@ -1242,17 +1274,16 @@
         if ((c.lights_per_km || 0) > lights) continue;
         const d = crowKm(cur.lon, cur.lat, s.lon, s.lat);
         if (d > TRAIN_MAX_KM) continue;
-        if (!best || c.score > best.c.score || (c.score === best.c.score && d < best.d)) best = { s, c, d };
+        const r = reasonOf(c);
+        if (!r) continue;                                   // pas d'écart visible : on ne propose pas cette gare
+        const v = r.w * (1 - d / (2 * TRAIN_MAX_KM));     // une gare proche passe avant une gare lointaine à écart égal
+        if (!best || v > best.v) best = { s, c, d, r, v };
       }
       if (!best) return '';
-      const cx = compareExit(best.c);                    // brief v3 : chiffres en mono, phrase courte, note en galet
-      return '<div class="tip"><p class="tip-h">' + t('tip_train_txt2', { name: esc(startLabel(best.s)), km: km(best.d),
-          dur: hm(o.duration_target_min) }) + '</p>' +
-        '<p>' + esc(t('tip_train_why', { l1: km1(best.c.lights_per_km || 0), l0: km1(lights),
-          exit: cx == null ? t('train_stays') : cx === 0 ? t('train_exit0') : t('train_exit', { km: km(cx) }) })) + '</p>' +
-        '<small class="tip-note">' + esc(t('tip_train_note')) + '</small>' +
-        '<button type="button" class="btn" onclick="goTrain(\'' + best.s.id + '\')">' + esc(t('go_from', { name: trName(best.s.name) })) +
-        '</button></div>';
+      return '<div class="tip tip-train">' + TRAIN_ICON + '<div class="tip-body"><p class="tip-h">' + esc(t('train_h_' + best.r.k)) + '</p>' +
+        '<p>' + esc(trName(best.s.name)) + ' · <b>' + esc(best.r.there) + '</b> <span class="tip-here">(' + esc(best.r.here) + ')</span></p>' +
+        '<div class="tip-act"><button type="button" class="btn" onclick="goTrain(\'' + best.s.id + '\')">' + esc(t('train_see')) + '</button>' +
+        '<small class="tip-note">' + esc(t('tip_train_note')) + '</small></div></div></div>';
     }
     function goTrain(id) {
       const s = indexData.starts.find(x => x.id === id);
@@ -1459,6 +1490,7 @@
         ${lc ? terrainBar(o) : '<div class="sub">' + esc(t('city_pct', { p: pctStr(Math.round(cityShare(o) * 100)) })) + '</div>'}
         ${keysHtml(o)}
         ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead">' + (o.terrain.climbs && o.terrain.climbs.length ? esc(tn('pf_climbs', o.terrain.climbs.length)) : '') + '</span></div>' + pf + '</div>' : ''}
+        ${longer}${natureNeighbour(o)}${trainStart(o)}
         <div class="rows">
           <details><summary>${esc(t('all_figures'))}</summary>
             <div class="facts">${facts}</div>
@@ -1468,7 +1500,6 @@
           </details>
           ${feedbackHtml(o)}
         </div>
-        ${longer}${natureNeighbour(o)}${trainStart(o)}
         ${others}
         <small class="notes">${esc(t('notes'))}</small>
         <div id="legal">${esc(t('legal_line'))} · <a href="${HOW_PAGE[LANG] || HOW_PAGE.fr}" target="_blank" rel="noopener">${esc(t('how_link'))}</a> · <a href="mentions.html" target="_blank" rel="noopener">${esc(t('legal_link'))}</a></div>`;
