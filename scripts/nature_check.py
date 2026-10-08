@@ -439,7 +439,7 @@ def relief_generate(gh, st_, sid, durations, levels, limits):
     return out
 
 
-def run_relief_test(sid, site, gh_url, durations, levels, prev_dir):
+def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17"):
     """Même départ sans puis avec les règles de relief v17 ; boucles v15 remises en jeu comme en production v16."""
     idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
     entry = next((e for e in idx["starts"] if e["id"] == sid), None)
@@ -459,7 +459,8 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir):
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    b = relief_generate(gh, st_, sid, durations, levels, g.RELIEF_LIMITS_V17)
+    b = relief_generate(gh, st_, sid, durations, levels,
+                        g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)]}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
@@ -1176,6 +1177,7 @@ def main() -> int:
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
     ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
+    ap.add_argument("--relief-variant", default="v17", help="v17 ou flat (tirages calm_flat, Modéré 4 points par m/km)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")
@@ -1251,7 +1253,7 @@ def main() -> int:
         durations = [float(x) for x in args.durations.split()]
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             results = list(ex.map(lambda sid: run_relief_test(sid, args.site, args.gh, durations, args.levels.split(),
-                                                              args.prev_dir), ids))
+                                                              args.prev_dir, args.relief_variant), ids))
         report_relief_test(results, args.out, args.out_md, t0)
         return 0
     if args.probe and args.margin_test is not None:

@@ -83,7 +83,12 @@ RELIEF_FULL_M_PER_KM = 20.0   # 20 m de D+ par km (2 000 m pour 100 km) = relief
 RELIEF_LIMITS = None
 RELIEF_LIMITS_V17 = {"facile": {"max_dpk": 10.0, "banned_cats": ("2", "1", "HC"), "max_grade": 20.0, "pen_above": 10.0},
                      "modere": {"pen_above": 15.0}}
-RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible
+# 2e essai (08/10/2026, test 1 : repli dans 50 % des cas en Tranquille, Modéré presque inchangé) : tirages avec le profil
+# GraphHopper « calm_flat » (loop_calm + pente moyenne fortement pénalisée, scripts/diag_models/loop_flat.json ; à mettre
+# dans config/ à l'activation) et Modéré pénalisé de 4 points par m/km au-dessus de 15
+RELIEF_LIMITS_V17_FLAT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profile": "calm_flat"},
+                          "modere": {"pen_above": 15.0, "pen_per": 0.04}}
+RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible (pen_per dans RELIEF_LIMITS pour changer)
 RELIEF_OVER_MAX = 0.20
 CLIMB_LEVELS = ("soutenu",)
 CLIMB_CANDIDATES = [(11, None), (12, None), (13, 0), (14, 90), (15, 180), (16, 270)]
@@ -1444,7 +1449,7 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
                      (INDUSTRIAL_PENALTY if ind_penalty is None else ind_penalty) * l.scenery.get("industrial", 0.0))
     lim = relief_limits().get(l.level)                    # relief au-dessus de la cible de l'allure (RELIEF_LIMITS)
     if lim and lim.get("pen_above") is not None and l.dplus_per_km > lim["pen_above"]:
-        total -= min(RELIEF_OVER_MAX, RELIEF_OVER_PENALTY * (l.dplus_per_km - lim["pen_above"]))
+        total -= min(RELIEF_OVER_MAX, lim.get("pen_per", RELIEF_OVER_PENALTY) * (l.dplus_per_km - lim["pen_above"]))
     return round(100 * max(0.0, total), 1)
 
 
@@ -2243,6 +2248,9 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
     les tirages « montée » en niveau sportif. Utilisé par la génération ET par le diagnostic (nature_check --probe)."""
     pool: list = []
     runs = [(profile, gh, candidates, profile) for profile in LEVELS[level]["profiles"]]
+    flat = (relief_limits().get(level) or {}).get("flat_profile")
+    if flat:                                                 # relief v17 : tirages qui évitent les côtes (Tranquille)
+        runs.append((flat, gh, candidates, flat))
     if level in CLIMB_LEVELS:
         runs.append(("sport", _ClimbGH(gh), CLIMB_CANDIDATES, "sport + montée"))
     spare: list = []
