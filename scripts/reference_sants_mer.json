@@ -1,5 +1,5 @@
 {
- "_note": "Boucles proposées par Florent (08/10/2026) : Sants-Montjuïc, Tranquille, 2 h, par le bord de mer goudronné de Poblenou (vérifié par Florent dans OSM) : passeig Marítim du Port Olímpic, voies de service de Nova Icària, avinguda del Litoral (chaussée, tant que le passeig del Bogatell est en travaux), piste de Bac de Roda vers la Mar Bella, puis le front de mer jusqu'au Fòrum. Points de passage pris sur les voies OSM et sur la boucle publiée (v16). Utilisée par nature_check.py --compare-refs (diag_part=cmp4).",
+ "_note": "Boucles proposées par Florent (08/10/2026) : Sants-Montjuïc, Tranquille, 2 h, par le bord de mer goudronné de Poblenou (vérifié par Florent dans OSM) : passeig Marítim du Port Olímpic, voies de service de Nova Icària, avinguda del Litoral (chaussée, tant que le passeig del Bogatell est en travaux), piste de Bac de Roda vers la Mar Bella, puis le front de mer jusqu'au Fòrum. Points de passage pris sur les voies OSM et sur la boucle publiée (v16). Utilisée par nature_check.py --compare-refs (diag_part=cmp4). Version 2 (08/10/2026, soir) : sans le point sur l'avinguda del Litoral (accroché à la mauvaise voie : demi-tour), point de Bac de Roda déplacé sur la piste du front de mer de la Mar Bella (OSM 280405213) : GraphHopper choisit lui-même le passage entre Nova Icària et la Mar Bella.",
  "start": "sants-montjuic",
  "loops": [
   {
@@ -47,12 +47,8 @@
      41.393
     ],
     [
-     2.20805,
-     41.397
-    ],
-    [
-     2.2121,
-     41.4015
+     2.21292,
+     41.40088
     ],
     [
      2.21922,
@@ -63,8 +59,8 @@
      41.4115
     ],
     [
-     2.2121,
-     41.4015
+     2.21292,
+     41.40088
     ],
     [
      2.2049,
@@ -149,12 +145,8 @@
      41.393
     ],
     [
-     2.20805,
-     41.397
-    ],
-    [
-     2.2121,
-     41.4015
+     2.21292,
+     41.40088
     ],
     [
      2.21922,
