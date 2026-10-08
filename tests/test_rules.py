@@ -21,6 +21,7 @@ def test_essais_desactives_en_production():
     assert g.DURATION_BIN_MARGIN is None
     assert g.RELIEF_LIMITS is None
     assert g.TARGETED_GATE is None
+    assert g.DIRT_RULES is None
 
 
 def test_empreinte_stable():
@@ -244,3 +245,22 @@ def test_repli_relief_publie(monkeypatch):
     assert getattr(flat, "relief_fallback", False)
     src = Path(g.__file__).read_text(encoding="utf-8")
     assert '"relief_fallback": True} if getattr(l, "relief_fallback", False)' in src
+
+
+# ----------------------------------------------------------------------------- terre v17
+def _dirt(km, dist_km=40.0):
+    return SimpleNamespace(shares={"unpaved": km / dist_km}, distance_m=dist_km * 1000.0, unpaved_fallback=False)
+
+
+def test_terre_v17_plafond_et_repli(monkeypatch):
+    monkeypatch.setattr(g, "DIRT_RULES", g.DIRT_RULES_V17)
+    kept = g.dirt_filter([_dirt(0.4), _dirt(1.6), _dirt(0.9)], "facile", lambda *_: None)
+    assert sorted(round(l.shares["unpaved"] * 40, 1) for l in kept) == [0.4, 0.9]       # plafond 1 km
+    only = g.dirt_filter([_dirt(2.5), _dirt(1.8)], "modere", lambda *_: None)
+    assert len(only) == 1 and round(only[0].shares["unpaved"] * 40, 1) == 1.8 and only[0].unpaved_fallback   # repli annoncé
+
+
+def test_terre_v17_inactive(monkeypatch):
+    monkeypatch.setattr(g, "DIRT_RULES", None)
+    pool = [_dirt(3.0)]
+    assert g.dirt_filter(pool, "facile", lambda *_: None) == pool

@@ -131,6 +131,11 @@ def bin_margin():
     return getattr(_TL, "bin_margin", DURATION_BIN_MARGIN)
 
 
+def dirt_rules() -> dict:
+    """Règles de terre v17 (DIRT_RULES), réglables par fil d'exécution pour les diagnostics."""
+    return getattr(_TL, "dirt_rules", DIRT_RULES) or {}
+
+
 def relief_limits() -> dict:
     """Règles de relief de l'allure (RELIEF_LIMITS), réglables par fil d'exécution pour les diagnostics."""
     return getattr(_TL, "relief_limits", RELIEF_LIMITS) or {}
@@ -215,6 +220,11 @@ VIEW_NEAR_DEG = 0.0012          # ~100 m
 VIEW_BONUS = 0.02               # 2 points par belvédère
 VIEW_MAX_BONUS = 0.04
 UNPAVED_PENALTY_PER_KM = 0.03    # note : 3 points par km de terre (notée, probable ou ICGC), 30 au plus
+# Terre v17 (Florent, 08/10/2026 : « limiter la terre au maximum » ; en v16, 13 % des boucles recommandées ont plus de
+# 1 km de terre) : plafond max_km avec REPLI (sans boucle sous le plafond, la moins terreuse est gardée et annoncée,
+# unpaved_fallback : plus aucun départ retiré) et pen_per_km par km. None : désactivé (production v16).
+DIRT_RULES = None
+DIRT_RULES_V17 = {"max_km": 1.0, "pen_per_km": 0.06}
 FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
 WEIGHTS = {"calm": 0.22, "lights": 0.30, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}   # feux 0,22 -> 0,30 (v16)
@@ -1439,7 +1449,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     # terre : dès le premier km, 3 points par km (Gràcia 2 h, 30/09/2026 : 1,9 km de piste en terre évitable ne coûtaient
     # que 4 points, la pénalité ne comptant qu'au-delà de 3 % du parcours) ; la part au-delà de 3 % reste pénalisée
     dirt_km = l.shares["unpaved"] * l.distance_m / 1000.0 + l.steep_dirt_km   # terre raide comptée deux fois
-    total -= min(0.3, max(UNPAVED_PENALTY_PER_KM * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
+    per_km = dirt_rules().get("pen_per_km", UNPAVED_PENALTY_PER_KM)
+    total -= min(0.3, max(per_km * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
     total += min(REMARKABLE_MAX_BONUS, REMARKABLE_BONUS * len(l.remarkable))   # Tibidabo, belvédères connus…
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
@@ -1465,6 +1476,22 @@ def relief_ok(l) -> bool:
     if lim.get("max_grade") is not None and (l.terrain.get("max_grade_pct") or 0.0) >= lim["max_grade"]:
         return False
     return True
+
+
+def dirt_filter(pool: list, level: str, log) -> list:
+    """Terre v17 : pool réduit aux boucles sous le plafond ; sans aucune, la moins terreuse seule, marquée
+    unpaved_fallback (l'app l'annonce). Désactivé si DIRT_RULES est vide."""
+    cap = dirt_rules().get("max_km")
+    if not pool or cap is None:
+        return pool
+    km = lambda l: l.shares["unpaved"] * l.distance_m / 1000.0  # noqa: E731
+    ok = [l for l in pool if km(l) <= cap]
+    if ok:
+        return ok
+    least = min(pool, key=km)
+    least.unpaved_fallback = True
+    log(f"    terre : aucune boucle sous {cap:g} km ({level}), la moins terreuse gardée ({km(least):.1f} km)")
+    return [least]
 
 
 def relief_filter(pool: list, level: str, log) -> list:
@@ -2287,7 +2314,7 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             if t is not None:
                 pool.append(t)
     if pool:
-        return relief_filter(pool, level, log)
+        return relief_filter(dirt_filter(pool, level, log), level, log)
     # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre
     # empêche souvent GraphHopper de boucler (candidats rejetés pour la durée ou les tronçons répétés) : on retente avec
     # les profils « souples », puis on garde les candidats les moins terreux sous les limites du repli, signalés.
@@ -2298,7 +2325,7 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
     if pool:
-        return relief_filter(pool, level, log)
+        return relief_filter(dirt_filter(pool, level, log), level, log)
     if spare:
         log(f"    repli : {len(spare)} candidat(s) avec un peu de terre (au plus {FALLBACK_UNPAVED_KM:g} km / "
             f"{FALLBACK_UNPAVED_SHARE:.0%}), signalé(s)")

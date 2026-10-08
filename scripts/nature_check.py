@@ -411,10 +411,11 @@ def run_probe(sid, site, gh_url, durations, levels):
 
 
 # ----------------------------------------------------------------------------- relief par allure (08/10/2026)
-def relief_generate(gh, st_, sid, durations, levels, limits):
+def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
     """Toutes les durées des allures demandées comme la génération réelle, avec les règles de relief données (None =
     production v16)."""
     g._TL.relief_limits = limits
+    g._TL.dirt_rules = dirt
     out, options = {}, []
     for d in durations:
         prior = []
@@ -433,9 +434,12 @@ def relief_generate(gh, st_, sid, durations, levels, limits):
                              "nature": round(lc.get("forest", 0) + lc.get("water", 0), 3), "exit": o.get("exit_city_km"),
                              "lights_km": o["traffic_lights_per_km"], "cats": [c for c in cats if c != "nc"],
                              "max_grade": (o.get("terrain") or {}).get("max_grade_pct"),
-                             "fallback": bool(getattr(l, "relief_fallback", False)), "key": o["route_key"]})
+                             "fallback": bool(getattr(l, "relief_fallback", False)), "key": o["route_key"],
+                             "dirt": round(o["distance_km"] * o["shares"]["unpaved"], 1),
+                             "dirt_fallback": bool(o.get("unpaved_fallback"))})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
+    del g._TL.dirt_rules
     return out
 
 
@@ -459,8 +463,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    b = relief_generate(gh, st_, sid, durations, levels,
-                        g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
+    if variant == "dirt":                                  # terre v17 seule (relief inchangé)
+        b = relief_generate(gh, st_, sid, durations, levels, None, g.DIRT_RULES_V17)
+    else:
+        b = relief_generate(gh, st_, sid, durations, levels,
+                            g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)]}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
@@ -472,9 +479,12 @@ def report_relief_test(results, out_json, out_md, t0):
     res = [r for r in results if not r.get("skipped")]
     med = lambda v: sorted(v)[len(v) // 2] if v else None  # noqa: E731
     L = [f"# Relief par allure (v17) : {len(res)} départs — {round((time.time() - t0) / 60)} min", "",
-         "| allure | D+/km médian v16 -> v17 | > 10 m/km | > 15 m/km | note moyenne | nature médiane | repli | options |",
-         "|---|---|---|---|---|---|---|---|"]
-    for lv in ("facile", "modere"):
+         "| allure | D+/km médian v16 -> v17 | > 10 m/km | > 15 m/km | note moyenne | nature médiane | repli | options |"
+         " terre > 1 km | terre > 0,5 km | repli terre |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for lv in ("facile", "modere", "soutenu"):
+        if not any(key.endswith("|" + lv) for r in res for key in r["v16"]):
+            continue
         def recs(k):
             return [rows[0] for r in res for key, rows in r[k].items() if key.endswith("|" + lv) and rows]
         a, b = recs("v16"), recs("relief")
@@ -484,7 +494,10 @@ def report_relief_test(results, out_json, out_md, t0):
                  f"{sum(x['dpk'] > 15 for x in a)} -> {sum(x['dpk'] > 15 for x in b)} | "
                  f"{sum(x['score'] for x in a) / max(1, len(a)):.1f} -> {sum(x['score'] for x in b) / max(1, len(b)):.1f} | "
                  f"{med([x['nature'] for x in a])} -> {med([x['nature'] for x in b])} | {sum(x['fallback'] for x in b)} | "
-                 f"{opts('v16')} -> {opts('relief')} |")
+                 f"{opts('v16')} -> {opts('relief')} | "
+                 f"{sum(x.get('dirt', 0) > 1 for x in a)} -> {sum(x.get('dirt', 0) > 1 for x in b)} | "
+                 f"{sum(x.get('dirt', 0) > 0.5 for x in a)} -> {sum(x.get('dirt', 0) > 0.5 for x in b)} | "
+                 f"{sum(x.get('dirt_fallback', False) for x in b)} |")
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L), flush=True)
 
