@@ -235,3 +235,12 @@ def test_liaisons_frequence(monkeypatch):
                "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n" + st})
     res, _ = tl.feed_links("x", z, [1.0, 41.0, 3.0, 42.0], [{"id": "gare-poble", "lon": 2.0, "lat": 41.5}], lambda *_: None)
     assert res[0]["to"] == [["gare-poble", 20, 2.0]]               # 10 trains de 7 h à 11 h 30 : 2 par heure, 20 min
+
+
+def test_repli_relief_publie(monkeypatch):
+    """Le repli de relief part dans les données publiées (l'app l'affiche) ; absent sinon."""
+    monkeypatch.setattr(g, "RELIEF_LIMITS", g.RELIEF_LIMITS_V17)
+    flat = g.relief_filter([_relief("facile", 13.0)], "facile", lambda *_: None)[0]
+    assert getattr(flat, "relief_fallback", False)
+    src = Path(g.__file__).read_text(encoding="utf-8")
+    assert '"relief_fallback": True} if getattr(l, "relief_fallback", False)' in src

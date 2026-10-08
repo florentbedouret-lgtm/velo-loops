@@ -2512,6 +2512,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"surface_seq": l.surface_seq} if any(c in l.surface_seq for c in "upn") else {}),
         **({"road_seq": l.road_seq} if "m" in l.road_seq or "c" in l.road_seq else {}),
         **({"unpaved_fallback": True} if l.unpaved_fallback else {}),
+        **({"relief_fallback": True} if getattr(l, "relief_fallback", False) else {}),   # v17 : aucune boucle peu vallonnée
         **({"targeted": True} if 900 <= l.seed < 1000 else {}),   # tirage ciblé (lieu attrayant), pour les diagnostics
         **({"retouched": True} if 1000 <= l.seed < 2000 else {}), # retouche d'une meilleure boucle (RETOUCH)
         **({"kept": True} if l.seed >= 2000 else {}),             # boucle de la version précédente (KEEP_PREVIOUS)

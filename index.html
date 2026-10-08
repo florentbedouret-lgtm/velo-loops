@@ -1146,6 +1146,7 @@
       updatePill();
       renderSuggest();                                    // accueil : les départs proposés suivent l'allure et la durée
       if (!startData) return;
+      syncUrl();                                          // l'adresse suit la durée et l'allure, même sans boucle à afficher
       shown = startData.options.filter(o => o.level === levelSel.value &&
         (o.duration_target_min == null ||
          Math.round(o.duration_target_min) === Math.round(Number(durSel.value) * 60)));
@@ -1368,6 +1369,8 @@
       const dirt = dirtKm(o);
       if (dirt != null && (dirt >= 0.5 || o.unpaved_fallback)) out.push([km1(dirt) + ' km',
         t(o.unpaved_fallback ? 'k_dirt_fallback' : 'k_dirt'), true, o.surface_seq ? 'dirt' : null]);
+      // relief (v17) : en Tranquille, aucune boucle « peu vallonnée » depuis ce départ ; la moins vallonnée est proposée
+      if (o.relief_fallback) out.push([km1(o.ascend_m / Math.max(o.distance_km, 0.1)) + ' m/km', t('k_relief_fallback'), true, null]);
       if (sh.main_roads > 0.10) out.push([pc(sh.main_roads), t('k_main'), true, rs ? 'main' : null]);
       else if (sh.dedicated_cycleway >= 0.20) out.push([pc(sh.dedicated_cycleway), t('k_cycle'), false, rs ? 'cycle' : null]);
       else if (o.traffic_lights === 0) out.push([t('k_nolight_fig'), t('k_nolight')]);
@@ -1711,14 +1714,41 @@
       if (!startData || !shown[current]) return;
       try { localStorage.setItem(LAST_KEY, JSON.stringify({ s: startSel.value, d: durSel.value, l: levelSel.value, o: shown[current].label })); }
       catch (e) { /* stockage bloqué : rien n'est retenu */ }
+      syncUrl();
     }
+    // 08/10/2026 : la boucle affichée est dans l'adresse de la page (retour arrière, marque-page, onglet rouvert, liens des
+    // pages par départ) ; nouveau départ, durée ou allure = nouvelle entrée d'historique, autre option = même entrée
+    let urlRestoring = false;
+    function syncUrl() {
+      const u = loopUrl(), restoring = urlRestoring;
+      urlRestoring = false;
+      if (u === location.href) return;
+      const prev = new URLSearchParams(location.search), q = new URL(u).searchParams;
+      const same = ['s', 'd', 'l'].every(k => prev.get(k) === q.get(k));
+      const how = restoring || same || !prev.get('s') ? 'replaceState' : 'pushState';
+      try { history[how]({ oyan: 1 }, '', u); } catch (e) { /* adresse inchangée */ }
+    }
+    window.addEventListener('popstate', () => {          // retour arrière : réafficher la boucle de l'adresse
+      const q = new URLSearchParams(location.search), sid = q.get('s');
+      if (!sid || !indexData || !indexData.starts.some(x => x.id === sid)) return;
+      urlRestoring = true;
+      if (q.get('l') && [...levelSel.options].some(o => o.value === q.get('l'))) levelSel.value = q.get('l');
+      if (q.get('d') && [...durSel.options].some(o => o.value === q.get('d'))) durSel.value = q.get('d');
+      wantedOption = q.get('o') || null;
+      if (sid !== startSel.value) {
+        const st = indexData.starts.find(x => x.id === sid);
+        setWhere(() => startLine(st, ''));
+        approachMin = null;
+        chooseStart(sid);
+      } else showLevel();
+    });
     let wantedOption = null;                               // option demandée par un lien (appliquée au chargement du départ)
     function restoreLoop() {                               // un lien passe avant les derniers réglages de l'appareil
       const q = new URLSearchParams(location.search);
       let r = q.get('s') ? { s: q.get('s'), d: q.get('d'), l: q.get('l'), o: q.get('o'), link: true } : null;
       if (!r) { try { r = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); } catch (e) { r = null; } }
       if (!r || !indexData.starts.some(x => x.id === r.s)) return;
-      if (r.link) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* adresse inchangée */ } }
+      if (r.link) urlRestoring = true;                       // l'adresse du lien est gardée (08/10/2026)
       if (r.l && [...levelSel.options].some(o => o.value === r.l)) levelSel.value = r.l;
       if (r.d && [...durSel.options].some(o => o.value === r.d)) durSel.value = r.d;
       wantedOption = r.o || null;
