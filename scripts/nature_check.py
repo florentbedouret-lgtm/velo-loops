@@ -410,6 +410,84 @@ def run_probe(sid, site, gh_url, durations, levels):
             "gh_calls": gh.calls, "gh_hits": gh.hits}
 
 
+# ----------------------------------------------------------------------------- relief par allure (08/10/2026)
+def relief_generate(gh, st_, sid, durations, levels, limits):
+    """Toutes les durées des allures demandées comme la génération réelle, avec les règles de relief données (None =
+    production v16)."""
+    g._TL.relief_limits = limits
+    out, options = {}, []
+    for d in durations:
+        prior = []
+        for level in sorted(levels, key=list(g.LEVELS).index):
+            pool = g.keep_order(g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None), options, level, d)
+            picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
+            prior += [l for _, l in picks]
+            rows = []
+            for i, (lab, l) in enumerate(picks, start=1):
+                o = g.to_json(l, lab, sid, i)
+                options.append(o)
+                lc = (o.get("scenery") or {}).get("landcover") or {}
+                cats = [c.get("category") for c in (o.get("terrain") or {}).get("climbs", [])]
+                rows.append({"score": o["score"], "label": lab, "km": o["distance_km"], "dplus": o["ascend_m"],
+                             "dpk": round(o["ascend_m"] / max(o["distance_km"], 0.1), 1), "min": o["time_est_min"],
+                             "nature": round(lc.get("forest", 0) + lc.get("water", 0), 3), "exit": o.get("exit_city_km"),
+                             "lights_km": o["traffic_lights_per_km"], "cats": [c for c in cats if c != "nc"],
+                             "max_grade": (o.get("terrain") or {}).get("max_grade_pct"),
+                             "fallback": bool(getattr(l, "relief_fallback", False)), "key": o["route_key"]})
+            out[f"{d:g}|{level}"] = rows
+    del g._TL.relief_limits
+    return out
+
+
+def run_relief_test(sid, site, gh_url, durations, levels, prev_dir):
+    """Même départ sans puis avec les règles de relief v17 ; boucles v15 remises en jeu comme en production v16."""
+    idx = requests.get(f"{site}/web/data/index.json", timeout=60).json()
+    entry = next((e for e in idx["starts"] if e["id"] == sid), None)
+    if entry is None:
+        return {"id": sid, "skipped": "départ absent de l'index publié"}
+    gh = GH(gh_url)
+    snapped = gh.nearest(entry["lat"], entry["lon"])
+    st_ = {"name": entry["name"], "lon": snapped[0], "lat": snapped[1], "previous": {}}
+    if prev_dir.startswith("http"):                      # boucles publiées (v16) : ce que la v17 remettra en jeu
+        prev = requests.get(f"{prev_dir.rstrip('/')}/{sid}.json", timeout=60).json()
+    else:
+        pf = Path(prev_dir) / f"{sid}.json"
+        prev = json.loads(pf.read_text(encoding="utf-8")) if pf.exists() else {"options": []}
+    for o in prev["options"]:
+        st_["previous"].setdefault((o["level"], round(o["duration_target_min"])), []).append(
+            (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
+    t0 = time.time()
+    a = relief_generate(gh, st_, sid, durations, levels, None)
+    t1 = time.time()
+    b = relief_generate(gh, st_, sid, durations, levels, g.RELIEF_LIMITS_V17)
+    res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)]}
+    Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
+    print(f"{sid} : {res['s']} s", flush=True)
+    return res
+
+
+def report_relief_test(results, out_json, out_md, t0):
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    res = [r for r in results if not r.get("skipped")]
+    med = lambda v: sorted(v)[len(v) // 2] if v else None  # noqa: E731
+    L = [f"# Relief par allure (v17) : {len(res)} départs — {round((time.time() - t0) / 60)} min", "",
+         "| allure | D+/km médian v16 -> v17 | > 10 m/km | > 15 m/km | note moyenne | nature médiane | repli | options |",
+         "|---|---|---|---|---|---|---|---|"]
+    for lv in ("facile", "modere"):
+        def recs(k):
+            return [rows[0] for r in res for key, rows in r[k].items() if key.endswith("|" + lv) and rows]
+        a, b = recs("v16"), recs("relief")
+        opts = lambda k: sum(len(rows) for r in res for key, rows in r[k].items() if key.endswith("|" + lv))  # noqa: E731
+        L.append(f"| {lv} | {med([x['dpk'] for x in a])} -> {med([x['dpk'] for x in b])} | "
+                 f"{sum(x['dpk'] > 10 for x in a)} -> {sum(x['dpk'] > 10 for x in b)} | "
+                 f"{sum(x['dpk'] > 15 for x in a)} -> {sum(x['dpk'] > 15 for x in b)} | "
+                 f"{sum(x['score'] for x in a) / max(1, len(a)):.1f} -> {sum(x['score'] for x in b) / max(1, len(b)):.1f} | "
+                 f"{med([x['nature'] for x in a])} -> {med([x['nature'] for x in b])} | {sum(x['fallback'] for x in b)} | "
+                 f"{opts('v16')} -> {opts('relief')} |")
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L), flush=True)
+
+
 # ----------------------------------------------------------------------------- marge des plages de durée (07/10/2026)
 def margin_generate(gh, st_, sid, durations, levels, margin):
     """Toutes les durées et allures d'un départ comme la génération réelle, avec la marge des plages donnée (None = v16)."""
@@ -1097,6 +1175,7 @@ def main() -> int:
     ap.add_argument("--out-md", required=True)
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
+    ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")
@@ -1166,6 +1245,14 @@ def main() -> int:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
         report_compare(res, args.out, args.out_md, args.note, t0)
+        return 0
+    if args.probe and args.relief_test:
+        ids = [x.strip() for x in args.probe.split(";") if x.strip()]
+        durations = [float(x) for x in args.durations.split()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_relief_test(sid, args.site, args.gh, durations, args.levels.split(),
+                                                              args.prev_dir), ids))
+        report_relief_test(results, args.out, args.out_md, t0)
         return 0
     if args.probe and args.margin_test is not None:
         ids = [x.strip() for x in args.probe.split(";") if x.strip()]

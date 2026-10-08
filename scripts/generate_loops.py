@@ -74,6 +74,17 @@ RELIEF_WEIGHTS: dict = {"soutenu": 0.30}   # v15 (sonde du 03/10/2026, 16 dépar
 # une plus longue et plus vallonnée n'est PAS un doublon). La boucle principale (équilibrée) n'est jamais écartée.
 LEVEL_DUP_SIM = 0.8           # (si aucune autre boucle n'existe, l'option est gardée et marquée : voir choose_options)
 RELIEF_FULL_M_PER_KM = 20.0   # 20 m de D+ par km (2 000 m pour 100 km) = relief maximal noté
+# Relief par allure (Florent, 08/10/2026 : « peut-on vraiment considérer 38,7 km et 798 m de D+ comme tranquille ? ») :
+# en v16, Tranquille (13,5 m/km en médiane) et Modéré (14,0) avaient le même relief. Cibles : Tranquille 5-10 m/km,
+# Modéré 10-15 m/km. Tranquille : règles OBLIGATOIRES pour toutes ses options, « Plus de relief » compris (D+ par km au
+# plus max_dpk, aucune montée de catégorie 2 / 1 / HC, aucune rampe ≥ max_grade %, même seuil que l'alerte « rampe très
+# raide » de l'app) ; sans boucle conforme, la moins vallonnée est gardée (repli signalé). Au-dessus de pen_above, la
+# note perd RELIEF_OVER_PENALTY par m/km (RELIEF_OVER_MAX au plus). None : désactivé (production v16).
+RELIEF_LIMITS = None
+RELIEF_LIMITS_V17 = {"facile": {"max_dpk": 10.0, "banned_cats": ("2", "1", "HC"), "max_grade": 20.0, "pen_above": 10.0},
+                     "modere": {"pen_above": 15.0}}
+RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible
+RELIEF_OVER_MAX = 0.20
 CLIMB_LEVELS = ("soutenu",)
 CLIMB_CANDIDATES = [(11, None), (12, None), (13, 0), (14, 90), (15, 180), (16, 270)]
 CLIMB_MODEL = {
@@ -113,6 +124,11 @@ _TL = threading.local()          # réglage par fil d'exécution (diagnostics qu
 
 def bin_margin():
     return getattr(_TL, "bin_margin", DURATION_BIN_MARGIN)
+
+
+def relief_limits() -> dict:
+    """Règles de relief de l'allure (RELIEF_LIMITS), réglables par fil d'exécution pour les diagnostics."""
+    return getattr(_TL, "relief_limits", RELIEF_LIMITS) or {}
 # Même audit : 12 % des boucles avaient plus de 3 km de terre (8,5 km à la Molina en 5 h : la limite était une PART du
 # parcours) ; les pentes de plus de 20 % étaient presque toutes sur des chemins de terre. Essai : désactivé.
 DIRT_MAX_KM = 4.0               # plafond absolu de terre (notée ou probable) ; v16 : 4 km
@@ -1426,7 +1442,38 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
         total -= min(INDUSTRIAL_MAX_PENALTY if ind_max is None else ind_max,
                      (INDUSTRIAL_PENALTY if ind_penalty is None else ind_penalty) * l.scenery.get("industrial", 0.0))
+    lim = relief_limits().get(l.level)                    # relief au-dessus de la cible de l'allure (RELIEF_LIMITS)
+    if lim and lim.get("pen_above") is not None and l.dplus_per_km > lim["pen_above"]:
+        total -= min(RELIEF_OVER_MAX, RELIEF_OVER_PENALTY * (l.dplus_per_km - lim["pen_above"]))
     return round(100 * max(0.0, total), 1)
+
+
+def relief_ok(l) -> bool:
+    """Boucle conforme aux règles obligatoires de relief de son allure (RELIEF_LIMITS ; toujours vraie si désactivé)."""
+    lim = relief_limits().get(l.level)
+    if not lim:
+        return True
+    if lim.get("max_dpk") is not None and l.dplus_per_km > lim["max_dpk"]:
+        return False
+    if lim.get("banned_cats") and any(c.get("category") in lim["banned_cats"] for c in l.terrain.get("climbs", [])):
+        return False
+    if lim.get("max_grade") is not None and (l.terrain.get("max_grade_pct") or 0.0) >= lim["max_grade"]:
+        return False
+    return True
+
+
+def relief_filter(pool: list, level: str, log) -> list:
+    """Pool réduit aux boucles conformes (relief_ok) ; sans aucune, la moins vallonnée seule, marquée relief_fallback."""
+    lim = relief_limits().get(level)
+    if not pool or not lim or not any(k in lim for k in ("max_dpk", "banned_cats", "max_grade")):
+        return pool
+    ok = [l for l in pool if relief_ok(l)]
+    if ok:
+        return ok
+    flat = min(pool, key=lambda l: l.dplus_per_km)
+    flat.relief_fallback = True
+    log(f"    relief : aucune boucle conforme ({level}), la moins vallonnée gardée ({flat.dplus_per_km:.1f} m/km)")
+    return [flat]
 
 
 # --------------------------------------------------------------------------- génération
@@ -2232,7 +2279,7 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             if t is not None:
                 pool.append(t)
     if pool:
-        return pool
+        return relief_filter(pool, level, log)
     # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre
     # empêche souvent GraphHopper de boucler (candidats rejetés pour la durée ou les tronçons répétés) : on retente avec
     # les profils « souples », puis on garde les candidats les moins terreux sous les limites du repli, signalés.
@@ -2243,7 +2290,7 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
         log(f"    {len(found)} candidats valides" + (f" (rejetés : {why})" if why else ""))
         pool.extend(found)
     if pool:
-        return pool
+        return relief_filter(pool, level, log)
     if spare:
         log(f"    repli : {len(spare)} candidat(s) avec un peu de terre (au plus {FALLBACK_UNPAVED_KM:g} km / "
             f"{FALLBACK_UNPAVED_SHARE:.0%}), signalé(s)")
