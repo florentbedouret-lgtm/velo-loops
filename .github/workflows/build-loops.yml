@@ -90,7 +90,8 @@ permissions:
 
 concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
-  group: ${{ contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops' }}
+  # diag_part=surf (carte seule, quelques minutes) : file à part, ne prend pas la place d'un diagnostic en attente
+  group: ${{ (inputs.mode == 'nature_check' && inputs.diag_part == 'surf') && 'diagnostic-carte' || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
@@ -224,7 +225,8 @@ jobs:
           python scripts/icgc_tag.py --pbf data/region.osm.pbf --icgc data/icgc_vials.geojsonseq.gz --workdir data
 
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
-        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
+        # diag_part=surf : lecture de la carte seule, sans GraphHopper
+        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') && !(steps.resolve_mode.outputs.mode == 'nature_check' && inputs.diag_part == 'surf') }}
         env:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
           DIAG_PART: ${{ inputs.diag_part }}
@@ -281,6 +283,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DIAG_PART: ${{ inputs.diag_part }}   # entrée passée par l'environnement, pas collée dans le script (audit B1)
         run: |
+          # revêtements « compactés » (08/10/2026, piste de la plage du Bogatell évitée comme de la terre) : carte seule
+          if [ "$DIAG_PART" = "surf" ]; then
+            python scripts/surface_check.py --pbf data/region.osm.pbf               --index "https://florentbedouret-lgtm.github.io/velo-loops/web/data/index.json"               --out data/surface_check.json --out-md data/surface_check.md
+            cat data/surface_check.md >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           # NATURE_RELIEF non vide : sonde « relief » en sportif (O-18 B), prioritaire ; sinon NATURE_PROBE non vide : sonde
           # avant / après sur ces départs ; les deux vides : calibrage v5
           # comparaisons « allure:durée en h:boucles de référence » (autres : "modere:2:scripts/reference_plata.json",
@@ -418,6 +426,8 @@ jobs:
             data/relief.json
             data/relief.md
             data/relief_*.json
+            data/surface_check.json
+            data/surface_check.md
             data/pages_test.txt
             data/pages_test.zip
             data/drops.json
