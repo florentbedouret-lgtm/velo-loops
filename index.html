@@ -748,6 +748,7 @@
     // ---------- position de l'utilisateur -> départ le plus proche -> temps d'approche
     let approachMin = null; // temps d'approche connu pour le départ actuellement choisi (null si choisi dans la liste)
     function setPosition(lon, lat) {
+      userPos = { lon, lat };
       if (userMarker) userMarker.remove();
       userMarker = new maplibregl.Marker({ element: dotEl('mk-user') }).setLngLat([lon, lat]).addTo(map);
       const { s, km } = nearestStart(lon, lat);
@@ -811,6 +812,8 @@
       ]);
       indexData = index;
       try {
+        fetch('web/data/train_links.json').then(r => (r.ok ? r.json() : null)).then(d => { trainLinks = d; })
+          .catch(() => { /* pas de liaisons : pas de suggestion de train */ });
         const m = await fetch('web/approach_model.json');
         if (m.ok) {
           const data = await m.json();
@@ -1232,7 +1235,19 @@
     }
     // ---------- panel 30/09/2026 : depuis le centre-ville, suggérer un départ en gare (on y va en train, vélo compris) dont
     // la boucle de même durée et même allure est nettement meilleure (note, feux, sortie de ville : bloc compare de l'index)
-    const TRAIN_MAX_KM = 20;             // gare à 20 km au plus (à vol d'oiseau) du départ actuel (30 avant le 08/10/2026)
+    // 08/10/2026 (O-42) : liaisons d'après les horaires ouverts Rodalies / FGC (scripts/build_train_links.py) : gare proche de
+    // l'adresse de l'utilisateur (sinon du départ choisi), train DIRECT, temps et fréquence du samedi matin ; sans ce
+    // fichier, aucune gare n'est proposée (mieux que de proposer une gare qui demande une correspondance)
+    const TRAIN_ORIGIN_MAX_MIN = 15;     // gare d'origine à 15 min à vélo au plus
+    const TRAIN_ACCESS_MAX_MIN = 75;     // vélo jusqu'à la gare + train : 1 h 15 au plus,
+    const TRAIN_ACCESS_SHARE = 0.35;     // et pas plus de 35 % de la durée de la boucle (2 h : 42 min)
+    const TRAIN_MIN_PER_H = 1;           // au moins un train par heure
+    let trainLinks = null;
+    let userPos = null;                  // adresse ou position de l'utilisateur (reste sur l'appareil)
+    function bikeMin(kmCrow) {           // même modèle que le temps d'approche, en ville
+      const z = (model.zones && model.zones.dense) || { detour_ratio_median: 1.56, speed_kmh_110W_median: 16.45 };
+      return Math.max(1, Math.round(kmCrow * z.detour_ratio_median / z.speed_kmh_110W_median * 60));
+    }
     const TRAIN_MIN_H = 1.5;             // pas de train pour une sortie de moins de 1 h 30 : le trajet pèserait plus que la boucle
     const TRAIN_SCORE_GAIN = 10;         // boucle notée au moins 10 points de plus
     const TRAIN_EXIT_GAIN_KM = 3;        // et un écart visible : nature au moins 3 km plus tôt,
@@ -1267,22 +1282,33 @@
                       here: t('train_here_l', { l: km1(lights) }) });
         return cand.sort((a, b) => b.w - a.w)[0] || null;
       };
+      if (!trainLinks || !trainLinks.stations) return '';
+      const here = userPos || { lon: cur.lon, lat: cur.lat };
+      const byId = new Map(indexData.starts.map(s => [s.id, s]));
       let best = null;
-      for (const s of indexData.starts) {
-        if (s.kind !== 'station' || s.id === cur.id || s.id === lastNeighbourId || airport(s)) continue;
-        const c = s.compare && s.compare[dur] && s.compare[dur][o.level];
-        if (!c || c.score == null || o.score == null || c.score < o.score + TRAIN_SCORE_GAIN) continue;
-        if ((c.lights_per_km || 0) > lights) continue;
-        const d = crowKm(cur.lon, cur.lat, s.lon, s.lat);
-        if (d > TRAIN_MAX_KM) continue;
-        const r = reasonOf(c);
-        if (!r) continue;                                   // pas d'écart visible : on ne propose pas cette gare
-        const v = r.w * (1 - d / (2 * TRAIN_MAX_KM));     // une gare proche passe avant une gare lointaine à écart égal
-        if (!best || v > best.v) best = { s, c, d, r, v };
+      for (const g of trainLinks.stations) {
+        const bm = bikeMin(crowKm(here.lon, here.lat, g.lon, g.lat));
+        if (bm > TRAIN_ORIGIN_MAX_MIN) continue;
+        for (const [sid, tmin, perH] of g.to) {
+          const s = byId.get(sid);
+          if (!s || s.id === cur.id || s.id === lastNeighbourId || airport(s)) continue;
+          if (perH < TRAIN_MIN_PER_H || bm + tmin > Math.min(TRAIN_ACCESS_MAX_MIN, TRAIN_ACCESS_SHARE * o.duration_target_min)) continue;
+          const c = s.compare && s.compare[dur] && s.compare[dur][o.level];
+          if (!c || c.score == null || o.score == null || c.score < o.score + TRAIN_SCORE_GAIN) continue;
+          if ((c.lights_per_km || 0) > lights) continue;
+          const r = reasonOf(c);
+          if (!r) continue;                                 // pas d'écart visible : on ne propose pas cette gare
+          // écart visible d'abord, puis le trajet le plus court et les trains les plus fréquents
+          const v = r.w * (1 - (bm + tmin) / 150) * Math.min(1, perH / 2);
+          if (!best || v > best.v) best = { s, c, r, v, g, bm, tmin, perH };
+        }
       }
       if (!best) return '';
+      const n = Math.round(best.perH);
       return '<div class="tip tip-train">' + TRAIN_ICON + '<div class="tip-body"><p class="tip-h">' + esc(t('train_h_' + best.r.k)) + '</p>' +
-        '<p>' + esc(trName(best.s.name)) + ' · <b>' + esc(best.r.there) + '</b> <span class="tip-here">(' + esc(best.r.here) + ')</span></p>' +
+        '<p>' + esc(t('train_route', { bike: best.bm, from: best.g.n, train: best.tmin, to: trName(best.s.name).replace(/^Gare\s+/, '') })) +
+        ' <span class="tip-here">' + esc(tn('train_freq', n)) + '</span></p>' +
+        '<p><b>' + esc(best.r.there) + '</b> <span class="tip-here">(' + esc(best.r.here) + ')</span></p>' +
         '<div class="tip-act"><button type="button" class="btn" onclick="goTrain(\'' + best.s.id + '\')">' + esc(t('train_see')) + '</button>' +
         '<small class="tip-note">' + esc(t('tip_train_note')) + '</small></div></div></div>';
     }

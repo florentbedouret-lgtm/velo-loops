@@ -565,6 +565,10 @@ jobs:
             --exclude='/graphhopper-web.jar' --exclude='/gh.log' --exclude='/gh.pid' ./ _site/
           touch _site/.nojekyll
           test -f _site/index.html || echo "ATTENTION : pas d'index.html à la racine du site"
+          # liaisons de train directes (horaires Rodalies / FGC du jour) pour la suggestion « partir d'une gare » ;
+          # si les horaires sont injoignables, le fichier reste vide et l'app ne propose simplement pas de gare
+          python scripts/build_train_links.py --index _site/web/data/index.json --out _site/web/data/train_links.json \
+            || echo "liaisons de train indisponibles"
           if [ "$START_PAGES" = "1" ]; then              # une page par départ et par langue, lisible sans JavaScript
             python scripts/build_start_pages.py --data _site/web/data --out _site
           fi

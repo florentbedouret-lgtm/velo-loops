@@ -187,3 +187,51 @@ def test_mots_du_relief():
     assert w(40, 500) == "vallonné"                  # 12,5 m/km
     assert w(39, 676) == "très vallonné"             # 17,3 m/km : Gràcia 3 h tranquille (v16)
     assert g.relief_category(1000) == "vallonné" and g.relief_category(999) == "peu vallonné"
+
+
+# ----------------------------------------------------------------------------- liaisons de train (O-42)
+def _gtfs(files):
+    import io as _io
+    import zipfile as _zf
+    buf = _io.BytesIO()
+    with _zf.ZipFile(buf, "w") as z:
+        for name, text in files.items():
+            z.writestr(name, text)
+    buf.seek(0)
+    return _zf.ZipFile(buf)
+
+
+def test_liaisons_directes(monkeypatch):
+    import datetime as _dt
+    import build_train_links as tl
+    monkeypatch.setattr(tl, "next_saturday", lambda z: _dt.date(2026, 10, 10))
+    # A (ville) -> B (départ Oyan « gare ») en direct, 2 trains le samedi matin ; C n'est desservie qu'après midi.
+    # Lignes complétées par des espaces, comme le fichier Renfe.
+    z = _gtfs({
+        "stops.txt": "stop_id,stop_name,stop_lat,stop_lon   \nA,Ciutat,41.40,2.15   \nB,Poble,41.50,2.00   \nC,Lluny,41.60,1.90   \n",
+        "calendar.txt": "service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date\n"
+                        "S,0,0,0,0,0,1,0,20261001,20261031\nW,1,1,1,1,1,0,0,20261001,20261031\n",
+        "trips.txt": "route_id,service_id,trip_id\nR,S,t1\nR,S,t2\nR,W,t3\nR,S,t4\n",
+        "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n"
+                          "t1,08:00:00,08:00:00,A,1\nt1,08:25:00,08:25:00,B,2\n"
+                          "t2,09:00:00,09:00:00,A,1\nt2,09:30:00,09:30:00,B,2\n"
+                          "t3,08:00:00,08:00:00,A,1\nt3,08:10:00,08:10:00,B,2\n"
+                          "t4,13:00:00,13:00:00,A,1\nt4,13:40:00,13:40:00,C,2\n"})
+    starts = [{"id": "gare-poble", "lon": 2.0005, "lat": 41.5002}, {"id": "gare-lluny", "lon": 1.90, "lat": 41.60}]
+    res, _ = tl.feed_links("x", z, [1.0, 41.0, 3.0, 42.0], starts, lambda *_: None)
+    assert res == []      # A -> B : 2 trains en 5 h (< 0,5 par heure) ; t3 roule en semaine ; C seulement l'après-midi
+
+
+def test_liaisons_frequence(monkeypatch):
+    import datetime as _dt
+    import build_train_links as tl
+    monkeypatch.setattr(tl, "next_saturday", lambda z: _dt.date(2026, 10, 10))
+    st = "".join(f"t{i},{7 + i // 2:02d}:{(i % 2) * 30:02d}:00,{7 + i // 2:02d}:{(i % 2) * 30:02d}:00,A,1\n"
+                 f"t{i},{7 + i // 2:02d}:{(i % 2) * 30 + 20:02d}:00,{7 + i // 2:02d}:{(i % 2) * 30 + 20:02d}:00,B,2\n"
+                 for i in range(10))
+    z = _gtfs({"stops.txt": "stop_id,stop_name,stop_lat,stop_lon\nA,Ciutat,41.40,2.15\nB,Poble,41.50,2.00\n",
+               "calendar_dates.txt": "service_id,date,exception_type\nS,20261010,1\n",
+               "trips.txt": "route_id,service_id,trip_id\n" + "".join(f"R,S,t{i}\n" for i in range(10)),
+               "stop_times.txt": "trip_id,arrival_time,departure_time,stop_id,stop_sequence\n" + st})
+    res, _ = tl.feed_links("x", z, [1.0, 41.0, 3.0, 42.0], [{"id": "gare-poble", "lon": 2.0, "lat": 41.5}], lambda *_: None)
+    assert res[0]["to"] == [["gare-poble", 20, 2.0]]               # 10 trains de 7 h à 11 h 30 : 2 par heure, 20 min
