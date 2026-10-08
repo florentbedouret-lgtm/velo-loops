@@ -1520,7 +1520,9 @@ def time_ok(time_s: float, duration_h: float) -> bool:
     lo = (DURATION_SET[i - 1] + duration_h) / 2.0 / duration_h if i > 0 else 0.0
     hi = (DURATION_SET[i + 1] + duration_h) / 2.0 / duration_h if i + 1 < len(DURATION_SET) else 9.0
     m = bin_margin() or 0.0
-    return lo - m <= r <= hi + m
+    # marge vers le bas seulement (08/10/2026, 2e test : une durée qui prenait une boucle un peu trop longue vidait parfois
+    # la durée suivante, calculée après elle : Argelaguer 4 h, Sant Celoni 6 h) ; une boucle un peu courte reste reprise
+    return lo - m <= r <= hi
 
 
 def order_bounds(options: list, level: str, duration_h: float) -> tuple:

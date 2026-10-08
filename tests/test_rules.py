@@ -54,6 +54,7 @@ def test_plages_avec_marge(plages, monkeypatch):
     assert g.time_ok(4.4 * h, 5.0)                 # 4 h 24 : repris avec 5 % de marge
     assert not g.time_ok(4.2 * h, 5.0)             # 4 h 12 : toujours hors plage
     assert not g.time_ok(5.0 * h * 1.2, 5.0)       # jamais au-delà de la tolérance de ±15 %
+    assert not g.time_ok(5.6 * h, 5.0)             # marge vers le bas seulement : 5 h 36 reste à « 6 h »
 
 
 def test_sans_plages(plages, monkeypatch):
