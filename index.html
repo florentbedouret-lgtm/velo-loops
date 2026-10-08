@@ -904,6 +904,8 @@
         paint: { 'line-color': ROUTE.casing, 'line-width': 13 } });
       map.addLayer({ id: 'hl', type: 'line', source: 'hl', layout: lineLayout,
         paint: { 'line-color': ROUTE.color, 'line-width': 8 } });
+      map.addLayer({ id: 'hl-pt', type: 'circle', source: 'hl', filter: ['==', ['geometry-type'], 'Point'],   // lieu remarquable
+        paint: { 'circle-radius': 8, 'circle-color': ROUTE.color, 'circle-stroke-color': ROUTE.casing, 'circle-stroke-width': 3 } });
       map.addLayer({ id: 'routes-arrows', type: 'symbol', source: 'routes', filter: isSel,
         layout: { 'symbol-placement': 'line', 'symbol-spacing': 160, 'icon-image': 'oyan-arrow',
                   'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true } });
@@ -1381,7 +1383,9 @@
           false, 'climb:0']);
       }
       // lieux remarquables (01/10/2026, Florent : Tibidabo) : sommets, belvédères connus traversés
-      if (o.remarkable && o.remarkable.length) out.push(['', t('k_remarkable', { list: o.remarkable.map(x => x.n).join(', ') })]);
+      // 08/10/2026 (Florent) : toucher la ligne montre où le lieu est sur le tracé
+      if (o.remarkable && o.remarkable.length) out.push(['', t('k_remarkable', { list: o.remarkable.map(x => x.n).join(', ') }),
+        false, o.remarkable.some(x => x.km != null) ? 'places' : null]);
       if (o.out_and_back) out.push([Math.round(100 * (o.overlap || 0)) + ' %', t('k_outback')]);   // aller-retour sur piste (v15)
       // échappatoires (panel d'utilisateurs) : points d'eau, cafés hors ville, gares de retour
       // brief v3 : une ligne par service, au format des autres (eau ; gares, deux au plus) ; cafés dans « Tous les chiffres »
@@ -1661,6 +1665,8 @@
     function hlRanges(o, kind) {                           // tronçons [km début, km fin]
       if (kind === 'exit') return [[0, exitKm(o)]];
       if (kind === 'city') return [[0, o.distance_km]];
+      if (kind === 'places') return (o.remarkable || []).filter(x => x.km != null)     // 500 m autour de chaque lieu
+        .map(x => [Math.max(0, x.km - 0.25), Math.min(o.distance_km, x.km + 0.25)]);
       if (kind.startsWith('climb:')) {
         const c = (o.terrain.climbs || [])[Number(kind.slice(6))];
         return c ? [[c.start_km, c.start_km + c.length_km]] : [];
@@ -1692,8 +1698,13 @@
       const color = ROUTE.color;
       map.setPaintProperty('routes', 'line-opacity', 0.4);        // boucle atténuée sous le tronçon surligné (brief v2)
       map.setPaintProperty('routes-casing', 'line-opacity', 0.4);
+      const pts = kind === 'places' ? (o.remarkable || []).filter(x => x.km != null).map(x => {   // point à l'endroit du lieu
+        const p = profileData(o.coords, o.distance_km);
+        return profilePoint(o.coords, p.dist, Math.min(o.distance_km, x.km));
+      }) : [];
       map.getSource('hl').setData({ type: 'FeatureCollection', features: lines.map(c =>
-        ({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: c } })) });
+        ({ type: 'Feature', properties: { color }, geometry: { type: 'LineString', coordinates: c } }))
+        .concat(pts.map(c => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [c[0], c[1]] } }))) });
       // pas de zoom sur le tronçon (demande de Florent) : toute la boucle reste cadrée pour situer l'endroit exact
       if (sheet.dataset.state === 'high') setSheet('mid');  // laisser voir la carte
       fitRoute();
