@@ -136,6 +136,11 @@ def dirt_rules() -> dict:
     return getattr(_TL, "dirt_rules", DIRT_RULES) or {}
 
 
+def detour_fix() -> bool:
+    """Détours en pâté de maisons (DETOUR_FIX), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "detour_fix", DETOUR_FIX))
+
+
 def relief_limits() -> dict:
     """Règles de relief de l'allure (RELIEF_LIMITS), réglables par fil d'exécution pour les diagnostics."""
     return getattr(_TL, "relief_limits", RELIEF_LIMITS) or {}
@@ -260,6 +265,24 @@ SPUR_PLEASANT_SHARE = 0.6
 SPUR_PENALTY = 0.04             # 4 points par éperon injustifié…
 SPUR_PENALTY_PER_100M = 0.01    # … plus 1 point par 100 m
 SPUR_MAX_PENALTY = 0.20
+# Détours en pâté de maisons (Florent, 08/10/2026, Sants-Montjuïc 1 h 30 Tranquille : Paral·lel -> Calàbria -> retour,
+# 810 m pour revenir à 118 m). Cause : un point de passage repris d'une boucle (retouche, boucle précédente, éperon coupé)
+# accroché à la chaussée d'en face d'une avenue ; sans demi-tour permis (pass_through), GraphHopper fait le tour du pâté
+# de maisons. DETOUR_FIX : (1) le sens de circulation de la boucle d'origine est donné pour chacun de ces points
+# (headings, bonne chaussée) ; (2) détour restant (retour à moins de DETOUR_GAP_M après DETOUR_MIN_M à DETOUR_MAX_M, sans
+# monter ni repasser par la même rue, hors départ et arrivée) : les meilleures candidates sont recalculées sans lui, et
+# la version sans détour remplace l'originale si sa note ne baisse pas de plus de DETOUR_SCORE_SLACK. Pas de pénalité :
+# la détection compte aussi des ronds-points et des échangeurs (échantillon v16 : la moitié des boucles), le recalcul
+# les laisse en place et ils restent donc sans effet.
+# False : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
+DETOUR_FIX = False
+DETOUR_MIN_M, DETOUR_MAX_M = 200.0, 1500.0
+DETOUR_GAP_M = 120.0             # retour à moins de 120 m…
+DETOUR_RATIO = 0.25              # … et à moins du quart du chemin parcouru
+DETOUR_CLIMB_M = 15.0            # monte d'au moins 15 m : lacets d'une côte, pas un détour
+DETOUR_END_M = 300.0             # près du départ ou de l'arrivée : ignoré (rue du départ)
+DETOUR_SCORE_SLACK = 0.01        # version sans détour gardée jusqu'à 1 point de note en moins
+DETOUR_TRIM_TOP = 3              # meilleures candidates dont on essaie d'enlever les détours
 SPUR_TRIM_TOP = 3               # meilleures candidates dont on essaie de couper les éperons (6 : sonde 18 -> 30 min)
 TARGETED_GATE = None            # essai (O-38) : tirages ciblés seulement si la meilleure boucle ordinaire note moins que ça
 AR_DRAWS = True                 # essai : aller-retour vers le bord de mer, une rivière ou un espace vert (ar_candidates)
@@ -1061,6 +1084,7 @@ class GraphHopper:
         self._memo: dict = {}
         self.calls = 0
         self.hits = 0
+        self.heading_retries = 0                            # sens de circulation refusé : requête refaite sans
 
     def _route(self, body):
         import copy
@@ -1071,7 +1095,11 @@ class GraphHopper:
             path, self.last_error = self._memo[key]
             return copy.deepcopy(path)
         try:
-            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
+            if "headings" in body:                         # NaN (point sans sens imposé) : hors JSON strict de requests
+                r = self.http.post(f"{self.base}/route", data=json.dumps(body), timeout=120,
+                                   headers={"Content-Type": "application/json"})
+            else:
+                r = self.http.post(f"{self.base}/route", json=body, timeout=120)
         except requests.RequestException as e:
             self.last_error = f"requête échouée : {e}"
             return None                                   # erreur réseau : pas gardée (peut réussir au prochain essai)
@@ -1102,9 +1130,17 @@ class GraphHopper:
     def via(self, points, profile, pass_through=False):
         """Itinéraire passant par des points imposés (tirages ciblés), mêmes détails que round_trip. pass_through : pas de
         demi-tour aux points de passage (retouche : points pris sur une boucle, parfois du mauvais côté d'une avenue)."""
-        body = {"points": points, "profile": profile, "ch.disable": True, "points_encoded": False,
-                "elevation": True, "instructions": False, "details": DETAILS,
+        heads = [p[2] if len(p) > 2 else None for p in points]   # sens de circulation (DETOUR_FIX), en degrés
+        body = {"points": [[p[0], p[1]] for p in points], "profile": profile, "ch.disable": True,
+                "points_encoded": False, "elevation": True, "instructions": False, "details": DETAILS,
                 **({"pass_through": True} if pass_through else {})}
+        if detour_fix() and any(h is not None for h in heads):
+            body["headings"] = [float("nan") if h is None else round(h, 1) for h in heads]
+            path = self._route(body)
+            if path is not None or not self.last_error.startswith("HTTP 400"):
+                return path
+            self.heading_retries += 1                       # refusé : même requête sans sens imposé
+            del body["headings"]
         return self._route(body)
 
     def round_trip(self, lon, lat, profile, dist_m, seed, heading=None, custom_model=None):
@@ -1396,6 +1432,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
     loop.spurs = unjustified_spurs(coords) if SPUR_FIX else []
+    loop.detours = block_detours(coords) if detour_fix() else []
     loop.surface_seq = surface_seq(edges, cum)
     if STEEP_DIRT_PENALTY:                                # terre (notée ou probable) sur une pente d'au moins 12 %
         n_ = min(len(loop.surface_seq), len(prof) - 1)
@@ -1844,6 +1881,18 @@ def true_uturns(coords) -> int:
     return sum(1 for u in uturn_points(coords) if u[2] < UTURN_SAME_STREET_M)
 
 
+def travel_heading(coords, k, back=True, ahead=True) -> float:
+    """Cap de la boucle au point k (sens de circulation), mesuré sur ~20 m avant et/ou après."""
+    i = j = k
+    while back and i > 0 and haversine(coords[i][0], coords[i][1], coords[k][0], coords[k][1]) < 20.0:
+        i -= 1
+    while ahead and j < len(coords) - 1 and haversine(coords[j][0], coords[j][1], coords[k][0], coords[k][1]) < 20.0:
+        j += 1
+    if i == j:
+        i, j = max(0, k - 1), min(len(coords) - 1, k + 1)
+    return bearing(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
+
+
 def loop_anchors(l, with_idx=False):
     """Points de passage d'une boucle : ses points à RETOUCH_ANCHORS de la distance, décalés de RETOUCH_ANCHOR_SHIFT_M
     plus loin s'ils tombent à moins de 150 m d'un vrai demi-tour de la boucle (impasse : le calcul y referait demi-tour)."""
@@ -1860,7 +1909,7 @@ def loop_anchors(l, with_idx=False):
         if any(haversine(c[k][0], c[k][1], u[0], u[1]) < 150.0 for u in bad):
             while k < len(cum) - 1 and cum[k] < cum[j] + RETOUCH_ANCHOR_SHIFT_M:
                 k += 1
-        out.append([c[k][0], c[k][1]])
+        out.append([c[k][0], c[k][1], travel_heading(c, k)])   # sens de circulation (utilisé si DETOUR_FIX)
         idx.append(k)
     return (out, idx) if with_idx else out
 
@@ -2070,8 +2119,10 @@ class _SoftGH:
 
 def route_waypoints(coords, step_m=ROUTE_WAYPOINT_M, skip=()) -> list:
     """Points de passage d'une boucle existante, tous les step_m m, sans ceux des intervalles d'indices skip (éperons) ;
-    le début et la fin de chaque intervalle sauté sont gardés."""
+    le début et la fin de chaque intervalle sauté sont gardés. Chaque point porte le sens de circulation de la boucle
+    (3e valeur, utilisée si DETOUR_FIX) : à l'entrée d'un intervalle sauté celui d'avant, à la sortie celui d'après."""
     out, acc, cuts = [[coords[0][0], coords[0][1]]], 0.0, set()
+    starts, ends = {a for a, _ in skip}, {b for _, b in skip}
     for a, b in skip:
         cuts.add(a)
         cuts.add(b)
@@ -2081,7 +2132,7 @@ def route_waypoints(coords, step_m=ROUTE_WAYPOINT_M, skip=()) -> list:
         if inside(i):
             continue
         if i in cuts or acc >= step_m:
-            out.append([coords[i][0], coords[i][1]])
+            out.append([coords[i][0], coords[i][1], travel_heading(coords, i, back=i not in ends, ahead=i not in starts)])
             acc = 0.0
     out.append([coords[-1][0], coords[-1][1]])
     return out
@@ -2117,6 +2168,63 @@ def spur_list(coords) -> list:
                     "start_m": cum[a], "end_m": cum[-1] - cum[b]})
         i = b
     return out
+
+
+def block_detours(coords) -> list:
+    """Détours en pâté de maisons (voir DETOUR_FIX) : la boucle revient à moins de DETOUR_GAP_M (et du quart du chemin)
+    après DETOUR_MIN_M à DETOUR_MAX_M, sans monter de DETOUR_CLIMB_M ni repasser par la même rue (éperon), hors départ et
+    arrivée. [{"a": indice d'entrée, "b": indice de sortie, "m": chemin parcouru, "gap": distance entrée-sortie}]."""
+    import numpy as np
+    idx = [0]
+    for i in range(1, len(coords)):
+        if haversine(coords[idx[-1]][0], coords[idx[-1]][1], coords[i][0], coords[i][1]) >= 15.0:
+            idx.append(i)
+    n = len(idx)
+    if n < 4:
+        return []
+    lat0 = math.radians(coords[0][1])
+    x = np.array([coords[i][0] for i in idx]) * 111320.0 * math.cos(lat0)
+    y = np.array([coords[i][1] for i in idx]) * 110540.0
+    acc = np.concatenate([[0.0], np.cumsum(np.hypot(np.diff(x), np.diff(y)))])
+    total = acc[-1]
+    best = np.full(n, -1)
+    for k in range(1, n):                                    # pour chaque entrée i : la sortie valide la plus lointaine
+        L = acc[k:] - acc[:-k]
+        if L.min() > DETOUR_MAX_M:
+            break
+        gap = np.hypot(x[k:] - x[:-k], y[k:] - y[:-k])
+        ok = (L >= DETOUR_MIN_M) & (L <= DETOUR_MAX_M) & (gap <= DETOUR_GAP_M) & (gap < DETOUR_RATIO * L)
+        ok &= (acc[:-k] >= DETOUR_END_M) & (total - acc[k:] >= DETOUR_END_M)
+        best[:-k][ok] = np.arange(k, n)[ok]
+    out, i = [], 0
+    while i < n:
+        j = int(best[i])
+        if j < 0:
+            i += 1
+            continue
+        seg = [coords[q] for q in idx[i:j + 1]]
+        z = [c[2] for c in seg if len(c) > 2]
+        h = len(seg) // 2
+        same = sum(any(haversine(p[0], p[1], q[0], q[1]) < 25.0 for q in seg[h:]) for p in seg[:h]) / max(1, h)
+        if (not z or max(z) - min(z) < DETOUR_CLIMB_M) and same <= 0.5:
+            out.append({"a": idx[i], "b": idx[j], "m": round(float(acc[j] - acc[i])),
+                        "gap": round(float(math.hypot(x[j] - x[i], y[j] - y[i])))})
+        i = j
+    return out
+
+
+def trim_detours(gh, loop, level, duration_h):
+    """La même boucle, recalculée sans ses détours en pâté de maisons (points de passage pris de part et d'autre, avec le
+    sens de circulation)."""
+    if not loop.detours:
+        return None
+    way = route_waypoints(loop.coords, skip=[(d["a"], d["b"]) for d in loop.detours])
+    path = gh.via(way, loop.profile, pass_through=True)
+    new = analyse(path, level, loop.profile, duration_h, loop.seed, loop.heading) if path else None
+    if (new is None or not time_ok(new.time_s, duration_h) or not overlap_ok(new)
+            or new.u_turns > MAX_UTURNS or not dirt_ok(new) or len(new.detours) >= len(loop.detours)):
+        return None
+    return new
 
 
 def unjustified_spurs(coords) -> list:
@@ -2315,6 +2423,11 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             t = trim_spurs(gh, l, level, duration)
             if t is not None:
                 pool.append(t)
+    if detour_fix():                                         # enlever les détours des meilleures candidates
+        for l in sorted([x for x in pool if x.detours], key=lambda x: x.score, reverse=True)[:DETOUR_TRIM_TOP]:
+            t = trim_detours(gh, l, level, duration)
+            if t is not None and t.score >= l.score - DETOUR_SCORE_SLACK:
+                pool[next(k for k, x in enumerate(pool) if x is l)] = t
     if pool:
         return relief_filter(dirt_filter(pool, level, log), level, log)
     # repli (choix B, 28/09/2026) : aucune boucle sous MAX_UNPAVED. Le test v10 a montré que l'évitement fort de la terre

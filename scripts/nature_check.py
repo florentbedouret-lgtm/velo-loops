@@ -411,6 +411,13 @@ def run_probe(sid, site, gh_url, durations, levels):
 
 
 # ----------------------------------------------------------------------------- relief par allure (08/10/2026)
+def detour_cols(coords) -> dict:
+    """Détours en pâté de maisons d'une boucle publiée (mesurés de la même façon avec ou sans DETOUR_FIX)."""
+    ds = g.block_detours(coords)
+    return {"detours": len(ds), "detour_m": sum(d["m"] - d["gap"] for d in ds),
+            "detour_at": [[round(coords[d["a"]][1], 5), round(coords[d["a"]][0], 5), d["m"]] for d in ds][:3]}
+
+
 def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
     """Toutes les durées des allures demandées comme la génération réelle, avec les règles de relief données (None =
     production v16)."""
@@ -436,7 +443,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "max_grade": (o.get("terrain") or {}).get("max_grade_pct"),
                              "fallback": bool(getattr(l, "relief_fallback", False)), "key": o["route_key"],
                              "dirt": round(o["distance_km"] * o["shares"]["unpaved"], 1),
-                             "dirt_fallback": bool(o.get("unpaved_fallback"))})
+                             "dirt_fallback": bool(o.get("unpaved_fallback")),
+                             **detour_cols(o["coords"])})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
     del g._TL.dirt_rules
@@ -463,12 +471,17 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "dirt":                                  # terre v17 seule (relief inchangé)
+    if variant == "detour":                                # détours en pâté de maisons v17 seuls
+        g._TL.detour_fix = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.detour_fix
+    elif variant == "dirt":                                # terre v17 seule (relief inchangé)
         b = relief_generate(gh, st_, sid, durations, levels, None, g.DIRT_RULES_V17)
     else:
         b = relief_generate(gh, st_, sid, durations, levels,
                             g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
-    res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)]}
+    res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)],
+           "heading_retries": gh.heading_retries}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
     return res
@@ -498,6 +511,18 @@ def report_relief_test(results, out_json, out_md, t0):
                  f"{sum(x.get('dirt', 0) > 1 for x in a)} -> {sum(x.get('dirt', 0) > 1 for x in b)} | "
                  f"{sum(x.get('dirt', 0) > 0.5 for x in a)} -> {sum(x.get('dirt', 0) > 0.5 for x in b)} | "
                  f"{sum(x.get('dirt_fallback', False) for x in b)} |")
+    L += ["", "Détours en pâté de maisons (boucles recommandées) :", "",
+          "| allure | boucles avec détour | détours | m en trop (total) | note moyenne |", "|---|---|---|---|---|"]
+    for lv in ("facile", "modere", "soutenu"):
+        a = [rows[0] for r in res for key, rows in r["v16"].items() if key.endswith("|" + lv) and rows]
+        b = [rows[0] for r in res for key, rows in r["relief"].items() if key.endswith("|" + lv) and rows]
+        if a:
+            L.append(f"| {lv} | {sum(x.get('detours', 0) > 0 for x in a)} -> {sum(x.get('detours', 0) > 0 for x in b)} "
+                     f"/ {len(a)} | {sum(x.get('detours', 0) for x in a)} -> {sum(x.get('detours', 0) for x in b)} | "
+                     f"{sum(x.get('detour_m', 0) for x in a)} -> {sum(x.get('detour_m', 0) for x in b)} | "
+                     f"{sum(x['score'] for x in a) / len(a):.1f} -> {sum(x['score'] for x in b) / max(1, len(b)):.1f} |")
+    L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
+             f"{sum(r.get('heading_retries', 0) for r in res)} fois")
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L), flush=True)
 
@@ -1190,7 +1215,8 @@ def main() -> int:
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
     ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
-    ap.add_argument("--relief-variant", default="v17", help="v17 ou flat (tirages calm_flat, Modéré 4 points par m/km)")
+    ap.add_argument("--relief-variant", default="v17",
+                    help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17) ou detour (DETOUR_FIX)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")
