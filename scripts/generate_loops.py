@@ -1557,7 +1557,9 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.views_passed = views_passed(coords, cum)
     loop.spurs = unjustified_spurs(coords, level, rc_rep) if SPUR_FIX else []
     loop.backtracks = [{"why": w, "m": round(cum[min(b_, len(cum) - 1)] - cum[a_]), "lat": round(coords[t][1], 5),
-                        "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1)} for a_, b_, t, w in useful]
+                        "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
+                        "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2)}
+                       for a_, b_, t, w in useful]
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep) is None]

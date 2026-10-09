@@ -480,7 +480,9 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "overlap": o["overlap"], "outback": bool(o.get("out_and_back")),
                              "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0),
                              "useful": o.get("backtracks", []), "retouched": bool(o.get("retouched")),
-                             "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed"))})
+                             "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed")),
+                             # tracé gardé pour relire les allers-retours jugés utiles (09/10/2026)
+                             **({"coords": [[c[0], c[1]] for c in o["coords"]]} if o.get("backtracks") else {})})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
     del g._TL.dirt_rules
