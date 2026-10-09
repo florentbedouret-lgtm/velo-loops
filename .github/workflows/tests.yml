@@ -25,6 +25,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Dépendances
-        run: pip install -q requests pytest
+        run: pip install -q -r scripts/requirements.txt pytest   # mêmes versions que le calcul (numpy vient avec shapely)
       - name: Tests
         run: python -m pytest -q tests
