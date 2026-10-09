@@ -141,6 +141,11 @@ def corridor_overlap() -> bool:
     return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
 
 
+def retouch_round_robin() -> bool:
+    """Familles d'essais de retouche à tour de rôle (RETOUCH_ROUND_ROBIN), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "retouch_rr", RETOUCH_ROUND_ROBIN))
+
+
 def detour_fix() -> bool:
     """Détours en pâté de maisons (DETOUR_FIX), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "detour_fix", DETOUR_FIX))
@@ -203,6 +208,11 @@ RETOUCH_DEDUPE = True            # essais aux mêmes points de passage : un seul
 RETOUCH_WORST_LEG_FIRST = True   # essais d'abord sur le tronçon le plus chargé en feux (comme Florent à la Plata : il a
 #                                  corrigé l'aller par Sant Andreu en modéré, le retour en sportif)
 RETOUCH_FAMILY_CAP = None        # au plus N essais par famille (mer, lieu, rivière, vert) avant les autres : diversité
+# Familles à tour de rôle (09/10/2026, la Plata Modéré 1 h 30 : le retour de Florent par le Besòs note 58,5 contre 51,8,
+# mais les 10 essais de la boucle publiée sont pris par « lieu », « mer » et « vert » ; la rivière n'est jamais essayée) :
+# un essai de chaque famille, dans l'ordre de rentabilité, puis on recommence. False : désactivé (production v16).
+# À l'activation, l'ajouter à l'empreinte (params_hash).
+RETOUCH_ROUND_ROBIN = False
 RETOUCH_PREFILTER = 0.25         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
 #                                  celle de la boucle de départ) ; au-delà, l'essai est écarté sans requête ni compter   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
 # Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
@@ -2075,6 +2085,12 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 fam[f] = fam.get(f, 0) + 1
                 (first if fam[f] <= RETOUCH_FAMILY_CAP else rest).append(t)
             trials = first + rest
+        if retouch_round_robin():                            # une famille après l'autre (mer, lieu, rivière, vert…)
+            fams: dict = {}
+            for t in trials:
+                fams.setdefault(t[2].split("/")[0], []).append(t)
+            queues = list(fams.values())
+            trials = [q[i] for i in range(max(len(q) for q in queues)) for q in queues if i < len(q)] if queues else []
         if detail is not None:
             detail.append(f"boucle de départ {bi + 1} : note {base.score:.1f}, {base.distance_m / 1000:.1f} km, "
                           f"{base.time_s / 60:.0f} min ; points de passage (lat,lon) "

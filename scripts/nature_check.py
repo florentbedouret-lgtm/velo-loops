@@ -58,6 +58,29 @@ class GH(g.GraphHopper):
         return g.GraphHopper.via(self, points, profile, pass_through)
 
 
+def ref_path(gh, waypoints, profile, analyse_fn):
+    """Boucle de référence par ses points de passage (09/10/2026 : les points de Florent, sans sens de circulation,
+    étaient souvent accrochés à la mauvaise voie : jusqu'à 10 demi-tours, notes faussées). Deux calculs : tel quel, et
+    avec à chaque point le sens du trajet (cap du point précédent au suivant, comme DETOUR_FIX) sans demi-tour permis ;
+    le moins de demi-tours l'emporte (à égalité : tel quel). Renvoie (path, loop)."""
+    plain = gh.via(waypoints, profile)
+    a = analyse_fn(plain) if plain else None
+    way = [list(waypoints[0][:2])]
+    for i in range(1, len(waypoints) - 1):
+        p0, p1, p2 = waypoints[i - 1], waypoints[i], waypoints[i + 1]
+        way.append([p1[0], p1[1], g.bearing(p0[0], p0[1], p2[0], p2[1])])
+    way.append(list(waypoints[-1][:2]))
+    g._TL.detour_fix = True                                  # le client GraphHopper n'envoie le sens que dans ce cas
+    try:
+        head = gh.via(way, profile, pass_through=True)
+    finally:
+        del g._TL.detour_fix
+    b = analyse_fn(head) if head else None
+    if b is not None and (a is None or b.u_turns < a.u_turns):
+        return head, b
+    return plain, a
+
+
 def destination(lon, lat, bearing_deg, km):
     b = math.radians(bearing_deg)
     return (lon + km * math.sin(b) / (111.32 * math.cos(math.radians(lat))), lat + km * math.cos(b) / 110.54)
@@ -252,8 +275,8 @@ def run_reference(ref, gh_url, levels):
     out = []
     for level in levels:
         profile = g.LEVELS[level]["profiles"][0]
-        path = gh.via([[st_["lon"], st_["lat"]]] + ref["waypoints"] + [[st_["lon"], st_["lat"]]], profile)
-        loop = g.analyse(path, level, profile, 1.0, 800, None) if path else None
+        path, loop = ref_path(gh, [[st_["lon"], st_["lat"]]] + ref["waypoints"] + [[st_["lon"], st_["lat"]]], profile,
+                              lambda pth: g.analyse(pth, level, profile, 1.0, 800, None))
         if loop is None:
             out.append({"level": level, "error": gh.last_error or "pas de boucle"})
             continue
@@ -480,7 +503,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "corridor":                              # répétition par couloir v17 seule
+    if variant == "rr":                                    # retouche : familles d'essais à tour de rôle (v17) seule
+        g._TL.retouch_rr = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.retouch_rr
+    elif variant == "corridor":                            # répétition par couloir v17 seule
         g._TL.corridor_overlap = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.corridor_overlap
@@ -546,6 +573,18 @@ def report_relief_test(results, out_json, out_md, t0):
                      f"{md([x['corridor'] for x in a])} -> {md([x['corridor'] for x in b])} | "
                      f"{sum(x.get('outback', False) for x in a)} -> {sum(x.get('outback', False) for x in b)} | "
                      f"{sum(x['score'] for x in a) / len(a):.1f} -> {sum(x['score'] for x in b) / max(1, len(b)):.1f} |")
+    L += ["", "Boucle recommandée de chaque durée et allure, comparée une à une :", "",
+          "| allure | durées | identique | meilleure (> +3) | moins bonne (< -3) | perdue | gagnée |", "|---|---|---|---|---|---|---|"]
+    for lv in ("facile", "modere", "soutenu"):
+        pairs = [(r["v16"].get(k) or [], r["relief"].get(k) or []) for r in res for k in r["v16"] if k.endswith("|" + lv)]
+        if pairs:
+            sa = [(a[0]["score"] if a else None, b[0]["score"] if b else None, bool(a and b and a[0]["key"] == b[0]["key"]))
+                  for a, b in pairs]
+            L.append(f"| {lv} | {len(sa)} | {sum(1 for x in sa if x[2])} | "
+                     f"{sum(1 for a, b, _ in sa if a is not None and b is not None and b - a > 3)} | "
+                     f"{sum(1 for a, b, _ in sa if a is not None and b is not None and b - a < -3)} | "
+                     f"{sum(1 for a, b, _ in sa if a is not None and b is None)} | "
+                     f"{sum(1 for a, b, _ in sa if a is None and b is not None)} |")
     L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
              f"{sum(r.get('heading_retries', 0) for r in res)} fois")
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
@@ -1170,8 +1209,8 @@ def run_compare(refs_path, site, gh_url, level, duration):
     for ref in refs["loops"]:
         best = None
         for profile in g.LEVELS[level]["profiles"]:
-            path = gh.via(here + ref["waypoints"] + here, profile)
-            loop = g.analyse(path, level, profile, duration, 800, None) if path else None
+            path, loop = ref_path(gh, here + ref["waypoints"] + here, profile,
+                                  lambda pth: g.analyse(pth, level, profile, duration, 800, None))
             if loop is not None and (best is None or loop.score > best.score):
                 best = loop
         out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle"),
@@ -1242,7 +1281,7 @@ def main() -> int:
     ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
     ap.add_argument("--relief-variant", default="v17",
                     help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17), detour (DETOUR_FIX) "
-                         "ou corridor (CORRIDOR_OVERLAP)")
+                         "ou corridor (CORRIDOR_OVERLAP), rr (RETOUCH_ROUND_ROBIN)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")

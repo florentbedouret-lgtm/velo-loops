@@ -24,6 +24,7 @@ def test_essais_desactives_en_production():
     assert g.DIRT_RULES is None
     assert g.DETOUR_FIX is False
     assert g.CORRIDOR_OVERLAP is False
+    assert g.RETOUCH_ROUND_ROBIN is False
 
 
 def test_empreinte_stable():
