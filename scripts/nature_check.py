@@ -1369,8 +1369,8 @@ def main() -> int:
     RETOUCH = args.retouch
     g.UTURN_LACETS_OK = args.lacets or g.UTURN_LACETS_OK   # v13 : déjà vrai en production
     g.RETOUCH = False          # la retouche est appelée à part (--retouch) pour la mesurer ; pas deux fois via level_pool
-    if args.relief_test:       # 09/10/2026 : tests avec / sans (relief, terre, détours, couloir, retouche à tour de rôle,
-        g.RETOUCH = RETOUCH    # retours sur ses pas) : génération complète, retouche comprise, comme la production
+    if args.relief_test or args.margin_test is not None:   # 09/10/2026 : tests avec / sans (relief, terre, détours,
+        g.RETOUCH = RETOUCH    # couloir, retouche à tour de rôle, retours sur ses pas, marge) : retouche comprise, comme la production
     if args.retouch_trials:
         g.RETOUCH_MAX_TRIALS = args.retouch_trials
     if args.retouch_prefilter is not None:
