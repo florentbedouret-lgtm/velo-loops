@@ -435,7 +435,7 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
     for d in durations:
         prior = []
         for level in sorted(levels, key=list(g.LEVELS).index):
-            pool = g.keep_order(g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None), options, level, d)
+            pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None, options)
             picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
             prior += [l for _, l in picks]
             rows = []
@@ -560,7 +560,7 @@ def margin_generate(gh, st_, sid, durations, levels, margin):
     for d in durations:
         prior = []
         for level in sorted(levels, key=list(g.LEVELS).index):
-            pool = g.keep_order(g.level_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None), options, level, d)
+            pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None, options)
             picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
             prior += [l for _, l in picks]
             opts = [g.to_json(l, lab, sid, i) for i, (lab, l) in enumerate(picks, start=1)]

@@ -1647,6 +1647,29 @@ def keep_order(pool: list, options: list, level: str, duration_h: float) -> list
     return [l for l in pool if lo <= l.time_s <= hi and route_key(simplify(l.coords, 10.0)) not in taken]   # comme to_json
 
 
+def ordered_pool(gh, st, level: str, duration: float, candidates, log, options: list) -> list:
+    """Pool d'une durée avec la marge et l'ordre des durées (keep_order). Filet (09/10/2026, 3e test de la marge : 65
+    recommandées meilleures, mais 4 durées vidées sur 1 416, dont Torrelles 1 h Modéré : 53 min, pas assez plus longue que
+    la boucle de 45 min, 52 min) : si la durée est vide, elle est recalculée avec les plages strictes (v16). La marge ne
+    peut donc plus faire perdre une boucle."""
+    pool = keep_order(level_pool(gh, st, level, duration, candidates, log), options, level, duration)
+    if pool or not bin_margin():
+        return pool
+    had = hasattr(_TL, "bin_margin")
+    old = getattr(_TL, "bin_margin", None)
+    _TL.bin_margin = 0.0                                     # plages strictes, sans contrainte d'ordre (v16)
+    try:
+        pool = level_pool(gh, st, level, duration, candidates, log)
+    finally:
+        if had:
+            _TL.bin_margin = old
+        else:
+            del _TL.bin_margin
+    if pool:
+        log(f"    marge : aucune boucle en gardant l'ordre des durées ; plages strictes reprises ({len(pool)} candidats)")
+    return pool
+
+
 def dirt_ok(l) -> bool:
     """Terre acceptable : part sous MAX_UNPAVED et, si DIRT_MAX_KM, pas plus de DIRT_MAX_KM km."""
     return l.shares["unpaved"] <= MAX_UNPAVED and (DIRT_MAX_KM is None or
@@ -3040,7 +3063,7 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         t_dur = time.time()
         prior: list = []                                  # options des allures inférieures (O-18 A)
         for level in sorted(levels, key=list(LEVELS).index):
-            pool = keep_order(level_pool(gh, st, level, duration, candidates, log), options, level, duration)
+            pool = ordered_pool(gh, st, level, duration, candidates, log, options)
             picks = choose_options(gh, st, level, duration, pool, prior, log)
             prior += [l for _, l in picks]
             for i, (label, loop) in enumerate(picks, start=1):

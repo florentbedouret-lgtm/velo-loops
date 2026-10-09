@@ -22,6 +22,8 @@ def test_essais_desactives_en_production():
     assert g.RELIEF_LIMITS is None
     assert g.TARGETED_GATE is None
     assert g.DIRT_RULES is None
+    assert g.DETOUR_FIX is False
+    assert g.CORRIDOR_OVERLAP is False
 
 
 def test_empreinte_stable():
@@ -265,3 +267,57 @@ def test_terre_v17_inactive(monkeypatch):
     monkeypatch.setattr(g, "DIRT_RULES", None)
     pool = [_dirt(3.0)]
     assert g.dirt_filter(pool, "facile", lambda *_: None) == pool
+
+
+# ----------------------------------------------------------------------------- filet de la marge (09/10/2026)
+def test_marge_ne_vide_jamais_une_duree(monkeypatch):
+    """Durée vidée par l'ordre des durées (Torrelles 1 h Modéré) : recalculée avec les plages strictes."""
+    monkeypatch.setattr(g, "DURATION_BIN_MARGIN", 0.05)
+    seen = []
+
+    def fake_pool(gh, st, level, duration, candidates, log):
+        seen.append(g.bin_margin())
+        return [_loop(53, COORDS_A)]
+    monkeypatch.setattr(g, "level_pool", fake_pool)
+    options = [_opt("modere", 45, 52, "k45")]                    # boucle de 45 min : 52 min (écart de 3 min exigé)
+    pool = g.ordered_pool(None, {}, "modere", 1.0, [], lambda *_: None, options)
+    assert len(pool) == 1 and seen == [0.05, 0.0]                # 1er calcul avec la marge, 2e en plages strictes
+    assert g.bin_margin() == 0.05                                # réglage rétabli
+
+
+# ----------------------------------------------------------------------------- tracé (v17, 08/10/2026)
+def _line(points):
+    """Points (x m, y m, z m) autour de Barcelone -> coordonnées [lon, lat, z]."""
+    return [[2.15 + x / 83800.0, 41.39 + y / 111000.0, z] for x, y, z in points]
+
+
+def _cum(c):
+    out = [0.0]
+    for a, b in zip(c, c[1:]):
+        out.append(out[-1] + g.haversine(a[0], a[1], b[0], b[1]))
+    return out
+
+
+def test_couloir_compte_la_voie_parallele():
+    """Aller puis retour sur une voie parallèle à 15 m (autre chaussée) : répété, ce que la mesure v16 ne voyait pas."""
+    c = _line([(x, 0, 10) for x in range(0, 1001, 50)] + [(x, 15, 10) for x in range(1000, -1, -50)])
+    rep = sum(g.corridor_repeats(c, _cum(c))) / _cum(c)[-1]
+    assert rep > 0.8
+
+
+def test_couloir_ignore_les_lacets():
+    """Lacets superposés sur la carte mais 30 m plus haut : pas une répétition."""
+    c = _line([(x, 0, 10 + x * 0.03) for x in range(0, 1001, 50)] + [(x, 15, 40 + (1000 - x) * 0.03) for x in range(1000, -1, -50)])
+    rep = sum(g.corridor_repeats(c, _cum(c))) / _cum(c)[-1]
+    assert rep < 0.3
+
+
+def test_detour_pate_de_maisons():
+    """Tour d'un pâté de maisons au milieu d'une ligne droite : détecté (Paral·lel -> Calàbria -> retour)."""
+    pts = [(x, 0, 10) for x in range(0, 1001, 20)]
+    pts += [(1000, y, 10) for y in range(20, 201, 20)] + [(x, 200, 10) for x in range(980, 879, -20)]
+    pts += [(880, y, 10) for y in range(180, 59, -20)] + [(x, 60, 10) for x in range(900, 1101, 20)]
+    pts += [(x, 0, 10) for x in range(1120, 2001, 20)]
+    found = g.block_detours(_line(pts))
+    assert len(found) == 1 and found[0]["m"] > 500
+    assert g.block_detours(_line([(x, 0, 10) for x in range(0, 2001, 20)])) == []     # ligne droite : rien
