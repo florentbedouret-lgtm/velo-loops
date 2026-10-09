@@ -526,7 +526,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         b = relief_generate(gh, st_, sid, durations, levels,
                             g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)],
-           "heading_retries": gh.heading_retries}
+           "heading_retries": gh.heading_retries, "heading_error": gh.heading_error}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
     return res
@@ -600,7 +600,8 @@ def report_relief_test(results, out_json, out_md, t0):
                      f"{sum(x['spurs'] for x in a)} -> {sum(x.get('spurs', 0) for x in b)} | "
                      f"{sum(x['uturns'] > 0 for x in a)} -> {sum(x.get('uturns', 0) > 0 for x in b)} |")
     L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
-             f"{sum(r.get('heading_retries', 0) for r in res)} fois")
+             f"{sum(r.get('heading_retries', 0) for r in res)} fois"
+             + "".join(f" ; {r['id']} : {r['heading_error'][:300]}" for r in res if r.get("heading_error"))[:900])
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L), flush=True)
 

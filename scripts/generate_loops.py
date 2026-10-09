@@ -1131,6 +1131,7 @@ class GraphHopper:
         self.calls = 0
         self.hits = 0
         self.heading_retries = 0                            # sens de circulation refusé : requête refaite sans
+        self.heading_error = ""                             # message du premier refus (diagnostic)
 
     def _route(self, body):
         import copy
@@ -1141,11 +1142,7 @@ class GraphHopper:
             path, self.last_error = self._memo[key]
             return copy.deepcopy(path)
         try:
-            if "headings" in body:                         # NaN (point sans sens imposé) : hors JSON strict de requests
-                r = self.http.post(f"{self.base}/route", data=json.dumps(body), timeout=120,
-                                   headers={"Content-Type": "application/json"})
-            else:
-                r = self.http.post(f"{self.base}/route", json=body, timeout=120)
+            r = self.http.post(f"{self.base}/route", json=body, timeout=120)
         except requests.RequestException as e:
             self.last_error = f"requête échouée : {e}"
             return None                                   # erreur réseau : pas gardée (peut réussir au prochain essai)
@@ -1181,11 +1178,14 @@ class GraphHopper:
                 "points_encoded": False, "elevation": True, "instructions": False, "details": DETAILS,
                 **({"pass_through": True} if pass_through else {})}
         if detour_fix() and any(h is not None for h in heads):
-            body["headings"] = [float("nan") if h is None else round(h, 1) for h in heads]
+            # point sans sens imposé : "NaN" en texte (09/10/2026 : la valeur NaN brute, hors JSON, était refusée par
+            # GraphHopper, 1 971 fois sur le diagnostic des détours ; le texte "NaN" est lu comme un nombre)
+            body["headings"] = ["NaN" if h is None else round(h, 1) for h in heads]
             path = self._route(body)
             if path is not None or not self.last_error.startswith("HTTP 400"):
                 return path
             self.heading_retries += 1                       # refusé : même requête sans sens imposé
+            self.heading_error = self.heading_error or self.last_error
             del body["headings"]
         return self._route(body)
 
