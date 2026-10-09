@@ -476,7 +476,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "dirt": round(o["distance_km"] * o["shares"]["unpaved"], 1),
                              "dirt_fallback": bool(o.get("unpaved_fallback")),
                              **detour_cols(o["coords"]), **corridor_col(o["coords"]),
-                             "overlap": o["overlap"], "outback": bool(o.get("out_and_back"))})
+                             "overlap": o["overlap"], "outback": bool(o.get("out_and_back")),
+                             "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0)})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
     del g._TL.dirt_rules
@@ -503,7 +504,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "rr":                                    # retouche : familles d'essais à tour de rôle (v17) seule
+    if variant == "bt":                                    # retours sur ses pas utiles / inutiles (v17) seuls
+        g._TL.backtrack_rules = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.backtrack_rules
+    elif variant == "rr":                                  # retouche : familles d'essais à tour de rôle (v17) seule
         g._TL.retouch_rr = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.retouch_rr
@@ -585,6 +590,15 @@ def report_relief_test(results, out_json, out_md, t0):
                      f"{sum(1 for a, b, _ in sa if a is not None and b is not None and b - a < -3)} | "
                      f"{sum(1 for a, b, _ in sa if a is not None and b is None)} | "
                      f"{sum(1 for a, b, _ in sa if a is None and b is not None)} |")
+    L += ["", "Demi-tours et éperons comptés (boucles recommandées) :", "",
+          "| allure | demi-tours | éperons inutiles | boucles avec au moins un demi-tour |", "|---|---|---|---|"]
+    for lv in ("facile", "modere", "soutenu"):
+        a = [rows[0] for r in res for key, rows in r["v16"].items() if key.endswith("|" + lv) and rows]
+        b = [rows[0] for r in res for key, rows in r["relief"].items() if key.endswith("|" + lv) and rows]
+        if a and "uturns" in a[0]:
+            L.append(f"| {lv} | {sum(x['uturns'] for x in a)} -> {sum(x.get('uturns', 0) for x in b)} | "
+                     f"{sum(x['spurs'] for x in a)} -> {sum(x.get('spurs', 0) for x in b)} | "
+                     f"{sum(x['uturns'] > 0 for x in a)} -> {sum(x.get('uturns', 0) > 0 for x in b)} |")
     L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
              f"{sum(r.get('heading_retries', 0) for r in res)} fois")
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
@@ -1281,7 +1295,7 @@ def main() -> int:
     ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
     ap.add_argument("--relief-variant", default="v17",
                     help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17), detour (DETOUR_FIX) "
-                         "ou corridor (CORRIDOR_OVERLAP), rr (RETOUCH_ROUND_ROBIN)")
+                         "ou corridor (CORRIDOR_OVERLAP), rr (RETOUCH_ROUND_ROBIN), bt (BACKTRACK_RULES)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")

@@ -25,6 +25,7 @@ def test_essais_desactives_en_production():
     assert g.DETOUR_FIX is False
     assert g.CORRIDOR_OVERLAP is False
     assert g.RETOUCH_ROUND_ROBIN is False
+    assert g.BACKTRACK_RULES is False
 
 
 def test_empreinte_stable():
@@ -322,3 +323,29 @@ def test_detour_pate_de_maisons():
     found = g.block_detours(_line(pts))
     assert len(found) == 1 and found[0]["m"] > 500
     assert g.block_detours(_line([(x, 0, 10) for x in range(0, 2001, 20)])) == []     # ligne droite : rien
+
+
+# ----------------------------------------------------------------------------- retours sur ses pas (09/10/2026)
+def test_retour_utile_relief_selon_allure(monkeypatch):
+    """Monter 50 m puis redescendre : utile en Modéré et Sportif, pas en Tranquille (sans rien d'autre au bout)."""
+    monkeypatch.setattr(g, "POIS", None)
+    monkeypatch.setattr(g, "LANDSCAPE", None)
+    c = _line([(x, 0, 10 + x * 0.05) for x in range(0, 1001, 50)] + [(x, 5, 60 - (1000 - x) * 0.05) for x in range(1000, -1, -50)])
+    n = len(c) - 1
+    assert g.backtrack_useful(c, 0, n, "modere") == "relief"
+    assert g.backtrack_useful(c, 0, n, "soutenu") == "relief"
+    assert g.backtrack_useful(c, 0, n, "facile") is None
+
+
+def test_retour_utile_piste_et_lieu(monkeypatch):
+    """Aller-retour plat : utile s'il est sur piste cyclable, ou s'il passe par un lieu remarquable (Montjuïc)."""
+    import shapely
+    monkeypatch.setattr(g, "LANDSCAPE", None)
+    monkeypatch.setattr(g, "POIS", None)
+    c = _line([(x, 0, 10) for x in range(0, 1001, 50)] + [(x, 5, 10) for x in range(1000, -1, -50)])
+    n = len(c) - 1
+    assert g.backtrack_useful(c, 0, n, "facile") is None
+    assert g.backtrack_useful(c, 0, n, "facile", ["c"] * n) == "piste"
+    tip = c[20]
+    monkeypatch.setattr(g, "POIS", {"lieu": (shapely.STRtree([shapely.Point(tip[0], tip[1])]), None)})
+    assert g.backtrack_useful(c, 0, n, "facile") == "lieu"

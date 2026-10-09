@@ -136,6 +136,11 @@ def dirt_rules() -> dict:
     return getattr(_TL, "dirt_rules", DIRT_RULES) or {}
 
 
+def backtrack_rules() -> bool:
+    """Règle unique des retours sur ses pas (BACKTRACK_RULES), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "backtrack_rules", BACKTRACK_RULES))
+
+
 def corridor_overlap() -> bool:
     """Répétition mesurée par couloir (CORRIDOR_OVERLAP), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
@@ -300,6 +305,19 @@ DETOUR_FIX = False
 # répété, les deux passages comptant. Sert à MAX_OVERLAP, à la note « fluidité » et aux allers-retours (OUTBACK_OK).
 # False : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
 CORRIDOR_OVERLAP = False
+# Retours sur ses pas utiles ou inutiles (Florent, 09/10/2026 : « bien différencier les demi-tours utiles — prolonger une
+# route agréable, avoir du D+, atteindre un lieu remarquable ou une piste cyclable — des demi-tours inutiles »). En v16,
+# chaque mécanisme a ses propres exceptions (éperons : montée, lieu, belvédère, nature ; répétition : allers-retours sur
+# piste ; demi-tours : aucune, le demi-tour au château de Montjuïc coûte ~3 points). BACKTRACK_RULES : un passage où la
+# boucle revient sur ses pas (demi-tour, éperon, tronçon répété, détour) est utile s'il passe par un lieu remarquable ou
+# un belvédère, s'il monte d'au moins BACKTRACK_CLIMB_M en Modéré ou Sportif (pas en Tranquille), ou s'il est surtout
+# (BACKTRACK_SHARE) au bord de l'eau, en forêt, dans un parc, ou sur piste cyclable / voie verte ; utile, il ne coûte
+# rien (ni demi-tour, ni répétition, ni éperon, ni détour). False : désactivé (production v16). À l'activation,
+# l'ajouter à l'empreinte (params_hash).
+BACKTRACK_RULES = False
+BACKTRACK_CLIMB_M = 40.0
+BACKTRACK_SHARE = 0.6
+BACKTRACK_RELIEF_LEVELS = ("modere", "soutenu")
 CORRIDOR_R_M = 25.0
 CORRIDOR_GAP_M = 200.0
 CORRIDOR_DZ_M = 6.0
@@ -1417,8 +1435,12 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         rep_m = corridor_repeats(coords, cum)
     else:                                            # mêmes points de la carte (v16)
         rep_m = [cum[i + 1] - cum[i] if seen[k] > 1 else 0.0 for i, k in enumerate(keys)]
-    repeated = sum(rep_m)
     rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
+    useful = useful_windows(coords, level, rc_rep) if backtrack_rules() else []
+    for a_, b_, _ in useful:                         # aller-retour utile (BACKTRACK_RULES) : pas une répétition
+        for i in range(a_, min(b_, len(rep_m))):
+            rep_m[i] = 0.0
+    repeated = sum(rep_m)
     rep_cycle = sum(m for i, m in enumerate(rep_m) if rc_rep[i] == "c")
     longest_repeat, run = 0.0, 0.0
     for i, m in enumerate(rep_m):                    # plus long tronçon consécutif emprunté deux fois
@@ -1474,6 +1496,9 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     surface_mix["unknown"] = max(0.0, 1.0 - sum(surface_mix.values()))
     terrain = slope_stats(ds, prof)
     u_turns = true_uturns(coords) if UTURN_LACETS_OK else count_uturns(coords)
+    if useful and UTURN_LACETS_OK:                   # demi-tour au bout d'un aller-retour utile (BACKTRACK_RULES) : gratuit
+        u_turns = sum(1 for u in uturn_points(coords) if u[2] < UTURN_SAME_STREET_M and not any(
+            haversine(u[0], u[1], coords[t][0], coords[t][1]) < 40.0 for _, _, t in useful))
     scenery = LANDSCAPE.measure(coords, cum) if LANDSCAPE is not None else None
     exit_dense = None
     ud = det.get("urban_density") or []
@@ -1498,8 +1523,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
-    loop.spurs = unjustified_spurs(coords) if SPUR_FIX else []
+    loop.spurs = unjustified_spurs(coords, level, rc_rep) if SPUR_FIX else []
     loop.detours = block_detours(coords) if detour_fix() else []
+    if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
+        loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep) is None]
     loop.surface_seq = surface_seq(edges, cum)
     if STEEP_DIRT_PENALTY:                                # terre (notée ou probable) sur une pente d'au moins 12 %
         n_ = min(len(loop.surface_seq), len(prof) - 1)
@@ -2323,13 +2350,58 @@ def trim_detours(gh, loop, level, duration_h):
     return new
 
 
-def unjustified_spurs(coords) -> list:
-    """Éperons d'au moins SPUR_MIN_M, hors départ et arrivée, qui n'apportent rien (voir SPUR_FIX)."""
+def backtrack_useful(coords, a: int, b: int, level: str, cyc=None):
+    """Pourquoi le passage coords[a..b], où la boucle revient sur ses pas, est utile (voir BACKTRACK_RULES) : "lieu",
+    "belvédère", "relief", "nature" ou "piste" ; None s'il n'apporte rien. cyc : lettre de chaque tronçon (road_edges)."""
+    import numpy as np
+    import shapely
+    seg = coords[a:b + 1]
+    if len(seg) < 2:
+        return None
+    pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]]))
+    if POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0]):
+        return "lieu"
+    tv = LANDSCAPE.trees.get("view") if LANDSCAPE is not None else None
+    if tv is not None and len(tv.query(pts, predicate="dwithin", distance=VIEW_NEAR_DEG)[0]):
+        return "belvédère"
+    if level in BACKTRACK_RELIEF_LEVELS and len(seg[0]) > 2 and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M:
+        return "relief"
+    if LANDSCAPE is not None:
+        hit = np.zeros(len(pts), dtype=bool)
+        for key in ("water", "river", "sea", "forest", "protected"):
+            tr = LANDSCAPE.trees.get(key)
+            if tr is not None:
+                hit[np.unique(tr.query(pts, predicate="dwithin", distance=0.0006)[0])] = True
+        if hit.mean() >= BACKTRACK_SHARE:
+            return "nature"
+    if cyc is not None:
+        m = [(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1]), cyc[i] == "c")
+             for i in range(a, min(b, len(cyc)))]
+        tot = sum(x for x, _ in m)
+        if tot > 0 and sum(x for x, c in m if c) / tot >= BACKTRACK_SHARE:
+            return "piste"
+    return None
+
+
+def useful_windows(coords, level: str, cyc=None) -> list:
+    """Allers-retours utiles de la boucle (voir BACKTRACK_RULES) : [(a, b, t)] (entrée, sortie, demi-tour)."""
+    return [(s["a"], s["b"], s["t"]) for s in spur_list(coords) if backtrack_useful(coords, s["a"], s["b"], level, cyc)]
+
+
+def unjustified_spurs(coords, level: str | None = None, cyc=None) -> list:
+    """Éperons d'au moins SPUR_MIN_M, hors départ et arrivée, qui n'apportent rien (voir SPUR_FIX ; avec
+    BACKTRACK_RULES, jugés par backtrack_useful)."""
     import numpy as np
     import shapely
     out = []
+    rules = backtrack_rules() and level is not None
     for s in spur_list(coords):
         if s["m"] < SPUR_MIN_M or s["start_m"] < SPUR_END_M or s["end_m"] < SPUR_END_M:
+            continue
+        if rules:
+            if backtrack_useful(coords, s["a"], s["b"], level, cyc) is None:
+                out.append({"km": None, "m": round(s["m"]), "a": s["a"], "b": s["b"],
+                            "lon": round(coords[s["t"]][0], 5), "lat": round(coords[s["t"]][1], 5)})
             continue
         seg = coords[s["a"]:s["t"] + 1]
         if len(seg[0]) > 2 and max(c[2] for c in seg) - seg[0][2] >= SPUR_JUSTIFIED_DPLUS_M:
