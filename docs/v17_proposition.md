@@ -15,7 +15,7 @@ retouche à tour de rôle, retours sur ses pas, marge v4) la comprennent.
 |---|---|---|---|
 | **Répétition par couloir** (`CORRIDOR_OVERLAP`, O-47) | l'autre chaussée, une voie parallèle ou un triangle de carrefour ne comptaient pas comme répétition (Gràcia Modéré 1 h : 4 % mesurés, 47 % réels) | boucles répétées à plus de 25 % : 20 → 1 (Tranquille), 18 → 2, 16 → 1 ; note −0,7 à +0,1 ; Gràcia corrigée | **activer** |
 | **Détours en pâté de maisons** (`DETOUR_FIX`, O-46) | points de passage accrochés à la mauvaise chaussée (Sants-Montjuïc 1 h 30 : Paral·lel → Calàbria) | mètres de détour −5 à −18 %, note inchangée ; Sants 1 h 30 : 2 détours → 0 | **activer** (gain modeste, sans effet négatif) |
-| **Relief par allure** (`RELIEF_LIMITS_V17_FLAT`, O-45) | Tranquille et Modéré avaient le même relief | Modéré : 14,3 → 12,9 m/km, au-delà de 15 m/km 89 → 57, note −3 ; Tranquille : 13,9 → 9,6 m/km, mais **38 % sans boucle peu vallonnée** (repli annoncé), note −9 | **Modéré : activer.** Tranquille : à toi de trancher (garder la cible et dire « pas de boucle plate d'ici », ou viser moins bas) |
+| **Relief par allure** (`RELIEF_LIMITS_V17_FLAT`, O-45) | Tranquille et Modéré avaient le même relief | Modéré : 14,3 → 12,9 m/km, au-delà de 15 m/km 89 → 57, note −3 ; Tranquille : 13,9 → 9,6 m/km, mais **38 % sans boucle peu vallonnée** (repli annoncé), note −9 | **Modéré : activer. Tranquille : activer (choix A de Florent, 09/10)** : cible 5-10 m/km gardée, repli annoncé (« pas de boucle plate d'ici ») plutôt qu'une boucle de ville |
 | **Terre plafonnée à 1 km** (`DIRT_RULES_V17`) | trop de terre dans les boucles recommandées | boucles à plus de 1 km de terre −15 % ; environ 10 % des durées en repli (la moins terreuse, annoncée) ; note −1,4 à −1,9 | **activer** (va dans ton sens, effet limité par le terrain) |
 | **Marge des durées** (`DURATION_BIN_MARGIN` 0,05 + filet) | une très bonne boucle de 4 h 24 refusée en « 5 h » | 3e test : 65 boucles meilleures de plus de 3 points (souvent +10 à +30), 4 durées vidées → **filet** ajouté (une durée vide est recalculée en plages strictes) | **activer si le test v4** (en cours, retouche comprise) **confirme zéro durée perdue** |
 | **Retours sur ses pas utiles / inutiles** (`BACKTRACK_RULES`, O-51) | un demi-tour au château de Montjuïc coûtait autant qu'un demi-tour absurde | note +2,7 à +3,3 ; 200 boucles meilleures, 4 moins bonnes ; 29 durées vides trouvent une boucle ; Sants 1 h 30 : 49,7 → 58,5 | **attendre l'audit** (en cours) : presque tous les demi-tours deviennent « utiles », le critère « nature » est sans doute trop large |
@@ -29,7 +29,8 @@ retouche à tour de rôle, retours sur ses pas, marge v4) la comprennent.
 
 ## Avant de lancer la v17
 
-1. **Mesurer l'ensemble** : un diagnostic avec toutes les règles retenues allumées en même temps, sur les 30 départs,
+1. **Mesurer l'ensemble** (prêt : `diag_part=v1` / `v2`, règles dans `V17_RULES` du workflow, Sants-Montjuïc, Gràcia et
+   la Plata ajoutés à v1) : un diagnostic avec toutes les règles retenues allumées en même temps, sur les 30 départs,
    retouche comprise (les règles peuvent se contrarier : par exemple, terre plafonnée et relief Tranquille réduisent
    tous deux le choix).
 2. **Activer** : mettre les interrupteurs retenus, les ajouter à l'empreinte (`params_hash`, entrée « v17 ») ; pour le

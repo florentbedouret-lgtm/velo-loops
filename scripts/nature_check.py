@@ -363,6 +363,7 @@ def report_references(results, path_json, path_md, note, t0):
 
 # ----------------------------------------------------------------------------- sonde : boucles de production avant/après
 WAYS = None                     # sonde « revêtement » : voies OSM classées (landcover.load_ways), chargées dans main()
+V17_RULES: set = set()          # --v17-rules : règles de la mesure combinée v17 (variante v17all)
 RETOUCH = False                 # --retouch : retouche des meilleures boucles mesurée (sonde, comparaison)
 
 
@@ -505,7 +506,23 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "bt":                                    # retours sur ses pas utiles / inutiles (v17) seuls
+    if variant == "v17all":                                # mesure combinée : règles de V17_RULES allumées ensemble
+        on = []
+        for name, attr, val in (("corridor", "corridor_overlap", True), ("detour", "detour_fix", True),
+                                ("backtrack", "backtrack_rules", True), ("rr", "retouch_rr", True),
+                                ("margin", "bin_margin", 0.05)):
+            if name in V17_RULES:
+                setattr(g._TL, attr, val)
+                on.append(attr)
+        try:
+            b = relief_generate(gh, st_, sid, durations, levels,
+                                g.RELIEF_LIMITS_V17_FLAT if "relief" in V17_RULES else None,
+                                g.DIRT_RULES_V17 if "dirt" in V17_RULES else None)
+        finally:
+            for attr in on:
+                if hasattr(g._TL, attr):
+                    delattr(g._TL, attr)
+    elif variant == "bt":                                  # retours sur ses pas utiles / inutiles (v17) seuls
         g._TL.backtrack_rules = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.backtrack_rules
@@ -1313,6 +1330,8 @@ def main() -> int:
     ap.add_argument("--note", default="", help="réglage particulier de ce run (ex. rayon « ville » de GraphHopper)")
     ap.add_argument("--probe", default=None, help="sonde : identifiants de départs publiés séparés par ;")
     ap.add_argument("--relief-test", action="store_true", help="relief par allure v17 : avec / sans (sonde --probe)")
+    ap.add_argument("--v17-rules", default="corridor,detour,relief,dirt,margin",
+                    help="variante v17all : règles allumées ensemble (corridor, detour, relief, dirt, margin, backtrack, rr)")
     ap.add_argument("--relief-variant", default="v17",
                     help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17), detour (DETOUR_FIX) "
                          "ou corridor (CORRIDOR_OVERLAP), rr (RETOUCH_ROUND_ROBIN), bt (BACKTRACK_RULES)")
@@ -1369,6 +1388,8 @@ def main() -> int:
     RETOUCH = args.retouch
     g.UTURN_LACETS_OK = args.lacets or g.UTURN_LACETS_OK   # v13 : déjà vrai en production
     g.RETOUCH = False          # la retouche est appelée à part (--retouch) pour la mesurer ; pas deux fois via level_pool
+    global V17_RULES
+    V17_RULES = {r.strip() for r in args.v17_rules.split(",") if r.strip()}
     if args.relief_test or args.margin_test is not None:   # 09/10/2026 : tests avec / sans (relief, terre, détours,
         g.RETOUCH = RETOUCH    # couloir, retouche à tour de rôle, retours sur ses pas, marge) : retouche comprise, comme la production
     if args.retouch_trials:
@@ -1393,7 +1414,7 @@ def main() -> int:
         durations = [float(x) for x in args.durations.split()]
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             results = list(ex.map(lambda sid: run_relief_test(sid, args.site, args.gh, durations, args.levels.split(),
-                                                              args.prev_dir, args.relief_variant), ids))
+                                                              args.prev_dir, args.relief_variant), ids))  # noqa: E501
         report_relief_test(results, args.out, args.out_md, t0)
         return 0
     if args.probe and args.margin_test is not None:
