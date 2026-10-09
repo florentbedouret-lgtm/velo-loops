@@ -92,7 +92,7 @@ concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
   # diag_part=surf (carte seule) et les parties lancées depuis le 08/10/2026 au soir (o1, o2, cmp3) : chacune dans sa file,
   # elles tournent en parallèle sans prendre la place d'un diagnostic en attente
-  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp4","w1","w2","b1","b2"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
+  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp4","w1","w2","b1","b2","t1","t2"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
