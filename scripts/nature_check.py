@@ -509,10 +509,12 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "cross":                                 # croisement des meilleures boucles (v17) seul
+    if variant in ("cross", "crossn"):                     # croisement (v17), avec les durées voisines (crossn)
         g._TL.crossover = True
+        g._TL.cross_neighbours = variant == "crossn"
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.crossover
+        del g._TL.cross_neighbours
     elif variant == "short":                               # retouche trop longue raccourcie (v17) seule
         g._TL.retouch_shorten = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
@@ -521,6 +523,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         on = []
         for name, attr, val in (("corridor", "corridor_overlap", True), ("detour", "detour_fix", True),
                                 ("shorten", "retouch_shorten", True), ("cross", "crossover", True),
+                                ("crossn", "cross_neighbours", True),
                                 ("backtrack", "backtrack_rules", True), ("rr", "retouch_rr", True),
                                 ("margin", "bin_margin", 0.05)):
             if name in V17_RULES:

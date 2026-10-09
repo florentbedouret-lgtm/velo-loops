@@ -146,6 +146,11 @@ def corridor_overlap() -> bool:
     return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
 
 
+def cross_neighbours() -> bool:
+    """Parents des durées voisines pour le croisement (CROSS_NEIGHBOURS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "cross_neighbours", CROSS_NEIGHBOURS))
+
+
 def crossover() -> bool:
     """Croisement des meilleures boucles (CROSSOVER), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "crossover", CROSSOVER))
@@ -245,6 +250,11 @@ CROSSOVER = False
 CROSS_TOP = 4
 CROSS_NEAR_M = 150.0
 CROSS_MAX_TRIALS = 12
+# Parents des durées voisines (09/10/2026, la Plata 1 h 30 : la boucle de Florent assemble la boucle publiée de 1 h 30 et
+# celle de 2 h ; le croisement seul ne combine que des boucles de la même durée) : CROSS_NEIGHBOURS ajoute comme parents
+# les CROSS_NEIGHBOUR_LOOPS premières boucles publiées (KEEP_PREVIOUS) des durées voisines, recalculées. False : désactivé.
+CROSS_NEIGHBOURS = False
+CROSS_NEIGHBOUR_LOOPS = 2
 RETOUCH_SHORTEN_GAIN = 0.03
 RETOUCH_SHORTEN_AIM = 0.97
 RETOUCH_PREFILTER = 0.25         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
@@ -2699,6 +2709,19 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
             tops.append(l)
         if len(tops) >= CROSS_TOP:
             break
+    parents = list(tops)
+    if cross_neighbours() and st.get("previous") and duration_h in DURATION_SET:
+        i = DURATION_SET.index(duration_h)                   # boucles publiées des durées voisines, même allure
+        for j in (i - 1, i + 1):
+            if not 0 <= j < len(DURATION_SET):
+                continue
+            for profile, coords in (st["previous"].get((level, round(DURATION_SET[j] * 60))) or [])[:CROSS_NEIGHBOUR_LOOPS]:
+                way = route_waypoints(coords)
+                way[0] = way[-1] = [st["lon"], st["lat"]]
+                p = gh.via(way, profile, pass_through=True)
+                l = analyse(p, level, profile, duration_h, 2100, None) if p else None
+                if l is not None:
+                    parents.append(l)
 
     def sampled(l):                                          # un point tous les ~50 m : (indices, x m, y m, part du parcours)
         c = l.coords
@@ -2713,10 +2736,10 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
         kx = 111320.0 * math.cos(math.radians(c[0][1]))
         return (np.array(idx), np.array([c[i][0] * kx for i in idx]), np.array([c[i][1] * 110540.0 for i in idx]),
                 np.array([cum[i] / max(cum[-1], 1.0) for i in idx]))
-    samp = {id(l): sampled(l) for l in tops}
+    samp = {id(l): sampled(l) for l in parents}
     plans = []
-    for A in tops:
-        for B in tops:
+    for A in parents:
+        for B in parents:
             if A is B:
                 continue
             ia, xa, ya, fa = samp[id(A)]
