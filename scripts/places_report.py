@@ -165,7 +165,8 @@ def main():
         snap, road_pt = road_dist_m(rtree, rlines, lon, lat)
         row = {"qid": qid, "label": e["label"], "sitelinks": e["sitelinks"], "kind": kinds, "lon": round(lon, 6),
                "lat": round(lat, 6), "osm": bool(best_el), "osm_name": osm_name, "road_m": None if snap is None else round(snap),
-               "passes": sum(passes.get(n, 0) for n in {e["label"], osm_name, e.get("point_name")} if n)}
+               "passes": sum(passes.get(n, 0) for n in {e["label"], osm_name, e.get("point_name")} if n),
+               "excluded": bool(e.get("exclude"))}             # écarté à la main (doublon d'un sommet…)
         if snap is not None and snap > ACCESS_MAX_M:      # inaccessible tel quel : chercher un point d'accès
             best = None
             for x, y, p in cands:
@@ -191,12 +192,15 @@ def main():
          "| lieu | articles | type | dans OSM | route (m) | boucles qui y passent | point d'accès proposé |", "|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: -r["sitelinks"]):
         acc = r.get("access")
-        L.append(f"| {r['label']} | {r['sitelinks']} | {', '.join(r['kind'])} | {'oui' if r['osm'] else 'non'} | "
+        L.append(f"| {r['label']}{' (écarté)' if r.get('excluded') else ''} | {r['sitelinks']} | {', '.join(r['kind'])} | {'oui' if r['osm'] else 'non'} | "
                  f"{r['road_m']} | {r['passes']} | "
                  + (f"{acc['via']} ({acc['dist_m']} m ; {acc['point'][1]:.5f},{acc['point'][0]:.5f})" if acc else "") + " |")
-    holes = [r for r in rows if r["passes"] == 0 and r["sitelinks"] >= 10]
+    holes = [r for r in rows if r["passes"] == 0 and r["sitelinks"] >= 10 and not r.get("excluded")]
     L += ["", f"Lieux célèbres (≥ 10 articles) sans aucune boucle : {len(holes)} — "
           + ", ".join(r["label"] for r in sorted(holes, key=lambda r: -r["sitelinks"]))]
+    out_ = [r["label"] for r in rows if r.get("excluded")]
+    if out_:                                              # 09/10/2026 : ils apparaissaient comme « sans aucune boucle »
+        L.append(f"Écartés à la main (exclude, doublons d'un sommet déjà compté) : {', '.join(out_)}")
     Path(a.out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L), flush=True)
 

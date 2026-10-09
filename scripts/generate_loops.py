@@ -739,7 +739,7 @@ def load_pois(pbf: Path, workdir: Path):
     # « a un article Wikipédia » retenait 63 petits turons de Catalogne, 239 boucles sur 459, le Tibidabo 2 fois seulement)
     try:
         remarkable_all = json.loads((Path(__file__).parent / "remarkable_places.json").read_text(encoding="utf-8"))["places"]
-        remarkable = set(remarkable_all)
+        remarkable = {q for q, e in remarkable_all.items() if not e.get("exclude")}   # écartés à la main : ni visés ni comptés
     except (OSError, ValueError, KeyError):
         remarkable, remarkable_all = set(), {}
     with out.open(encoding="utf-8") as fh:

@@ -60,7 +60,9 @@
    "coord": [
     2.073889,
     41.412222
-   ]
+   ],
+   "exclude": true,
+   "why": "massif, pas un point : point arbitraire au milieu des collines ; forêt et espace protégé déjà comptés par la note paysage (Florent, 09/10/2026)"
   },
   "Q1862666": {
    "label": "Pedraforca",
@@ -198,7 +200,9 @@
    "coord": [
     2.567022,
     41.675858
-   ]
+   ],
+   "exclude": true,
+   "why": "massif, pas un point : point arbitraire au milieu des collines ; forêt et espace protégé déjà comptés par la note paysage (Florent, 09/10/2026)"
   },
   "Q7131953": {
    "label": "pantà de Susqueda",

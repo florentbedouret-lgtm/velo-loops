@@ -44,7 +44,7 @@ def main():
         if k not in e["kind"]:
             e["kind"].append(k)
     for qid, e in places.items():                     # champs relus à la main : gardés
-        for k in ("point", "point_name", "via", "exclude"):
+        for k in ("point", "point_name", "via", "exclude", "why"):
             if k in old.get(qid, {}):
                 e[k] = old[qid][k]
     note = ("Lieux remarquables de la province de Barcelone ayant au moins 6 articles Wikipédia (Wikidata, CC0), construits par "
