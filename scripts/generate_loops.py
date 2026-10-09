@@ -346,6 +346,9 @@ CORRIDOR_OVERLAP = False
 BACKTRACK_RULES = False
 BACKTRACK_CLIMB_M = 40.0
 BACKTRACK_SHARE = 0.6
+# audit du 09/10/2026 : 429 des 661 allers-retours « nature » et 33 des 53 « piste » faisaient moins de 500 m (demi-tour
+# au bout d'un chemin forestier ou d'une bretelle) : « prolonger une route agréable » demande au moins ce trajet
+BACKTRACK_PLEASANT_MIN_M = 1000.0
 BACKTRACK_RELIEF_LEVELS = ("modere", "soutenu")
 CORRIDOR_R_M = 25.0
 CORRIDOR_GAP_M = 200.0
@@ -2424,6 +2427,9 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None):
         return "belvédère"
     if level in BACKTRACK_RELIEF_LEVELS and len(seg[0]) > 2 and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M:
         return "relief"
+    long_ = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
+    if long_ < BACKTRACK_PLEASANT_MIN_M:                     # trop court pour « prolonger une route agréable »
+        return None
     if LANDSCAPE is not None:
         hit = np.zeros(len(pts), dtype=bool)
         for key in ("water", "river", "sea", "forest", "protected"):

@@ -348,6 +348,8 @@ def test_retour_utile_piste_et_lieu(monkeypatch):
     n = len(c) - 1
     assert g.backtrack_useful(c, 0, n, "facile") is None
     assert g.backtrack_useful(c, 0, n, "facile", ["c"] * n) == "piste"
+    court = _line([(x, 0, 10) for x in range(0, 201, 50)] + [(x, 5, 10) for x in range(200, -1, -50)])   # 400 m
+    assert g.backtrack_useful(court, 0, len(court) - 1, "facile", ["c"] * (len(court) - 1)) is None
     tip = c[20]
     monkeypatch.setattr(g, "POIS", {"lieu": (shapely.STRtree([shapely.Point(tip[0], tip[1])]), None)})
     assert g.backtrack_useful(c, 0, n, "facile") == "lieu"
