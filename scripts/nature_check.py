@@ -480,7 +480,7 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "overlap": o["overlap"], "outback": bool(o.get("out_and_back")),
                              "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0),
                              "useful": o.get("backtracks", []), "retouched": bool(o.get("retouched")),
-                             "shortened": bool(o.get("shortened"))})
+                             "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed"))})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
     del g._TL.dirt_rules
@@ -507,14 +507,18 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "short":                                 # retouche trop longue raccourcie (v17) seule
+    if variant == "cross":                                 # croisement des meilleures boucles (v17) seul
+        g._TL.crossover = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.crossover
+    elif variant == "short":                               # retouche trop longue raccourcie (v17) seule
         g._TL.retouch_shorten = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.retouch_shorten
     elif variant == "v17all":                              # mesure combinée : règles de V17_RULES allumées ensemble
         on = []
         for name, attr, val in (("corridor", "corridor_overlap", True), ("detour", "detour_fix", True),
-                                ("shorten", "retouch_shorten", True),
+                                ("shorten", "retouch_shorten", True), ("cross", "crossover", True),
                                 ("backtrack", "backtrack_rules", True), ("rr", "retouch_rr", True),
                                 ("margin", "bin_margin", 0.05)):
             if name in V17_RULES:
@@ -642,13 +646,14 @@ def report_relief_test(results, out_json, out_md, t0):
                 L.append(f"| {sid} | {d} h {lv} | {w} | {x['m']} | {x['km']} | {x['lat']}, {x['lon']} | "
                          f"https://florentbedouret-lgtm.github.io/velo-loops/?s={sid}&d={d}&l={lv} |")
     L += ["", "Boucles recommandées issues de la retouche :", "",
-          "| allure | retouchées | dont raccourcies |", "|---|---|---|"]
+          "| allure | retouchées | dont raccourcies | croisées |", "|---|---|---|---|"]
     for lv in ("facile", "modere", "soutenu"):
         a = [rows[0] for r in res for key, rows in r["v16"].items() if key.endswith("|" + lv) and rows]
         b = [rows[0] for r in res for key, rows in r["relief"].items() if key.endswith("|" + lv) and rows]
         if a and "retouched" in a[0]:
             L.append(f"| {lv} | {sum(x['retouched'] for x in a)} -> {sum(x.get('retouched', False) for x in b)} / {len(a)} | "
-                     f"{sum(x.get('shortened', False) for x in b)} |")
+                     f"{sum(x.get('shortened', False) for x in b)} | "
+                     f"{sum(x.get('crossed', False) for x in a)} -> {sum(x.get('crossed', False) for x in b)} |")
     L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
              f"{sum(r.get('heading_retries', 0) for r in res)} fois"
              + "".join(f" ; {r['id']} : {r['heading_error'][:300]}" for r in res if r.get("heading_error"))[:900])

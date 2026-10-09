@@ -27,6 +27,7 @@ def test_essais_desactives_en_production():
     assert g.RETOUCH_ROUND_ROBIN is False
     assert g.BACKTRACK_RULES is False
     assert g.RETOUCH_SHORTEN is False
+    assert g.CROSSOVER is False
 
 
 def test_empreinte_stable():

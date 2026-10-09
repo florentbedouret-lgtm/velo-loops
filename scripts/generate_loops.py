@@ -146,6 +146,11 @@ def corridor_overlap() -> bool:
     return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
 
 
+def crossover() -> bool:
+    """Croisement des meilleures boucles (CROSSOVER), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "crossover", CROSSOVER))
+
+
 def retouch_shorten() -> bool:
     """Retouche trop longue raccourcie (RETOUCH_SHORTEN), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "retouch_shorten", RETOUCH_SHORTEN))
@@ -230,6 +235,16 @@ RETOUCH_ROUND_ROBIN = False
 # RETOUCH_SHORTEN_AIM ; gardé s'il passe tous les filtres et note mieux que la boucle de départ. False : désactivé
 # (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
 RETOUCH_SHORTEN = False
+# Croisement des meilleures boucles (09/10/2026 : la boucle de Florent à la Plata 1 h 30, notée 58,5 contre 51,8, est le
+# début de la boucle Oyan de 1 h 30 et la fin de celle de 2 h ; les deux morceaux existaient, rien ne les assemblait).
+# CROSSOVER : les CROSS_TOP meilleures boucles du pool, deux à deux ; là où elles passent à moins de CROSS_NEAR_M l'une
+# de l'autre (entre 20 et 80 % du parcours), début de l'une + fin de l'autre, au point dont la durée prévue est la plus
+# proche de la cible ; CROSS_MAX_TRIALS essais au plus. False : désactivé (production v16). À l'activation, l'ajouter à
+# l'empreinte (params_hash).
+CROSSOVER = False
+CROSS_TOP = 4
+CROSS_NEAR_M = 150.0
+CROSS_MAX_TRIALS = 12
 RETOUCH_SHORTEN_GAIN = 0.03
 RETOUCH_SHORTEN_AIM = 0.97
 RETOUCH_PREFILTER = 0.25         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
@@ -2634,6 +2649,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
         pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
+    if crossover() and len(pool) >= 2:                       # croisement des meilleures boucles (CROSSOVER, v17)
+        pool.extend(crossover_candidates(gh, st, level, duration, pool, log))
     if SPUR_FIX:                                             # couper les éperons des meilleures candidates
         for l in sorted([x for x in pool if x.spurs], key=lambda x: x.score, reverse=True)[:SPUR_TRIM_TOP]:
             t = trim_spurs(gh, l, level, duration)
@@ -2661,6 +2678,71 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
         log(f"    repli : {len(spare)} candidat(s) avec un peu de terre (au plus {FALLBACK_UNPAVED_KM:g} km / "
             f"{FALLBACK_UNPAVED_SHARE:.0%}), signalé(s)")
     return spare
+
+
+def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list:
+    """Boucles « croisées » (voir CROSSOVER) : début d'une bonne boucle, fin d'une autre, raccordées là où elles se
+    croisent ; mêmes filtres que les autres tirages. detail : une ligne par essai (diagnostic)."""
+    import numpy as np
+    target_s = duration_h * 3600.0
+    tops = []
+    for l in sorted(pool, key=lambda x: x.score, reverse=True):
+        if all(similarity(l, b) < 0.8 for b in tops):
+            tops.append(l)
+        if len(tops) >= CROSS_TOP:
+            break
+
+    def sampled(l):                                          # un point tous les ~50 m : (indices, x m, y m, part du parcours)
+        c = l.coords
+        cum = [0.0]
+        for a, b in zip(c, c[1:]):
+            cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
+        idx, last = [], -1e9
+        for i, d in enumerate(cum):
+            if d - last >= 50.0:
+                idx.append(i)
+                last = d
+        kx = 111320.0 * math.cos(math.radians(c[0][1]))
+        return (np.array(idx), np.array([c[i][0] * kx for i in idx]), np.array([c[i][1] * 110540.0 for i in idx]),
+                np.array([cum[i] / max(cum[-1], 1.0) for i in idx]))
+    samp = {id(l): sampled(l) for l in tops}
+    plans = []
+    for A in tops:
+        for B in tops:
+            if A is B:
+                continue
+            ia, xa, ya, fa = samp[id(A)]
+            ib, xb, yb, fb = samp[id(B)]
+            ma, mb = (fa > 0.2) & (fa < 0.8), (fb > 0.2) & (fb < 0.8)
+            if not ma.any() or not mb.any():
+                continue
+            d = np.hypot(xa[ma][:, None] - xb[mb][None, :], ya[ma][:, None] - yb[mb][None, :])
+            pa, pb = np.nonzero(d < CROSS_NEAR_M)
+            if not len(pa):
+                continue
+            # durée prévue : part de A jusqu'au raccord + part de B après le raccord
+            est = (A.time_s * fa[ma][pa] + B.time_s * (1.0 - fb[mb][pb])) / target_s
+            k = int(np.argmin(np.abs(est - 1.0)))
+            if abs(est[k] - 1.0) > 0.12:
+                continue
+            plans.append((abs(est[k] - 1.0), A, B, int(ia[ma][pa[k]]), int(ib[mb][pb[k]]), float(est[k])))
+    plans.sort(key=lambda p: (p[0], -(p[1].score + p[2].score)))
+    found = []
+    for n, (_, A, B, i, j, est) in enumerate(plans[:CROSS_MAX_TRIALS]):
+        way = route_waypoints(A.coords[:i + 1]) + route_waypoints(B.coords[j:])[1:]
+        path = gh.via(way, A.profile, pass_through=True)
+        loop = analyse(path, level, A.profile, duration_h, 3000 + n, None) if path else None
+        ok = (loop is not None and time_ok(loop.time_s, duration_h) and overlap_ok(loop)
+              and loop.u_turns <= MAX_UTURNS and dirt_ok(loop))
+        if ok:
+            found.append(loop)
+        if detail is not None:
+            detail.append(f"  croisement {A.score:.1f} x {B.score:.1f} [durée prévue {est:.2f}] -> "
+                          + ("pas d'itinéraire" if loop is None else
+                             f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min")
+                          + (" : valide" if ok else " : rejeté"))
+    log(f"    croisements : {len(found)} valide(s) sur {min(len(plans), CROSS_MAX_TRIALS)} essai(s)")
+    return found
 
 
 def similarity(a: Loop, b: Loop) -> float:
@@ -2881,6 +2963,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"relief_fallback": True} if getattr(l, "relief_fallback", False) else {}),   # v17 : aucune boucle peu vallonnée
         **({"targeted": True} if 900 <= l.seed < 1000 else {}),   # tirage ciblé (lieu attrayant), pour les diagnostics
         **({"retouched": True} if 1000 <= l.seed < 2000 else {}), # retouche d'une meilleure boucle (RETOUCH)
+        **({"crossed": True} if 3000 <= l.seed < 4000 else {}),   # croisement de deux boucles (CROSSOVER, v17)
         **({"kept": True} if l.seed >= 2000 else {}),             # boucle de la version précédente (KEEP_PREVIOUS)
         **({"spurs": len(l.spurs)} if l.spurs else {}),
         **({"backtracks": l.backtracks} if getattr(l, "backtracks", None) else {}),   # allers-retours jugés utiles (v17)
