@@ -354,3 +354,28 @@ def test_retour_utile_piste_et_lieu(monkeypatch):
     tip = c[20]
     monkeypatch.setattr(g, "POIS", {"lieu": (shapely.STRtree([shapely.Point(tip[0], tip[1])]), None)})
     assert g.backtrack_useful(c, 0, n, "facile") == "lieu"
+
+
+def test_retour_jamais_sur_la_terre(monkeypatch):
+    """Aller-retour sur piste cyclable mais avec 300 m de terre au bout : inutile (relecture de Florent, 09/10/2026)."""
+    monkeypatch.setattr(g, "POIS", None)
+    monkeypatch.setattr(g, "LANDSCAPE", None)
+    c = _line([(x, 0, 10) for x in range(0, 1001, 50)] + [(x, 5, 10) for x in range(1000, -1, -50)])
+    n = len(c) - 1
+    unp = ["u" if 14 <= i < 26 else "-" for i in range(n)]                  # autour du demi-tour
+    assert g.backtrack_useful(c, 0, n, "facile", ["c"] * n, ["-"] * n) == "piste"
+    assert g.backtrack_useful(c, 0, n, "facile", ["c"] * n, unp) is None
+
+
+def test_demi_tour_a_un_endroit_naturel(monkeypatch):
+    """Monter 60 m puis faire demi-tour : utile (Modéré) seulement à un sommet ou un col nommé, sinon « pourquoi ici ? »."""
+    import shapely
+    monkeypatch.setattr(g, "LANDSCAPE", None)
+    up = [(x, 0, 10 + x * 0.06) for x in range(0, 1001, 50)]                  # 10 -> 70 m
+    c = _line(up + [(x, 5, 10 + x * 0.06) for x in range(1000, -1, -50)])
+    n, tip = len(c) - 1, c[20]
+    far = shapely.Point(tip[0] + 0.05, tip[1])                              # un sommet à 4 km : sans rapport
+    monkeypatch.setattr(g, "POIS", {"peak": (shapely.STRtree([far]), None)})
+    assert g.backtrack_useful(c, 0, n, "modere", t=20) is None
+    monkeypatch.setattr(g, "POIS", {"peak": (shapely.STRtree([shapely.Point(tip[0], tip[1])]), None)})
+    assert g.backtrack_useful(c, 0, n, "modere", t=20) == "relief"
