@@ -92,7 +92,7 @@ concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
   # diag_part=surf (carte seule) et les parties lancées depuis le 08/10/2026 au soir (o1, o2, cmp3) : chacune dans sa file,
   # elles tournent en parallèle sans prendre la place d'un diagnostic en attente
-  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp4","w1","w2","b1","b2","t1","t2"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
+  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp3b","cmp4","w1","w2","b1","b2","t1","t2"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
@@ -298,6 +298,9 @@ jobs:
           [ "$DIAG_PART" = "cmp" ] && NATURE_COMPARE="modere:2:scripts/reference_gracia_besos.json"   # 08/10/2026 : boucle appréciée par Florent
           [ "$DIAG_PART" = "cmp4" ] && NATURE_COMPARE="facile:2:scripts/reference_sants_mer.json"   # 08/10/2026 : bord de mer goudronné (Florent)
           [ "$DIAG_PART" = "cmp3" ] && NATURE_COMPARE="modere:1.5:scripts/reference_plata_besos.json"   # 08/10/2026 : retour par le Besòs (Florent)
+          # 09/10/2026 : même comparaison, retouche sans préfiltre et avec 60 essais (la rivière est-elle trouvable ?)
+          NATURE_RETOUCH_EXTRA=""
+          [ "$DIAG_PART" = "cmp3b" ] && NATURE_COMPARE="modere:1.5:scripts/reference_plata_besos.json" && NATURE_RETOUCH_EXTRA="--retouch-trials 60 --retouch-prefilter 9"
           [ "$DIAG_PART" = "cmp2" ] && NATURE_COMPARE="soutenu:1:scripts/reference_eixample_1h.json facile:1:scripts/reference_horta_1h.json modere:1:scripts/reference_hospitalet_1h.json soutenu:1:scripts/reference_cornella_1h.json modere:1:scripts/reference_sarria_1h_modere.json modere:6:scripts/reference_ciutat_vella_6h.json"   # propositions du 05/10, règles v16
           # Montserrat (03/10/2026) : "soutenu:5:scripts/reference_montserrat.json soutenu:6:scripts/reference_montserrat.json modere:6:scripts/reference_montserrat.json"
           NATURE_MARGIN="0.05"   # marge des plages de durée essayée (bloc plus bas) ; non vide : pas de calibrage v5
@@ -317,7 +320,7 @@ jobs:
               LVL="${C%%:*}"; REST="${C#*:}"; DUR="${REST%%:*}"; REF="${REST#*:}"; TAG="$(basename "$REF" .json)_${LVL}_$DUR"
               python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json \
                 --pbf data/region.osm.pbf --workdir data --compare-refs "$REF" --durations "$DUR" --levels "$LVL" \
-                $NATURE_RETOUCH --out "data/nature_compare_$TAG.json" --out-md "data/nature_compare_$TAG.md" \
+                $NATURE_RETOUCH $NATURE_RETOUCH_EXTRA --out "data/nature_compare_$TAG.json" --out-md "data/nature_compare_$TAG.md" \
                 --note "$REF, $LVL, $DUR h : boucles de Florent contre la production, retouche comprise"
               cat "data/nature_compare_$TAG.md" >> "$GITHUB_STEP_SUMMARY"
             done

@@ -477,7 +477,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "dirt_fallback": bool(o.get("unpaved_fallback")),
                              **detour_cols(o["coords"]), **corridor_col(o["coords"]),
                              "overlap": o["overlap"], "outback": bool(o.get("out_and_back")),
-                             "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0)})
+                             "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0),
+                             "useful": o.get("backtracks", [])})
             out[f"{d:g}|{level}"] = rows
     del g._TL.relief_limits
     del g._TL.dirt_rules
@@ -599,6 +600,24 @@ def report_relief_test(results, out_json, out_md, t0):
             L.append(f"| {lv} | {sum(x['uturns'] for x in a)} -> {sum(x.get('uturns', 0) for x in b)} | "
                      f"{sum(x['spurs'] for x in a)} -> {sum(x.get('spurs', 0) for x in b)} | "
                      f"{sum(x['uturns'] > 0 for x in a)} -> {sum(x.get('uturns', 0) > 0 for x in b)} |")
+    ex = [(r["id"], key, x) for r in res for key, rows in r["relief"].items() if rows for x in rows[0].get("useful", [])]
+    if ex:                                                 # retours sur ses pas jugés utiles (BACKTRACK_RULES) : à relire
+        from collections import Counter as _C
+        L += ["", "Allers-retours jugés utiles dans les boucles recommandées, par raison :", "",
+              "| allure | " + " | ".join(("lieu", "belvédère", "relief", "nature", "piste")) + " |", "|---|---|---|---|---|---|"]
+        for lv in ("facile", "modere", "soutenu"):
+            c = _C(x["why"] for _, key, x in ex if key.endswith("|" + lv))
+            L.append(f"| {lv} | " + " | ".join(str(c.get(w, 0)) for w in ("lieu", "belvédère", "relief", "nature", "piste")) + " |")
+        import random as _r
+        _r.seed(9)
+        L += ["", "Exemples à relire sur la carte (au hasard, 6 par raison au plus) :", "",
+              "| départ | durée / allure | raison | aller-retour (m) | km | lat, lon | dans l'app |", "|---|---|---|---|---|---|---|"]
+        for w in ("lieu", "belvédère", "relief", "nature", "piste"):
+            pick = [e for e in ex if e[2]["why"] == w]
+            for sid, key, x in _r.sample(pick, min(6, len(pick))):
+                d, lv = key.split("|")
+                L.append(f"| {sid} | {d} h {lv} | {w} | {x['m']} | {x['km']} | {x['lat']}, {x['lon']} | "
+                         f"https://florentbedouret-lgtm.github.io/velo-loops/?s={sid}&d={d}&l={lv} |")
     L.append(f"\nSens de circulation refusé par GraphHopper (requête refaite sans) : "
              f"{sum(r.get('heading_retries', 0) for r in res)} fois"
              + "".join(f" ; {r['id']} : {r['heading_error'][:300]}" for r in res if r.get("heading_error"))[:900])

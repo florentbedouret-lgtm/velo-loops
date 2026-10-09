@@ -1180,7 +1180,7 @@ class GraphHopper:
         if detour_fix() and any(h is not None for h in heads):
             # point sans sens imposé : "NaN" en texte (09/10/2026 : la valeur NaN brute, hors JSON, était refusée par
             # GraphHopper, 1 971 fois sur le diagnostic des détours ; le texte "NaN" est lu comme un nombre)
-            body["headings"] = ["NaN" if h is None else round(h, 1) for h in heads]
+            body["headings"] = ["NaN" if h is None else round(h, 1) % 360.0 for h in heads]   # 360,0 refusé (09/10)
             path = self._route(body)
             if path is not None or not self.last_error.startswith("HTTP 400"):
                 return path
@@ -1437,7 +1437,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         rep_m = [cum[i + 1] - cum[i] if seen[k] > 1 else 0.0 for i, k in enumerate(keys)]
     rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
     useful = useful_windows(coords, level, rc_rep) if backtrack_rules() else []
-    for a_, b_, _ in useful:                         # aller-retour utile (BACKTRACK_RULES) : pas une répétition
+    for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : pas une répétition
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] = 0.0
     repeated = sum(rep_m)
@@ -1498,7 +1498,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     u_turns = true_uturns(coords) if UTURN_LACETS_OK else count_uturns(coords)
     if useful and UTURN_LACETS_OK:                   # demi-tour au bout d'un aller-retour utile (BACKTRACK_RULES) : gratuit
         u_turns = sum(1 for u in uturn_points(coords) if u[2] < UTURN_SAME_STREET_M and not any(
-            haversine(u[0], u[1], coords[t][0], coords[t][1]) < 40.0 for _, _, t in useful))
+            haversine(u[0], u[1], coords[t][0], coords[t][1]) < 40.0 for _, _, t, _ in useful))
     scenery = LANDSCAPE.measure(coords, cum) if LANDSCAPE is not None else None
     exit_dense = None
     ud = det.get("urban_density") or []
@@ -1524,6 +1524,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
     loop.spurs = unjustified_spurs(coords, level, rc_rep) if SPUR_FIX else []
+    loop.backtracks = [{"why": w, "m": round(cum[min(b_, len(cum) - 1)] - cum[a_]), "lat": round(coords[t][1], 5),
+                        "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1)} for a_, b_, t, w in useful]
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep) is None]
@@ -2134,8 +2136,13 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
             seen.add(key)
             pred = base.time_s / target_s * poly_km(way) / base_poly       # durée prévue / durée visée
             if RETOUCH_PREFILTER is not None and abs(pred - 1.0) > RETOUCH_PREFILTER:
+                if detail is not None:
+                    detail.append(f"  (écarté sans calcul : durée prévue {pred:.2f}) {desc}")
                 continue
             kept.append((desc, way, kind, pred))
+        if detail is not None:
+            for desc, way, kind, pred in kept[RETOUCH_MAX_TRIALS:]:
+                detail.append(f"  (non essayé, au-delà de {RETOUCH_MAX_TRIALS} essais : durée prévue {pred:.2f}) {desc}")
         for k, (desc, way, kind, pred) in enumerate(kept[:RETOUCH_MAX_TRIALS]):
             n_try += 1
             path = gh.via(way, base.profile, pass_through=True)
@@ -2384,8 +2391,13 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None):
 
 
 def useful_windows(coords, level: str, cyc=None) -> list:
-    """Allers-retours utiles de la boucle (voir BACKTRACK_RULES) : [(a, b, t)] (entrée, sortie, demi-tour)."""
-    return [(s["a"], s["b"], s["t"]) for s in spur_list(coords) if backtrack_useful(coords, s["a"], s["b"], level, cyc)]
+    """Allers-retours utiles de la boucle (voir BACKTRACK_RULES) : [(a, b, t, raison)] (entrée, sortie, demi-tour)."""
+    out = []
+    for s in spur_list(coords):
+        why = backtrack_useful(coords, s["a"], s["b"], level, cyc)
+        if why:
+            out.append((s["a"], s["b"], s["t"], why))
+    return out
 
 
 def unjustified_spurs(coords, level: str | None = None, cyc=None) -> list:
@@ -2834,7 +2846,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"targeted": True} if 900 <= l.seed < 1000 else {}),   # tirage ciblé (lieu attrayant), pour les diagnostics
         **({"retouched": True} if 1000 <= l.seed < 2000 else {}), # retouche d'une meilleure boucle (RETOUCH)
         **({"kept": True} if l.seed >= 2000 else {}),             # boucle de la version précédente (KEEP_PREVIOUS)
-        **({"spurs": len(l.spurs)} if l.spurs else {}),           # éperons injustifiés restants (SPUR_FIX)
+        **({"spurs": len(l.spurs)} if l.spurs else {}),
+        **({"backtracks": l.backtracks} if getattr(l, "backtracks", None) else {}),   # allers-retours jugés utiles (v17)           # éperons injustifiés restants (SPUR_FIX)
         **({"remarkable": l.remarkable} if l.remarkable else {}),  # lieux remarquables traversés (appli, GPX)
         **({"views_passed": l.views_passed} if l.views_passed else {}),   # belvédères devant lesquels on passe
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
