@@ -26,6 +26,7 @@ def test_essais_desactives_en_production():
     assert g.CORRIDOR_OVERLAP is False
     assert g.RETOUCH_ROUND_ROBIN is False
     assert g.BACKTRACK_RULES is False
+    assert g.RETOUCH_SHORTEN is False
 
 
 def test_empreinte_stable():

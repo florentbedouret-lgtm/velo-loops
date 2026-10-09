@@ -146,6 +146,11 @@ def corridor_overlap() -> bool:
     return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
 
 
+def retouch_shorten() -> bool:
+    """Retouche trop longue raccourcie (RETOUCH_SHORTEN), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "retouch_shorten", RETOUCH_SHORTEN))
+
+
 def retouch_round_robin() -> bool:
     """Familles d'essais de retouche à tour de rôle (RETOUCH_ROUND_ROBIN), réglable par fil d'exécution."""
     return bool(getattr(_TL, "retouch_rr", RETOUCH_ROUND_ROBIN))
@@ -218,6 +223,15 @@ RETOUCH_FAMILY_CAP = None        # au plus N essais par famille (mer, lieu, rivi
 # un essai de chaque famille, dans l'ordre de rentabilité, puis on recommence. False : désactivé (production v16).
 # À l'activation, l'ajouter à l'empreinte (params_hash).
 RETOUCH_ROUND_ROBIN = False
+# Retouche trop longue raccourcie (09/10/2026, la Plata Modéré 1 h 30, 44 essais sans préfiltre : le retour par le Besòs
+# note 63,5 contre 51,8 mais dure 1 h 45 pour une limite de 1 h 43, et il est jeté ; la retouche ajoute un passage sans
+# rien raccourcir ailleurs). RETOUCH_SHORTEN : un essai qui gagne au moins RETOUCH_SHORTEN_GAIN de note mais dépasse la
+# durée est recalculé une fois sans le point de passage d'origine dont le retrait rapproche le plus la durée prévue de
+# RETOUCH_SHORTEN_AIM ; gardé s'il passe tous les filtres et note mieux que la boucle de départ. False : désactivé
+# (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
+RETOUCH_SHORTEN = False
+RETOUCH_SHORTEN_GAIN = 0.03
+RETOUCH_SHORTEN_AIM = 0.97
 RETOUCH_PREFILTER = 0.25         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
 #                                  celle de la boucle de départ) ; au-delà, l'essai est écarté sans requête ni compter   # point de passage tombant sur un vrai demi-tour de la boucle : décalé d'autant
 # Demi-tours (diagnostic la Plata, 02/10/2026) : les rampes en lacets du parc fluvial du Besòs comptaient comme demi-tours.
@@ -2162,6 +2176,28 @@ def retouch_candidates(gh, st, level, duration_h, pool, log, fallback=None, deta
                 why = "note plus basse"
             else:
                 found.append(loop)
+            if (why == "durée" and retouch_shorten() and loop.time_s > target_s
+                    and loop.score >= base.score + RETOUCH_SHORTEN_GAIN):   # trop longue mais meilleure : raccourcir
+                extra = [p for p in way[1:-1] if p not in anchors]          # points ajoutés par l'essai : gardés
+                r0, L0 = loop.time_s / target_s, max(poly_km(way), 0.1)
+                cands = [(abs(r0 * poly_km(way[:j] + way[j + 1:]) / L0 - RETOUCH_SHORTEN_AIM), j)
+                         for j in range(1, len(way) - 1) if way[j] not in extra]
+                if cands:
+                    j = min(cands)[1]
+                    w2 = way[:j] + way[j + 1:]
+                    n_try += 1
+                    p2 = gh.via(w2, base.profile, pass_through=True)
+                    l2 = analyse(p2, level, base.profile, duration_h, 1050 + 100 * bi + k, None) if p2 else None
+                    ok2 = (l2 is not None and time_ok(l2.time_s, duration_h) and overlap_ok(l2)
+                           and l2.u_turns <= MAX_UTURNS and dirt_ok(l2) and l2.score > base.score)
+                    if detail is not None:
+                        detail.append(f"    raccourcie sans le point {j} -> " + ("pas d'itinéraire" if l2 is None else
+                                      f"note {l2.score:.1f}, {l2.distance_m / 1000:.1f} km, {l2.time_s / 60:.0f} min")
+                                      + (" : GARDÉE" if ok2 else " : rejetée"))
+                    if ok2:
+                        l2.shortened = True
+                        found.append(l2)
+                        why = "durée, raccourcie gardée"
             if stats is not None:                            # diagnostic : quels essais rapportent
                 stats.append([kind, bi, k, why or "gardée", None if loop is None else round(loop.score - base.score, 1),
                               round(pred, 3), None if loop is None else round(loop.time_s / target_s, 3)])
@@ -2847,7 +2883,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"retouched": True} if 1000 <= l.seed < 2000 else {}), # retouche d'une meilleure boucle (RETOUCH)
         **({"kept": True} if l.seed >= 2000 else {}),             # boucle de la version précédente (KEEP_PREVIOUS)
         **({"spurs": len(l.spurs)} if l.spurs else {}),
-        **({"backtracks": l.backtracks} if getattr(l, "backtracks", None) else {}),   # allers-retours jugés utiles (v17)           # éperons injustifiés restants (SPUR_FIX)
+        **({"backtracks": l.backtracks} if getattr(l, "backtracks", None) else {}),   # allers-retours jugés utiles (v17)
+        **({"shortened": True} if getattr(l, "shortened", False) else {}),   # retouche raccourcie (RETOUCH_SHORTEN, v17)           # éperons injustifiés restants (SPUR_FIX)
         **({"remarkable": l.remarkable} if l.remarkable else {}),  # lieux remarquables traversés (appli, GPX)
         **({"views_passed": l.views_passed} if l.views_passed else {}),   # belvédères devant lesquels on passe
         "terrain": {"max_grade_pct": l.terrain.get("max_grade_pct"), "slope_bands": l.terrain.get("bands"),
