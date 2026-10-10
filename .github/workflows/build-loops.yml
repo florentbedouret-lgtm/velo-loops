@@ -372,7 +372,7 @@ jobs:
             [ "$DIAG_PART" = "k3" ] && RELIEF_IDS="la-plata-sud-ouest" && RELIEF_VARIANT=v17all
             [ "$DIAG_PART" = "k1" ] && RELIEF_IDS="la-plata-sud-ouest;$RELIEF_IDS"   # retouche raccourcie (09/10/2026)
             # mesure combinée v17 (09/10/2026) : règles retenues (docs/v17_proposition.md) ; « backtrack » après son audit
-            V17_RULES="corridor,detour,relief,dirt,margin,cross,crossn"
+            V17_RULES="corridor,detour,relief,dirt,margin,cross,crossn,backtrack"
             [ "$DIAG_PART" = "k3" ] && V17_RULES="rr,shorten"
             [ "$DIAG_PART" = "v1" ] && RELIEF_IDS="sants-montjuic;gracia;la-plata-sud-ouest;$RELIEF_IDS"
             # détours (08/10/2026) : Sants-Montjuïc (boucle signalée par Florent) ajouté à la partie t1
