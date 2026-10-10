@@ -459,8 +459,12 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
     for d in durations:
         prior = []
         for level in sorted(levels, key=list(g.LEVELS).index):
-            pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None, options)
-            picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
+            buf: list = []                                  # journal gardé pour les durées vides (mesure combinée)
+            logf = buf.append if getattr(g._TL, "collect_logs", False) else (lambda *_: None)
+            pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, logf, options)
+            picks = g.choose_options(gh, st_, level, d, pool, prior, logf)
+            if not picks and getattr(g._TL, "collect_logs", False):
+                g._TL.empty_logs[f"{d:g}|{level}"] = [str(x) for x in buf][-80:]
             prior += [l for _, l in picks]
             rows = []
             for i, (lab, l) in enumerate(picks, start=1):
@@ -530,11 +534,13 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
                 setattr(g._TL, attr, val)
                 on.append(attr)
         try:
+            g._TL.collect_logs, g._TL.empty_logs = True, {}
             b = relief_generate(gh, st_, sid, durations, levels,
                                 g.RELIEF_LIMITS_V17_FLAT if "relief" in V17_RULES else None,
                                 g.DIRT_RULES_V17 if "dirt" in V17_RULES else None)
+            empty_logs = g._TL.empty_logs
         finally:
-            for attr in on:
+            for attr in on + ["collect_logs", "empty_logs"]:
                 if hasattr(g._TL, attr):
                     delattr(g._TL, attr)
     elif variant == "bt":                                  # retours sur ses pas utiles / inutiles (v17) seuls
@@ -559,7 +565,8 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         b = relief_generate(gh, st_, sid, durations, levels,
                             g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)],
-           "heading_retries": gh.heading_retries, "heading_error": gh.heading_error}
+           "heading_retries": gh.heading_retries, "heading_error": gh.heading_error,
+           "empty_logs": locals().get("empty_logs", {})}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
     return res

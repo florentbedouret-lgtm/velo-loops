@@ -92,7 +92,7 @@ concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
   # diag_part=surf (carte seule) et les parties lancées depuis le 08/10/2026 au soir (o1, o2, cmp3) : chacune dans sa file,
   # elles tournent en parallèle sans prendre la place d'un diagnostic en attente
-  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp3b","cmp4","w1","w2","b1","b2","t1","t2","1","2","3","4","v1","v2","k1","k2","x1","x2","k3","x3","x4"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
+  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp3b","cmp4","w1","w2","b1","b2","t1","t2","1","2","3","4","v1","v2","k1","k2","x1","x2","k3","x3","x4","v3"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
@@ -353,7 +353,7 @@ jobs:
           MARGIN_DROPS="breda;sant-celoni;castellfollit-de-la-roca;sant-andreu;granollers;molins-de-rei;arbucies;sant-marti;palleja;abrera;gualba;gracia;la-pobla-de-claramunt;cerdanyola-del-valles;tordera;odena;can-salva;sant-boi-de-llobregat;castellfollit-de-riubregos;parets-del-valles;sants-montjuic;calella;moia;muntanyola;l-hospitalet-de-llobregat;vallromanes;torrelles-de-llobregat;l-eixample;ciutat-vella;el-pont-d-armentera"
           MARGIN_TEM="castellnou-can-mir-sud-est;canyet-sud;pineda-de-bages;can-rovira-nou-sud-ouest;la-palma-de-cervello;rocacrespa-est;vallirana;les-ginesteres-nord-est;sant-vicenc-de-castellet;barbera-del-valles;castelloli;sant-vicenc-de-montalt;torello;els-caus-els-pinetons-est;zona-franca-port-est;el-pla-de-sant-tirs;feners-est;sant-feliu-de-codines;argelaguer;el-collell-est;vilobi-del-penedes;mura;santa-coloma-de-farners;rossinyol-i-coforb-est;el-coll-est-2;sot-d-en-mola-est;rubio;masies-de-sansuies-est;el-pala-de-torroella-sud;can-servitge-est"
           # relief par allure (08/10/2026) : parties r1 / r2 ; le test de la marge ne tourne pas dans ce cas
-          case "$DIAG_PART" in r*|f*|d*|t*|o[12]|w[12]|b[12]|v[12]|k[123]|x[1234]|pages|cmp*|places) NATURE_MARGIN="" ;; esac
+          case "$DIAG_PART" in r*|f*|d*|t*|o[12]|w[12]|b[12]|v[123]|k[123]|x[1234]|pages|cmp*|places) NATURE_MARGIN="" ;; esac
           if [ "$DIAG_PART" = "pages" ]; then              # essai des pages par départ sur toutes les données publiées
             mkdir -p data/pages_test
             python scripts/build_start_pages.py --data "https://florentbedouret-lgtm.github.io/velo-loops/web/data"               --out data/pages_test | tee data/pages_test.txt
@@ -363,7 +363,7 @@ jobs:
           fi
           RELIEF_P1="gracia;la-muntanyesa-sud-est;egara-nord-ouest;ximelis-nord;callus;cornella-de-llobregat;castellgali;sant-cugat-del-valles;cesalpina-sud;sant-just-desvern;prats-de-llucanes;martorell;castelldefels;el-pont-de-vilomara;bellavista"
           RELIEF_P2="can-massuet-del-far-sud;sant-andreu-de-llavaneres;cal-tico-nou-est;arenys-de-mar;la-valldan-est;sant-esteve-de-llemena;sant-feliu-de-pallerols;riells;camprodon;gosol;sant-miquel-d-olerdola;llongarriu-est;la-rapita;vallgorguina;la-pineda-est"
-          if [ "$DIAG_PART" = "r1" ] || [ "$DIAG_PART" = "r2" ] || [ "$DIAG_PART" = "f1" ] || [ "$DIAG_PART" = "f2" ] || [ "$DIAG_PART" = "d1" ] || [ "$DIAG_PART" = "d2" ] || [ "$DIAG_PART" = "t1" ] || [ "$DIAG_PART" = "t2" ] || [ "$DIAG_PART" = "o1" ] || [ "$DIAG_PART" = "o2" ] || [ "$DIAG_PART" = "w1" ] || [ "$DIAG_PART" = "w2" ] || [ "$DIAG_PART" = "b1" ] || [ "$DIAG_PART" = "b2" ] || [ "$DIAG_PART" = "v1" ] || [ "$DIAG_PART" = "v2" ] || [ "$DIAG_PART" = "k1" ] || [ "$DIAG_PART" = "k2" ] || [ "$DIAG_PART" = "x1" ] || [ "$DIAG_PART" = "x2" ] || [ "$DIAG_PART" = "k3" ] || [ "$DIAG_PART" = "x3" ] || [ "$DIAG_PART" = "x4" ]; then
+          if [ "$DIAG_PART" = "r1" ] || [ "$DIAG_PART" = "r2" ] || [ "$DIAG_PART" = "f1" ] || [ "$DIAG_PART" = "f2" ] || [ "$DIAG_PART" = "d1" ] || [ "$DIAG_PART" = "d2" ] || [ "$DIAG_PART" = "t1" ] || [ "$DIAG_PART" = "t2" ] || [ "$DIAG_PART" = "o1" ] || [ "$DIAG_PART" = "o2" ] || [ "$DIAG_PART" = "w1" ] || [ "$DIAG_PART" = "w2" ] || [ "$DIAG_PART" = "b1" ] || [ "$DIAG_PART" = "b2" ] || [ "$DIAG_PART" = "v1" ] || [ "$DIAG_PART" = "v2" ] || [ "$DIAG_PART" = "k1" ] || [ "$DIAG_PART" = "k2" ] || [ "$DIAG_PART" = "x1" ] || [ "$DIAG_PART" = "x2" ] || [ "$DIAG_PART" = "k3" ] || [ "$DIAG_PART" = "x3" ] || [ "$DIAG_PART" = "x4" ] || [ "$DIAG_PART" = "v3" ]; then
             case "$DIAG_PART" in *1) RELIEF_IDS="$RELIEF_P1" ;; *) RELIEF_IDS="$RELIEF_P2" ;; esac
             case "$DIAG_PART" in f*) RELIEF_VARIANT=flat ;; d*) RELIEF_VARIANT=dirt ;; t*) RELIEF_VARIANT=detour ;; o*) RELIEF_VARIANT=corridor ;; w*) RELIEF_VARIANT=rr ;; b*) RELIEF_VARIANT=bt ;; v*) RELIEF_VARIANT=v17all ;; k*) RELIEF_VARIANT=short ;; x[12]) RELIEF_VARIANT=cross ;; x*) RELIEF_VARIANT=crossn ;; *) RELIEF_VARIANT=v17 ;; esac
             [ "$DIAG_PART" = "x1" ] && RELIEF_IDS="la-plata-sud-ouest;sants-montjuic;$RELIEF_IDS"   # croisement (09/10/2026)
@@ -375,6 +375,8 @@ jobs:
             V17_RULES="corridor,detour,relief,dirt,margin,cross,crossn,backtrack"
             [ "$DIAG_PART" = "k3" ] && V17_RULES="rr,shorten"
             [ "$DIAG_PART" = "v1" ] && RELIEF_IDS="sants-montjuic;gracia;la-plata-sud-ouest;$RELIEF_IDS"
+            # v3 (10/10/2026) : les 6 départs dont la mesure combinée a vidé des durées, journal des rejets gardé
+            [ "$DIAG_PART" = "v3" ] && RELIEF_IDS="castellgali;el-pont-de-vilomara;prats-de-llucanes;camprodon;riells;vallgorguina"
             # détours (08/10/2026) : Sants-Montjuïc (boucle signalée par Florent) ajouté à la partie t1
             [ "$DIAG_PART" = "t1" ] && RELIEF_IDS="sants-montjuic;$RELIEF_IDS"
             # répétition par couloir (08/10/2026) : Gràcia (boucle signalée par Florent) est déjà dans la partie 1
