@@ -1,5 +1,9 @@
 # Proposition de contenu pour la v17
 
+> **Mise à jour du 10/10/2026 (soir)** : tout ce contenu est en ligne dans la **v18**, qui y ajoute les détours restants
+> comptés dans la note (`DETOUR_SCORE` : détours −25 à −30 % sur les trois allures). La v17 a été interrompue au premier
+> run, à la demande de Florent, avant toute publication. Le profil plat adouci, testé en même temps, n'est pas retenu.
+
 Préparée le 09/10/2026, à trancher par Florent. Toutes ces règles sont codées et **éteintes** en production (v16). Chacune
 a été mesurée seule, avant / après, sur les mêmes 30 départs (60 pour la marge) ; leurs effets **combinés** ne sont pas
 encore mesurés.
