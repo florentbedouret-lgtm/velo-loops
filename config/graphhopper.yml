@@ -14,6 +14,9 @@ graphhopper:
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json, loop_calm.json]
     - name: sport
       custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json, loop_sport.json]
+    # v17 (relief par allure) : tirages Tranquille qui évitent franchement les côtes (pente moyenne pénalisée)
+    - name: calm_flat
+      custom_model_files: [racingbike.json, bike_elevation.json, road_surface.json, loop_calm.json, loop_flat.json]
     # repli (v10, choix B) : mêmes profils SANS road_surface.json, utilisés seulement quand aucune boucle propre n'existe
     # (la terre reste limitée par FALLBACK_UNPAVED_* et signalée)
     - name: calm_souple

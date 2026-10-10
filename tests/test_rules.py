@@ -16,19 +16,23 @@ import build_start_pages as sp  # noqa: E402
 
 
 # ----------------------------------------------------------------------------- réglages de production
-def test_essais_desactives_en_production():
-    """Les essais de la v17 restent éteints tant qu'ils ne sont pas ajoutés à l'empreinte et recalculés."""
-    assert g.DURATION_BIN_MARGIN is None
-    assert g.RELIEF_LIMITS is None
+def test_reglages_v17():
+    """v17 : règles retenues allumées (docs/v17_proposition.md), essais non retenus éteints, version 17."""
+    assert g.GENERATOR_VERSION == "17"
+    assert g.DURATION_BIN_MARGIN == 0.05
+    assert g.RELIEF_LIMITS is g.RELIEF_LIMITS_V17_FLAT
+    assert g.DIRT_RULES is g.DIRT_RULES_V17
+    assert g.DETOUR_FIX and g.CORRIDOR_OVERLAP and g.BACKTRACK_RULES and g.CROSSOVER and g.CROSS_NEIGHBOURS
     assert g.TARGETED_GATE is None
-    assert g.DIRT_RULES is None
-    assert g.DETOUR_FIX is False
-    assert g.CORRIDOR_OVERLAP is False
     assert g.RETOUCH_ROUND_ROBIN is False
-    assert g.BACKTRACK_RULES is False
     assert g.RETOUCH_SHORTEN is False
-    assert g.CROSSOVER is False
-    assert g.CROSS_NEIGHBOURS is False
+
+
+def test_profil_plat_dans_la_configuration():
+    """Le relief Tranquille tire avec le profil calm_flat : il doit exister dans la configuration de production."""
+    cfg = (Path(__file__).resolve().parents[1] / "config" / "graphhopper.yml").read_text(encoding="utf-8")
+    assert "name: calm_flat" in cfg
+    assert (Path(__file__).resolve().parents[1] / "config" / "custom_models" / "loop_flat.json").exists()
 
 
 def test_empreinte_stable():

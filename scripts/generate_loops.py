@@ -88,6 +88,7 @@ RELIEF_LIMITS_V17 = {"facile": {"max_dpk": 10.0, "banned_cats": ("2", "1", "HC")
 # dans config/ à l'activation) et Modéré pénalisé de 4 points par m/km au-dessus de 15
 RELIEF_LIMITS_V17_FLAT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profile": "calm_flat"},
                           "modere": {"pen_above": 15.0, "pen_per": 0.04}}
+RELIEF_LIMITS = RELIEF_LIMITS_V17_FLAT   # v17 (choix A de Florent, 09/10/2026) ; profil calm_flat dans config/
 RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible (pen_per dans RELIEF_LIMITS pour changer)
 RELIEF_OVER_MAX = 0.20
 CLIMB_LEVELS = ("soutenu",)
@@ -122,7 +123,7 @@ DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
 # durée visée (0,05 : « 5 h » de 4 h 15 à 5 h 45) ; l'ordre reste garanti : à une allure donnée, toute boucle d'une durée
 # est plus longue que celles de la durée inférieure et plus courte que celles de la durée supérieure (order_bounds).
 # None : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash, "v16").
-DURATION_BIN_MARGIN = None
+DURATION_BIN_MARGIN = 0.05        # v17 (test v4 : aucune durée perdue grâce au filet ordered_pool)
 ORDER_GAP_S = 180.0              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
 _TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
 
@@ -246,14 +247,14 @@ RETOUCH_SHORTEN = False
 # de l'autre (entre 20 et 80 % du parcours), début de l'une + fin de l'autre, au point dont la durée prévue est la plus
 # proche de la cible ; CROSS_MAX_TRIALS essais au plus. False : désactivé (production v16). À l'activation, l'ajouter à
 # l'empreinte (params_hash).
-CROSSOVER = False
+CROSSOVER = True                  # v17
 CROSS_TOP = 4
 CROSS_NEAR_M = 150.0
 CROSS_MAX_TRIALS = 12
 # Parents des durées voisines (09/10/2026, la Plata 1 h 30 : la boucle de Florent assemble la boucle publiée de 1 h 30 et
 # celle de 2 h ; le croisement seul ne combine que des boucles de la même durée) : CROSS_NEIGHBOURS ajoute comme parents
 # les CROSS_NEIGHBOUR_LOOPS premières boucles publiées (KEEP_PREVIOUS) des durées voisines, recalculées. False : désactivé.
-CROSS_NEIGHBOURS = False
+CROSS_NEIGHBOURS = True           # v17
 CROSS_NEIGHBOUR_LOOPS = 2
 RETOUCH_SHORTEN_GAIN = 0.03
 RETOUCH_SHORTEN_AIM = 0.97
@@ -289,6 +290,7 @@ UNPAVED_PENALTY_PER_KM = 0.03    # note : 3 points par km de terre (notée, prob
 # unpaved_fallback : plus aucun départ retiré) et pen_per_km par km. None : désactivé (production v16).
 DIRT_RULES = None
 DIRT_RULES_V17 = {"max_km": 1.0, "pen_per_km": 0.06}
+DIRT_RULES = DIRT_RULES_V17       # v17
 FALLBACK_UNPAVED_SHARE = 0.20
 MAX_UTURNS = 2                # demi-tours acceptés (impasses parcourues aller-retour)
 WEIGHTS = {"calm": 0.22, "lights": 0.30, "axes": 0.14, "infra": 0.12, "flow": 0.18, "scenery": 0.12}   # feux 0,22 -> 0,30 (v16)
@@ -334,7 +336,7 @@ SPUR_MAX_PENALTY = 0.20
 # la détection compte aussi des ronds-points et des échangeurs (échantillon v16 : la moitié des boucles), le recalcul
 # les laisse en place et ils restent donc sans effet.
 # False : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
-DETOUR_FIX = False
+DETOUR_FIX = True                 # v17
 # Répétition mesurée par couloir (Florent, 08/10/2026, Gràcia Modéré 1 h « plus de relief » : trois passages sur la
 # carretera de Sant Cugat, 4 % de répétition mesurée). La mesure v16 compte un tronçon répété seulement s'il passe par les
 # mêmes points de la carte : l'autre chaussée, une voie parallèle ou un triangle de carrefour ne comptent pas (Gràcia :
@@ -343,7 +345,7 @@ DETOUR_FIX = False
 # d'altitude : les lacets d'une côte, superposés sur la carte mais à des altitudes différentes, ne comptent pas) est
 # répété, les deux passages comptant. Sert à MAX_OVERLAP, à la note « fluidité » et aux allers-retours (OUTBACK_OK).
 # False : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash).
-CORRIDOR_OVERLAP = False
+CORRIDOR_OVERLAP = True           # v17
 # Retours sur ses pas utiles ou inutiles (Florent, 09/10/2026 : « bien différencier les demi-tours utiles — prolonger une
 # route agréable, avoir du D+, atteindre un lieu remarquable ou une piste cyclable — des demi-tours inutiles »). En v16,
 # chaque mécanisme a ses propres exceptions (éperons : montée, lieu, belvédère, nature ; répétition : allers-retours sur
@@ -353,7 +355,7 @@ CORRIDOR_OVERLAP = False
 # (BACKTRACK_SHARE) au bord de l'eau, en forêt, dans un parc, ou sur piste cyclable / voie verte ; utile, il ne coûte
 # rien (ni demi-tour, ni répétition, ni éperon, ni détour). False : désactivé (production v16). À l'activation,
 # l'ajouter à l'empreinte (params_hash).
-BACKTRACK_RULES = False
+BACKTRACK_RULES = True            # v17
 BACKTRACK_CLIMB_M = 40.0
 BACKTRACK_SHARE = 0.6
 # audit du 09/10/2026 : 429 des 661 allers-retours « nature » et 33 des 53 « piste » faisaient moins de 500 m (demi-tour
@@ -3123,7 +3125,11 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "16"  # 16 : feux 0,30 et zones industrielles x2 ; options secondaires jamais nettement pires ; éperons
+GENERATOR_VERSION = "17"  # 17 : relief par allure (Tranquille 5-10 m/km et repli annoncé, Modéré pénalisé au-dessus de
+#                           15 m/km), terre plafonnée à 1 km, marge des durées, détours en pâté de maisons, répétition par
+#                           couloir, retours sur ses pas utiles ou inutiles, croisement des meilleures boucles (durées
+#                           voisines comprises) ; départ du Tibidabo retiré, Susqueda, Collserola et Montnegre (10/10/2026).
+#                      16 : feux 0,30 et zones industrielles x2 ; options secondaires jamais nettement pires ; éperons
 #                           coupés ou pénalisés ; boucles de la version précédente reprises ; allers-retours vers un endroit
 #                           agréable et tour des lieux ; plages de durée sans chevauchement ; terre plafonnée à 4 km, terre raide
 #                           x2 ; allers-retours au bord de l'eau seulement près de l'eau (05-06/10/2026). 15 : lieux remarquables les plus célèbres visés (aller-retour au lieu compris) et points
@@ -3203,7 +3209,14 @@ def params_hash(config_dir: str = "config") -> str:
                       SECONDARY_MAX_LIGHTS_GAP, SECONDARY_MAX_INDUSTRIAL, SPUR_FIX, SPUR_CORRIDOR_M, SPUR_MIN_M, SPUR_END_M,
                       SPUR_JUSTIFIED_DPLUS_M, SPUR_PLEASANT_SHARE, SPUR_PENALTY, SPUR_PENALTY_PER_100M, SPUR_MAX_PENALTY,
                       SPUR_TRIM_TOP, KEEP_PREVIOUS, ROUTE_WAYPOINT_M, AR_DRAWS, LIEU_TOUR, OUTBACK_NEAR_KM, DURATION_BINS,
-                      DURATION_SET, DIRT_MAX_KM, STEEP_DIRT_GRADE, STEEP_DIRT_PENALTY]}
+                      DURATION_SET, DIRT_MAX_KM, STEEP_DIRT_GRADE, STEEP_DIRT_PENALTY],
+              "v17": [RELIEF_LIMITS, RELIEF_OVER_PENALTY, RELIEF_OVER_MAX, DIRT_RULES, DURATION_BIN_MARGIN, ORDER_GAP_S,
+                      DETOUR_FIX, DETOUR_MIN_M, DETOUR_MAX_M, DETOUR_GAP_M, DETOUR_RATIO, DETOUR_CLIMB_M, DETOUR_END_M,
+                      DETOUR_SCORE_SLACK, DETOUR_TRIM_TOP, CORRIDOR_OVERLAP, CORRIDOR_R_M, CORRIDOR_GAP_M, CORRIDOR_DZ_M,
+                      CORRIDOR_STEP_M, BACKTRACK_RULES, BACKTRACK_CLIMB_M, BACKTRACK_SHARE, BACKTRACK_RELIEF_LEVELS,
+                      BACKTRACK_PLEASANT_MIN_M, BACKTRACK_DIRT_MAX_M, BACKTRACK_PISTE_GREEN, BACKTRACK_REPEAT_WEIGHT,
+                      CROSSOVER, CROSS_TOP, CROSS_NEAR_M, CROSS_MAX_TRIALS, CROSS_NEIGHBOURS, CROSS_NEIGHBOUR_LOOPS,
+                      RETOUCH_ROUND_ROBIN, RETOUCH_SHORTEN]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     rp = Path(__file__).parent / "remarkable_places.json"   # liste des lieux (points d'accès) : change les boucles aussi
     if rp.exists():
