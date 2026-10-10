@@ -235,7 +235,7 @@ jobs:
           GH_CONFIG=config/graphhopper.yml
           # relief v17, 2e essai (08/10/2026) : parties f1 / f2 sur une COPIE de la configuration avec le profil calm_flat
           # (config/ entre dans l'empreinte : la production n'est pas touchée)
-          if [ "$MODE" = "nature_check" ] && { [ "$DIAG_PART" = "f1" ] || [ "$DIAG_PART" = "f2" ] || [ "$DIAG_PART" = "v1" ] || [ "$DIAG_PART" = "v2" ]; }; then
+          if [ "$MODE" = "nature_check" ] && { [ "$DIAG_PART" = "f1" ] || [ "$DIAG_PART" = "f2" ] || [ "$DIAG_PART" = "v1" ] || [ "$DIAG_PART" = "v2" ] || [ "$DIAG_PART" = "v3" ]; }; then
             mkdir -p data/config_flat && cp -r config/custom_models data/config_flat/
             cp scripts/diag_models/loop_flat.json data/config_flat/custom_models/
             GH_CONFIG=data/graphhopper_flat.yml

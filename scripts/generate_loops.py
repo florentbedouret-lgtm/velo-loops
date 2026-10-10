@@ -1493,6 +1493,12 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             rep_m[i] = 0.0
     repeated = sum(rep_m)
     rep_cycle = sum(m for i, m in enumerate(rep_m) if rc_rep[i] == "c")
+    # mesure v16 gardée pour le filtre (10/10/2026, mesure combinée : 14 durées vidées en montagne, boucles à 24-54 % par
+    # couloir mais 14-24 % en v16, sans autre boucle possible) : la mesure par couloir compte dans la note, jamais plus
+    # stricte que la v16 comme filtre (voir overlap_ok)
+    rep_v16 = [cum[i + 1] - cum[i] if seen[k] > 1 else 0.0 for i, k in enumerate(keys)]
+    ov16 = sum(rep_v16) / total
+    cyc16 = (sum(m for i, m in enumerate(rep_v16) if rc_rep[i] == "c") / sum(rep_v16)) if sum(rep_v16) > 0 else 0.0
     longest_repeat, run = 0.0, 0.0
     for i, m in enumerate(rep_m):                    # plus long tronçon consécutif emprunté deux fois
         run = run + m if m > 0.5 * (cum[i + 1] - cum[i]) else 0.0
@@ -1571,6 +1577,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         repeat_cycle_share=(rep_cycle / repeated) if repeated > 0 else 0.0,
         scenery=scenery,
     )
+    loop.overlap_v16, loop.repeat_cycle_share_v16 = ov16, cyc16
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
@@ -1769,9 +1776,12 @@ def dirt_ok(l) -> bool:
 
 
 def overlap_ok(l) -> bool:
-    """Part répétée acceptable : sous MAX_OVERLAP, ou aller-retour sur piste cyclable (OUTBACK_OK)."""
-    return l.overlap <= MAX_OVERLAP or (OUTBACK_OK and l.overlap <= OUTBACK_MAX_OVERLAP
-                                        and l.repeat_cycle_share >= OUTBACK_MIN_CYCLE)
+    """Part répétée acceptable : sous MAX_OVERLAP, ou aller-retour sur piste cyclable (OUTBACK_OK). Avec
+    CORRIDOR_OVERLAP, acceptable aussi selon la mesure v16 : le couloir pèse dans la note, sans vider de durée."""
+    def ok(ov, cyc):
+        return ov <= MAX_OVERLAP or (OUTBACK_OK and ov <= OUTBACK_MAX_OVERLAP and cyc >= OUTBACK_MIN_CYCLE)
+    return ok(l.overlap, l.repeat_cycle_share) or (
+        hasattr(l, "overlap_v16") and ok(l.overlap_v16, l.repeat_cycle_share_v16))
 
 
 def outback_candidates(gh, st, level, profile, duration_h, log, detail=None) -> list:

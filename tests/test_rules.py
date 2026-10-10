@@ -379,3 +379,13 @@ def test_demi_tour_a_un_endroit_naturel(monkeypatch):
     assert g.backtrack_useful(c, 0, n, "modere", t=20) is None
     monkeypatch.setattr(g, "POIS", {"peak": (shapely.STRtree([shapely.Point(tip[0], tip[1])]), None)})
     assert g.backtrack_useful(c, 0, n, "modere", t=20) == "relief"
+
+
+def test_couloir_jamais_plus_strict_que_v16():
+    """Boucle de montagne à 30 % de répétition par couloir mais 20 % en v16, sans autre boucle possible : gardée
+    (mesure combinée du 10/10/2026, 14 durées vidées) ; la note, elle, compte le couloir."""
+    l = SimpleNamespace(overlap=0.30, repeat_cycle_share=0.0, overlap_v16=0.20, repeat_cycle_share_v16=0.0)
+    assert g.overlap_ok(l)
+    l.overlap_v16 = 0.30
+    assert not g.overlap_ok(l)
+    assert g.overlap_ok(SimpleNamespace(overlap=0.20, repeat_cycle_share=0.0))      # sans mesure v16 : comme avant
