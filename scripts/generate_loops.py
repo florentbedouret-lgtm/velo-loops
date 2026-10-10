@@ -367,6 +367,9 @@ BACKTRACK_PLEASANT_MIN_M = 1000.0
 # agréable (BACKTRACK_PISTE_GREEN de bord de l'eau, forêt ou parc)
 BACKTRACK_DIRT_MAX_M = 50.0
 BACKTRACK_PISTE_GREEN = 0.3
+# mesure combinée du 10/10/2026 : un aller-retour utile ne comptant plus du tout comme répétition, les boucles à long
+# aller-retour gagnaient (répétées à plus de 25 % : 6 -> 30 en Tranquille) ; il compte désormais pour cette part
+BACKTRACK_REPEAT_WEIGHT = 0.5
 BACKTRACK_RELIEF_LEVELS = ("modere", "soutenu")
 CORRIDOR_R_M = 25.0
 CORRIDOR_GAP_M = 200.0
@@ -1488,9 +1491,9 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
     unp_e = unpaved_edges(det, len(cum) - 1) if backtrack_rules() else None
     useful = useful_windows(coords, level, rc_rep, unp_e) if backtrack_rules() else []
-    for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : pas une répétition
+    for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
-            rep_m[i] = 0.0
+            rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
     repeated = sum(rep_m)
     rep_cycle = sum(m for i, m in enumerate(rep_m) if rc_rep[i] == "c")
     # mesure v16 gardée pour le filtre (10/10/2026, mesure combinée : 14 durées vidées en montagne, boucles à 24-54 % par
