@@ -395,7 +395,7 @@ DETOUR_END_M = 300.0             # près du départ ou de l'arrivée : ignoré (
 DETOUR_SCORE_SLACK = 0.01        # version sans détour gardée jusqu'à 1 point de note en moins
 # v18 (O-55) : un détour inutile qui reste après la réparation compte dans la note (une boucle plate mais tordue battait
 # une boucle propre un peu moins plate) ; les détours jugés utiles (BACKTRACK_RULES) restent gratuits. False : désactivé.
-DETOUR_SCORE = False
+DETOUR_SCORE = True               # v18 (Florent, 10/10/2026 : activée en interrompant le calcul de la v17)
 DETOUR_PENALTY = 0.02            # 2 points par détour…
 DETOUR_PENALTY_PER_100M = 0.01   # … plus 1 point par 100 m en trop
 DETOUR_MAX_PENALTY = 0.10
@@ -3144,7 +3144,9 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "17"  # 17 : relief par allure (Tranquille 5-10 m/km et repli annoncé, Modéré pénalisé au-dessus de
+GENERATOR_VERSION = "18"  # 18 : détours en pâté de maisons restants comptés dans la note (diagnostic : détours −25 à
+#                           −30 % sur les trois allures, aucune durée perdue) ; v17 interrompue au premier run (10/10/2026).
+#                      17 : relief par allure (Tranquille 5-10 m/km et repli annoncé, Modéré pénalisé au-dessus de
 #                           15 m/km), terre plafonnée à 1 km, marge des durées, détours en pâté de maisons, répétition par
 #                           couloir, retours sur ses pas utiles ou inutiles, croisement des meilleures boucles (durées
 #                           voisines comprises) ; départ du Tibidabo retiré, Susqueda, Collserola et Montnegre (10/10/2026).
@@ -3235,7 +3237,8 @@ def params_hash(config_dir: str = "config") -> str:
                       CORRIDOR_STEP_M, BACKTRACK_RULES, BACKTRACK_CLIMB_M, BACKTRACK_SHARE, BACKTRACK_RELIEF_LEVELS,
                       BACKTRACK_PLEASANT_MIN_M, BACKTRACK_DIRT_MAX_M, BACKTRACK_PISTE_GREEN, BACKTRACK_REPEAT_WEIGHT,
                       CROSSOVER, CROSS_TOP, CROSS_NEAR_M, CROSS_MAX_TRIALS, CROSS_NEIGHBOURS, CROSS_NEIGHBOUR_LOOPS,
-                      RETOUCH_ROUND_ROBIN, RETOUCH_SHORTEN]}
+                      RETOUCH_ROUND_ROBIN, RETOUCH_SHORTEN],
+              "v18": [DETOUR_SCORE, DETOUR_PENALTY, DETOUR_PENALTY_PER_100M, DETOUR_MAX_PENALTY]}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     rp = Path(__file__).parent / "remarkable_places.json"   # liste des lieux (points d'accès) : change les boucles aussi
     if rp.exists():

@@ -17,8 +17,8 @@ import build_start_pages as sp  # noqa: E402
 
 # ----------------------------------------------------------------------------- réglages de production
 def test_reglages_v17():
-    """v17 : règles retenues allumées (docs/v17_proposition.md), essais non retenus éteints, version 17."""
-    assert g.GENERATOR_VERSION == "17"
+    """v17 + v18 : règles retenues allumées (docs/v17_proposition.md), essais non retenus éteints, version 18."""
+    assert g.GENERATOR_VERSION == "18"
     assert g.DURATION_BIN_MARGIN == 0.05
     assert g.RELIEF_LIMITS is g.RELIEF_LIMITS_V17_FLAT
     assert g.DIRT_RULES is g.DIRT_RULES_V17
@@ -26,7 +26,7 @@ def test_reglages_v17():
     assert g.TARGETED_GATE is None
     assert g.RETOUCH_ROUND_ROBIN is False
     assert g.RETOUCH_SHORTEN is False
-    assert g.DETOUR_SCORE is False                     # v18, en essai
+    assert g.DETOUR_SCORE is True                      # v18
 
 
 def test_profil_plat_dans_la_configuration():
