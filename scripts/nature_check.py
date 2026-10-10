@@ -451,10 +451,12 @@ def detour_cols(coords) -> dict:
 
 
 def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
-    """Toutes les durées des allures demandées comme la génération réelle, avec les règles de relief données (None =
-    production v16)."""
-    g._TL.relief_limits = limits
-    g._TL.dirt_rules = dirt
+    """Toutes les durées des allures demandées comme la génération réelle, avec les règles de relief et de terre données
+    (None = réglage de production : depuis la v17, ce ne sont plus « aucune règle »)."""
+    if limits is not None:
+        g._TL.relief_limits = limits
+    if dirt is not None:
+        g._TL.dirt_rules = dirt
     out, options = {}, []
     for d in durations:
         prior = []
@@ -488,8 +490,9 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              # tracé gardé pour relire les allers-retours jugés utiles (09/10/2026)
                              **({"coords": [[c[0], c[1]] for c in o["coords"]]} if o.get("backtracks") else {})})
             out[f"{d:g}|{level}"] = rows
-    del g._TL.relief_limits
-    del g._TL.dirt_rules
+    for attr in ("relief_limits", "dirt_rules"):
+        if hasattr(g._TL, attr):
+            delattr(g._TL, attr)
     return out
 
 
@@ -513,7 +516,13 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant in ("cross", "crossn"):                     # croisement (v17), avec les durées voisines (crossn)
+    if variant == "soft":                                  # v18 : profil plat adouci (calm_flat_soft) seul
+        b = relief_generate(gh, st_, sid, durations, levels, g.RELIEF_LIMITS_V18_SOFT)
+    elif variant == "dscore":                              # v18 : détours restants comptés dans la note
+        g._TL.detour_score = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.detour_score
+    elif variant in ("cross", "crossn"):                   # croisement (v17), avec les durées voisines (crossn)
         g._TL.crossover = True
         g._TL.cross_neighbours = variant == "crossn"
         b = relief_generate(gh, st_, sid, durations, levels, None)

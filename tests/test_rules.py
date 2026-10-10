@@ -26,6 +26,7 @@ def test_reglages_v17():
     assert g.TARGETED_GATE is None
     assert g.RETOUCH_ROUND_ROBIN is False
     assert g.RETOUCH_SHORTEN is False
+    assert g.DETOUR_SCORE is False                     # v18, en essai
 
 
 def test_profil_plat_dans_la_configuration():

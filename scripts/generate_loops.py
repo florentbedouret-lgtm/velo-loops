@@ -89,6 +89,11 @@ RELIEF_LIMITS_V17 = {"facile": {"max_dpk": 10.0, "banned_cats": ("2", "1", "HC")
 RELIEF_LIMITS_V17_FLAT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profile": "calm_flat"},
                           "modere": {"pen_above": 15.0, "pen_per": 0.04}}
 RELIEF_LIMITS = RELIEF_LIMITS_V17_FLAT   # v17 (choix A de Florent, 09/10/2026) ; profil calm_flat dans config/
+# v18 (O-55, 10/10/2026 : le profil plat seul fait passer les détours de 76 à 96 et les demi-tours de 32 à 53 en
+# Tranquille) : profil adouci (scripts/diag_models/loop_flat_soft.json : ×0,3 / ×0,6 / ×0,85 au lieu de ×0,1 / ×0,3 /
+# ×0,6), essai seulement (diagnostic g1 / g2 sur une copie de la configuration)
+RELIEF_LIMITS_V18_SOFT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profile": "calm_flat_soft"},
+                          "modere": RELIEF_LIMITS_V17_FLAT["modere"]}
 RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible (pen_per dans RELIEF_LIMITS pour changer)
 RELIEF_OVER_MAX = 0.20
 CLIMB_LEVELS = ("soutenu",)
@@ -165,6 +170,11 @@ def retouch_shorten() -> bool:
 def retouch_round_robin() -> bool:
     """Familles d'essais de retouche à tour de rôle (RETOUCH_ROUND_ROBIN), réglable par fil d'exécution."""
     return bool(getattr(_TL, "retouch_rr", RETOUCH_ROUND_ROBIN))
+
+
+def detour_score() -> bool:
+    """Détours restants comptés dans la note (DETOUR_SCORE), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "detour_score", DETOUR_SCORE))
 
 
 def detour_fix() -> bool:
@@ -383,6 +393,12 @@ DETOUR_RATIO = 0.25              # … et à moins du quart du chemin parcouru
 DETOUR_CLIMB_M = 15.0            # monte d'au moins 15 m : lacets d'une côte, pas un détour
 DETOUR_END_M = 300.0             # près du départ ou de l'arrivée : ignoré (rue du départ)
 DETOUR_SCORE_SLACK = 0.01        # version sans détour gardée jusqu'à 1 point de note en moins
+# v18 (O-55) : un détour inutile qui reste après la réparation compte dans la note (une boucle plate mais tordue battait
+# une boucle propre un peu moins plate) ; les détours jugés utiles (BACKTRACK_RULES) restent gratuits. False : désactivé.
+DETOUR_SCORE = False
+DETOUR_PENALTY = 0.02            # 2 points par détour…
+DETOUR_PENALTY_PER_100M = 0.01   # … plus 1 point par 100 m en trop
+DETOUR_MAX_PENALTY = 0.10
 DETOUR_TRIM_TOP = 3              # meilleures candidates dont on essaie d'enlever les détours
 SPUR_TRIM_TOP = 3               # meilleures candidates dont on essaie de couper les éperons (6 : sonde 18 -> 30 min)
 TARGETED_GATE = None            # essai (O-38) : tirages ciblés seulement si la meilleure boucle ordinaire note moins que ça
@@ -1653,6 +1669,9 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
+    if detour_score() and getattr(l, "detours", None):    # détours inutiles restants (DETOUR_SCORE, v18)
+        total -= min(DETOUR_MAX_PENALTY, sum(DETOUR_PENALTY + DETOUR_PENALTY_PER_100M * (d["m"] - d["gap"]) / 100.0
+                                             for d in l.detours))
     if l.scenery is not None:                             # zones industrielles et portuaires (entrepôts, camions)
         total -= min(INDUSTRIAL_MAX_PENALTY if ind_max is None else ind_max,
                      (INDUSTRIAL_PENALTY if ind_penalty is None else ind_penalty) * l.scenery.get("industrial", 0.0))
