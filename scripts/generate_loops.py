@@ -217,6 +217,8 @@ MOTORWAY_NUISANCE = False
 MOTORWAY_DEG = 0.00035
 MOTORWAY_PER_KM = 0.01
 MOTORWAY_MAX = 0.05
+MOTORWAY_TRUNK = False           # v3 (i1 / i2 v2 : 73 % des boucles touchées ; les « voies express » OSM comprennent la
+#                                 Meridiana, la Gran Via, déjà comptées comme grands axes) : autoroutes seules
 MOTORWAY_RUN_M = 300.0           # v2 (i1 / i2 du 14/10 : 95 % des boucles touchées, chaque passage dessus ou dessous
 #                                 comptait) : seulement les tronçons LONGÉS sur au moins 300 m d'affilée
 MOTORWAYS = None                 # STRtree des autoroutes et voies express à l'air libre, chargé dans main()
@@ -308,7 +310,8 @@ def load_motorways(pbf: Path, workdir: Path):
         return None
     filt, out = workdir / "motorways.osm.pbf", workdir / "motorways.geojson"
     try:
-        subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway=motorway,trunk", "-o", str(filt), "--overwrite"],
+        subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway=motorway,trunk" if MOTORWAY_TRUNK else "w/highway=motorway",
+                        "-o", str(filt), "--overwrite"],
                        check=True, capture_output=True)
         subprocess.run(["osmium", "export", str(filt), "-f", "geojson", "-o", str(out), "--overwrite"],
                        check=True, capture_output=True)
@@ -3887,6 +3890,7 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
              SCENIC_MAX_RUNS, SCENIC_DENSE, SCENIC_PICK_M],
             [CROSS_SEG_MAX, CROSS_SEG_MARGIN, CROSS_SEG_TIME],
             [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, MOTORWAY_RUN_M,
+             MOTORWAY_TRUNK,
              WATER_CITY_DEG]]
 
 
