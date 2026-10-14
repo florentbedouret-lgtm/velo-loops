@@ -516,7 +516,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "spatial":                               # croisement avec les départs voisins (essai) seul
+    if variant == "segx":                                  # croisement tronçon par tronçon (essai) seul
+        g._TL.cross_segments = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.cross_segments
+    elif variant == "spatial":                             # croisement avec les départs voisins (essai) seul
         g._TL.cross_spatial = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_spatial

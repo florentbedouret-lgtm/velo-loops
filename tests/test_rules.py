@@ -28,6 +28,7 @@ def test_reglages_v17():
     assert g.RETOUCH_SHORTEN is False
     assert g.DETOUR_SCORE is True                      # v18
     assert g.CROSS_SPATIAL is False                    # départs voisins, en essai
+    assert g.CROSS_SEGMENTS is False                   # tronçon par tronçon, en essai
 
 
 def test_profil_plat_dans_la_configuration():

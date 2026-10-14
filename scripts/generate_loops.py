@@ -157,6 +157,130 @@ def cross_neighbours() -> bool:
     return bool(getattr(_TL, "cross_neighbours", CROSS_NEIGHBOURS))
 
 
+def cross_segments() -> bool:
+    """Croisement tronçon par tronçon (CROSS_SEGMENTS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "cross_segments", CROSS_SEGMENTS))
+
+
+def segment_quality(l, m0: float, m1: float) -> float:
+    """Note (0 à 1, même esprit que score_parts) du morceau de la boucle l entre m0 et m1 mètres : feux, grands axes,
+    pistes, ville, nature, terre et relief selon l'allure."""
+    n = max(1, int((m1 - m0) // 100))
+    i0, i1 = int(m0 // 100), int(m0 // 100) + n
+    road = (l.road_seq or "")[i0:i1]
+    surf = (l.surface_seq or "")[i0:i1]
+    lc = ""
+    if l.scenery and (l.scenery.get("landcover") or {}).get("cls") is not None:
+        lc = landcover_seq(l.scenery["landcover"]["cls"])[i0:i1]
+    share = lambda s, ch: (sum(1 for c in s if c in ch) / len(s)) if s else 0.0  # noqa: E731
+    km = max((m1 - m0) / 1000.0, 0.1)
+    lights = sum(1 for p in getattr(l, "signal_m", []) if m0 <= p <= m1) / km
+    q = (WEIGHTS["lights"] * (1.0 - min(2.0, lights / LIGHTS_PER_KM_ZERO_SCORE))
+         + WEIGHTS["axes"] * (1.0 - min(1.0, 2.0 * share(road, "m")))
+         + WEIGHTS["infra"] * min(1.0, 2.0 * share(road, "c"))
+         + WEIGHTS["calm"] * (1.0 - share(lc, "v"))
+         + WEIGHTS["scenery"] * share(lc, "ef")
+         - 0.5 * share(surf, "up"))
+    c = l.coords
+    seg = [p for p, d in zip(c, _cum_cache(l)) if m0 <= d <= m1]
+    if len(seg) > 1 and len(seg[0]) > 2:
+        up = sum(max(0.0, b[2] - a[2]) for a, b in zip(seg, seg[1:])) / km
+        lim = (relief_limits().get(l.level) or {})
+        target = lim.get("max_dpk") or lim.get("pen_above")
+        if target:
+            q -= 0.02 * max(0.0, up - target)
+    return q
+
+
+def _cum_cache(l) -> list:
+    if getattr(l, "_cum", None) is None:
+        cum = [0.0]
+        for a, b in zip(l.coords, l.coords[1:]):
+            cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
+        l._cum = cum
+    return l._cum
+
+
+def segment_crossover(gh, level: str, duration_h: float, parents: list, log, detail=None) -> list:
+    """Boucles assemblées tronçon par tronçon (voir CROSS_SEGMENTS), à partir des boucles parents."""
+    import numpy as np
+    target_s = duration_h * 3600.0
+    plans = []
+    for ai, A in enumerate(parents):
+        for B in parents[ai + 1:]:
+            ca, cb = _cum_cache(A), _cum_cache(B)
+            # points de A et de B tous les ~50 m
+            def pick(c, cum):
+                out, last = [], -1e9
+                for i, d in enumerate(cum):
+                    if d - last >= 50.0:
+                        out.append(i)
+                        last = d
+                return out
+            pa, pb = pick(A.coords, ca), pick(B.coords, cb)
+            kx = 111320.0 * np.cos(np.radians(A.coords[0][1]))
+            xa = np.array([[A.coords[i][0] * kx, A.coords[i][1] * 110540.0] for i in pa])
+            xb = np.array([[B.coords[i][0] * kx, B.coords[i][1] * 110540.0] for i in pb])
+            d = np.hypot(xa[:, None, 0] - xb[None, :, 0], xa[:, None, 1] - xb[None, :, 1])
+            near = d.argmin(axis=1)
+            matched = d[np.arange(len(pa)), near] < CROSS_NEAR_M
+            if matched.sum() < 4 or matched.all():
+                continue
+            # tronçons où A s'écarte de B : entre deux points communs consécutifs
+            swaps, k = [], 0
+            while k < len(pa):
+                if matched[k]:
+                    k += 1
+                    continue
+                a0 = k - 1
+                while k < len(pa) and not matched[k]:
+                    k += 1
+                if a0 < 0 or k >= len(pa):
+                    continue
+                b0, b1 = int(near[a0]), int(near[k])
+                if b1 <= b0 + 1:
+                    continue                                 # B ne fait pas le même chemin dans le même sens
+                ma0, ma1 = ca[pa[a0]], ca[pa[k]]
+                mb0, mb1 = cb[pb[b0]], cb[pb[b1]]
+                qa, qb = segment_quality(A, ma0, ma1), segment_quality(B, mb0, mb1)
+                if qb >= qa + CROSS_SEG_MARGIN:
+                    dt = B.time_s * (mb1 - mb0) / max(cb[-1], 1.0) - A.time_s * (ma1 - ma0) / max(ca[-1], 1.0)
+                    swaps.append((pa[a0], pa[k], pb[b0], pb[b1], dt, qb - qa))
+            if not swaps:
+                continue
+            est = (A.time_s + sum(s[4] for s in swaps)) / target_s
+            if abs(est - 1.0) > CROSS_SEG_TIME:                # trop long ou trop court : les meilleurs échanges seuls
+                swaps = sorted(swaps, key=lambda s: -s[5])
+                while swaps and abs((A.time_s + sum(s[4] for s in swaps)) / target_s - 1.0) > CROSS_SEG_TIME:
+                    swaps.pop()
+                if not swaps:
+                    continue
+                est = (A.time_s + sum(s[4] for s in swaps)) / target_s
+            plans.append((sum(s[5] for s in swaps), A, B, sorted(swaps), est))
+    plans.sort(key=lambda p: -p[0])
+    found = []
+    for n, (gain, A, B, swaps, est) in enumerate(plans[:CROSS_SEG_MAX]):
+        coords, cur = [], 0
+        for a0, a1, b0, b1, _, _ in swaps:
+            coords += A.coords[cur:a0] + B.coords[b0:b1 + 1]
+            cur = a1 + 1
+        coords += A.coords[cur:]
+        way = route_waypoints(coords)
+        way[0] = way[-1] = [A.coords[0][0], A.coords[0][1]]
+        path = gh.via(way, A.profile, pass_through=True)
+        loop = analyse(path, level, A.profile, duration_h, 3600 + n, None) if path else None
+        ok = (loop is not None and time_ok(loop.time_s, duration_h) and overlap_ok(loop)
+              and loop.u_turns <= MAX_UTURNS and dirt_ok(loop))
+        if ok:
+            found.append(loop)
+        if detail is not None:
+            detail.append(f"  tronçons {A.score:.1f} + {B.score:.1f} ({len(swaps)} échange(s), durée prévue {est:.2f}) -> "
+                          + ("pas d'itinéraire" if loop is None else f"note {loop.score:.1f}, {loop.time_s / 60:.0f} min")
+                          + (" : valide" if ok else " : rejeté"))
+    log(f"    croisements tronçon par tronçon : {len(found)} valide(s) sur {min(len(plans), CROSS_SEG_MAX)} essai(s)")
+    return found
+
+
 def cross_spatial() -> bool:
     """Boucles des départs voisins pour le croisement (CROSS_SPATIAL), réglable par fil d'exécution."""
     return bool(getattr(_TL, "cross_spatial", CROSS_SPATIAL)) and bool(NEIGHBOUR_SRC)
@@ -306,6 +430,15 @@ CROSS_NEIGHBOUR_LOOPS = 2
 # de CROSS_SPATIAL_KM, adaptées au départ (du départ au point le plus proche de la boucle voisine, la boucle, retour),
 # deviennent des candidates et des parents du croisement. Source : site publié (NEIGHBOUR_SRC). False : désactivé.
 CROSS_SPATIAL = False
+# Croisement tronçon par tronçon (Florent, 14/10/2026 : « si A est meilleure sur un tronçon 1 et B sur un tronçon 2,
+# la boucle doit prendre le tronçon 1 de A et le tronçon 2 de B ») : là où deux boucles parents se séparent puis se
+# rejoignent, chaque tronçon est noté (feux, grands axes, pistes, ville, nature, terre, relief selon l'allure) et le
+# meilleur des deux est pris, si la durée prévue reste à CROSS_SEG_TIME près ; CROSS_SEG_MAX essais au plus. La note de la
+# boucle entière tranche ensuite. False : désactivé.
+CROSS_SEGMENTS = False
+CROSS_SEG_MAX = 8
+CROSS_SEG_MARGIN = 0.03          # un tronçon remplace l'autre s'il note au moins 3 points de mieux (sur 100)
+CROSS_SEG_TIME = 0.12
 CROSS_SPATIAL_KM = 3.0
 CROSS_SPATIAL_STARTS = 3
 CROSS_SPATIAL_LOOPS = 2
@@ -548,7 +681,7 @@ class SignalIndex:
         for idx, (lon, lat) in enumerate(points):
             self.grid.setdefault((int(lon // self.CELL), int(lat // self.CELL)), []).append(idx)
 
-    def count_along(self, coords, cum) -> int:
+    def count_along(self, coords, cum, out=None) -> int:
         """Nombre de carrefours à feux franchis par le tracé (feux voisins fusionnés)."""
         positions = []
         for i in range(1, len(coords)):
@@ -571,6 +704,8 @@ class SignalIndex:
         for pos in positions:
             if last is None or pos - last > SIGNAL_CLUSTER_M:
                 count += 1
+                if out is not None:                          # un point par carrefour à feux (m depuis le départ)
+                    out.append(pos)
             last = pos
         return count
 
@@ -1611,7 +1746,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     watts = level_watts(level, duration_h)
     ds, prof = elevation_profile(coords, cum)
     ascend, descend = gain_loss(prof)
-    n_signals = SIGNALS.count_along(coords, cum) if SIGNALS is not None else None
+    signal_m: list = []
+    n_signals = SIGNALS.count_along(coords, cum, signal_m) if SIGNALS is not None else None
     n_stops = STOPS.count_along(coords, cum) if STOPS is not None else None
     surface_mix = {
         "asphalt": frac(surf, list(ASPHALT)), "cobbles": frac(surf, list(COBBLES)),
@@ -1662,6 +1798,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.steep_dirt_km = sum(1 for k in range(n_) if loop.surface_seq[k] in "up"
                                  and abs(prof[k + 1] - prof[k]) / ds >= STEEP_DIRT_GRADE) * ds / 1000.0
     loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
+    loop.signal_m = signal_m                                 # positions des feux (croisement tronçon par tronçon)
     loop.doubt_ways = doubt_ways(det, coords, cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
     loop.score = score(loop)
@@ -2907,6 +3044,8 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
                           + (" : valide" if ok else " : rejeté"))
     log(f"    croisements : {len(found)} valide(s) sur {min(len(plans), CROSS_MAX_TRIALS)} essai(s)"
         + (f" ; boucles de départs voisins adoptables : {len(adopted)}" if adopted else ""))
+    if cross_segments():                                     # tronçon par tronçon (Florent, 14/10/2026)
+        found += segment_crossover(gh, level, duration_h, parents, log, detail)
     return found + adopted
 
 
