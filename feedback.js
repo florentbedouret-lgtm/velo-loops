@@ -20,7 +20,7 @@ document.head.insertAdjacentHTML('beforeend', '<style>' +
   '.fb button:disabled{opacity:.5;cursor:default}' +
   '.fb .fb-r{margin:6px 0}.fb .fb-pills{display:flex;gap:8px;margin-top:6px}' +
   '.fb .fb-pills{gap:2px}.fb button.fb-pill{width:44px;height:44px;margin:0;padding:0;border:0;background:none;' +
-  'font-size:30px;line-height:1;color:var(--color-border)}' +
+  'font-size:30px;line-height:1;color:var(--color-control-off,#8C867D)}' +   // étoile vide lisible : 3,6:1 sur blanc (audit 14/10)
   '.fb button.fb-pill.on{color:var(--color-accent)}' +
   '.fb .fb-trap{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}' +
   '.fb .fb-note{display:block;color:var(--color-text-2);font-size:13px}' +

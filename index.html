@@ -48,7 +48,9 @@
     button, a, summary, [role=button], label { touch-action: manipulation; }
     button, summary, [role=button], #grip { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     /* appui : le bouton répond dès que le doigt se pose (Emil Kowalski : 97 %, ~120 ms, ease-out) */
-    :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); }
+    :root { --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+            /* audit du 14/10/2026 : survol de l'argile et contrôle « éteint » lisible (au moins 3:1 sur blanc) */
+            --color-accent-hover: #95482A; --color-control-off: #8C867D; }
     button { transition: transform 120ms var(--ease-out), background-color 150ms ease, border-color 150ms ease; }
     button:not(:disabled):active { transform: scale(0.97); }
     .keys div[data-hl]:active, .rows summary:active, #history summary:active { background: var(--color-bg); }
@@ -56,7 +58,7 @@
     @media (hover: hover) and (pointer: fine) {
       .btn:hover, .stepper button:not(:disabled):hover, .share:hover, .vcard:hover, #me:hover { border-color: var(--color-text-2); }
       .seg button:not([aria-pressed=true]):hover, .optseg .alt:not([aria-pressed=true]):hover { color: var(--color-text); }
-      .btn-accent:hover { background: #95482A; border-color: #95482A; }
+      .btn-accent:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
       .suggest button:hover, .rows summary:hover, #history summary:hover, .keys div[data-hl]:hover { background: var(--color-bg); }
       #change:hover { text-decoration-thickness: 2px; }
     }
