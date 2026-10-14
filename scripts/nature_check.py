@@ -365,6 +365,36 @@ def report_references(results, path_json, path_md, note, t0):
 WAYS = None                     # sonde « revêtement » : voies OSM classées (landcover.load_ways), chargées dans main()
 V17_RULES: set = set()          # --v17-rules : règles de la mesure combinée v17 (variante v17all)
 RETOUCH = False                 # --retouch : retouche des meilleures boucles mesurée (sonde, comparaison)
+TRACE: set = set()              # --trace « départ|durée|allure » : toutes les candidates de ces durées, avant / après
+TRACE_OUT: dict = {}            # (départ, phase) -> traces
+
+
+def origin(seed: int) -> str:
+    """Origine d'une candidate d'après son numéro de tirage (voir generate_loops)."""
+    for lo, name in ((4100, "voies agréables"), (4000, "feux en fin"), (3600, "tronçons"), (3500, "départ voisin"),
+                     (3000, "croisement"), (2100, "croisement (parent)"), (2000, "boucle publiée"), (1050, "retouche raccourcie"),
+                     (1000, "retouche"), (900, "tirage ciblé")):
+        if seed >= lo:
+            return name
+    return "tirage"
+
+
+def trace_pool(gh, st_, sid, level, d, options, logf):
+    """Candidates d'une durée (TRACE) : note, durée, origine, conformité, et pourquoi l'ordre des durées les écarte."""
+    raw = g.level_pool(gh, st_, level, d, g.CANDIDATES, logf)
+    lo, hi = g.order_bounds(options, level, d)
+    dm = round(d * 60)
+    taken = {o.get("route_key") for o in options if o["level"] == level and o["duration_target_min"] != dm}
+    rows = []
+    for l in sorted(raw, key=lambda x: -x.score):
+        rk = g.route_key(g.simplify(l.coords, 10.0))
+        why = ("plus courte que la durée inférieure" if l.time_s < lo else "plus longue que la durée supérieure"
+               if l.time_s > hi else "déjà proposée à une autre durée" if rk in taken else "")
+        rows.append({"score": l.score, "min": round(l.time_s / 60), "km": round(l.distance_m / 1000, 1), "key": rk[:6],
+                     "origine": origin(l.seed), "dpk": round(l.dplus_per_km, 1), "relief_ok": g.relief_ok(l),
+                     "repli": bool(getattr(l, "relief_fallback", False) or getattr(l, "unpaved_fallback", False)),
+                     "ecartee": why})
+    return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows}
 
 
 def option_row(o) -> dict:
@@ -463,8 +493,14 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
         for level in sorted(levels, key=list(g.LEVELS).index):
             buf: list = []                                  # journal gardé pour les durées vides (mesure combinée)
             logf = buf.append if getattr(g._TL, "collect_logs", False) else (lambda *_: None)
+            tkey = f"{sid}|{d:g}|{level}"
+            tr = trace_pool(gh, st_, sid, level, d, options, logf) if tkey in TRACE else None
             pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, logf, options)
             picks = g.choose_options(gh, st_, level, d, pool, prior, logf)
+            if tr is not None:                              # traçage : ce qui est finalement choisi
+                tr["choisies"] = [{"label": lab, "score": l.score, "key": g.route_key(g.simplify(l.coords, 10.0))[:6],
+                                   "origine": origin(l.seed)} for lab, l in picks]
+                TRACE_OUT.setdefault((sid, getattr(g._TL, "trace_phase", "?")), {})[tkey] = tr
             if not picks and getattr(g._TL, "collect_logs", False):
                 g._TL.empty_logs[f"{d:g}|{level}"] = [str(x) for x in buf][-80:]
             prior += [l for _, l in picks]
@@ -519,8 +555,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         st_["previous"].setdefault((o["level"], round(o["duration_target_min"])), []).append(
             (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
     t0 = time.time()
+    g._TL.trace_phase = "production"
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
+    g._TL.trace_phase = "variante"
     if variant in ("front", "rapide", "frontvoies"):       # front de mer, voies rapides, front de mer + voies agréables
         g._TL.seafront = variant in ("front", "frontvoies")
         g._TL.motorway = variant == "rapide"
@@ -620,7 +658,8 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
                             g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)],
            "heading_retries": gh.heading_retries, "heading_error": gh.heading_error,
-           "empty_logs": locals().get("empty_logs", {})}
+           "empty_logs": locals().get("empty_logs", {}),
+           "trace": {ph: TRACE_OUT.get((sid, ph), {}) for ph in ("production", "variante")}}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
     return res
@@ -1428,6 +1467,7 @@ def main() -> int:
                     help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17), detour (DETOUR_FIX) "
                          "ou corridor (CORRIDOR_OVERLAP), rr (RETOUCH_ROUND_ROBIN), bt (BACKTRACK_RULES)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
+    ap.add_argument("--trace", default="", help="durées tracées « départ|durée|allure », séparées par des points-virgules")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")
     ap.add_argument("--drops", default=None, help="baisses v15 -> v16 : fichier des cas (scripts/diag_v16_drops.json)")
@@ -1511,6 +1551,7 @@ def main() -> int:
         report_compare(res, args.out, args.out_md, args.note, t0)
         return 0
     if args.probe and args.relief_test:
+        TRACE.update(x.strip() for x in args.trace.split(";") if x.strip())
         ids = [x.strip() for x in args.probe.split(";") if x.strip()]
         durations = [float(x) for x in args.durations.split()]
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
