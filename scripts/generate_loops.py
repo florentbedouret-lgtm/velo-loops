@@ -190,6 +190,11 @@ WATER_CITY_DEG = 0.0008
 # test). FALLBACK_BEST : parmi les boucles à FALLBACK_RELIEF_TOL m/km (relief) ou FALLBACK_DIRT_TOL_KM km (terre) de la
 # moins vallonnée (la moins terreuse), la mieux notée. False : la moins vallonnée seule (v17).
 FALLBACK_BEST = False
+# Boucles publiées retrouvées à l'identique (14/10/2026, traçage m1 : la boucle publiée de Sant Martí 3 h Tranquille, 72,2,
+# retouchée, n'était pas retrouvée par KEEP_PREVIOUS, recalculée d'un point de passage tous les 2 km : GraphHopper prend
+# un autre chemin entre deux points). PREVIOUS_WAYPOINT_M : points de passage tous les N m (avec le sens de circulation)
+# pour recalculer les boucles publiées. None : ROUTE_WAYPOINT_M (2 km, v18).
+PREVIOUS_WAYPOINT_M = None
 # Front de mer (Florent, 14/10/2026 ; diagnostics cmp6 / y3 : la piste du passeig Marítim de la Barceloneta et le couloir
 # intérieur notent presque pareil, 53,1 contre 52,8 : la note ne voit ni la vue ni l'espace d'une promenade). SEAFRONT_BONUS :
 # SEAFRONT_PER_KM point par km roulé sans voitures (piste, voie verte) à moins de SEAFRONT_DEG (~80 m) de la côte ou d'une
@@ -292,6 +297,11 @@ def load_motorways(pbf: Path, workdir: Path):
         lines.append(shape(g))
     print(f"voies rapides à l'air libre : {len(lines)} tronçons")
     return STRtree(lines) if lines else None
+
+
+def previous_step() -> float:
+    """Pas des points de passage des boucles publiées remises en jeu (PREVIOUS_WAYPOINT_M), réglable par fil d'exécution."""
+    return getattr(_TL, "previous_step", PREVIOUS_WAYPOINT_M) or ROUTE_WAYPOINT_M
 
 
 def lights_late() -> bool:
@@ -3136,7 +3146,7 @@ def previous_candidates(gh, st, level, duration_h) -> list:
     et notées avec les règles actuelles : une nouvelle version ne perd plus une bonne boucle par malchance."""
     out = []
     for profile, coords in (st.get("previous") or {}).get((level, round(duration_h * 60)), []):
-        way = route_waypoints(coords)
+        way = route_waypoints(coords, step_m=previous_step())
         way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
         path = gh.via(way, profile, pass_through=True)
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
@@ -3807,7 +3817,8 @@ CARRY = None                    # {"src", "by_key"} si --carry-over-from est fou
 def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres entrées de l'empreinte
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
-             WATER_CITY_NEAR],
+             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None],
+            [PREVIOUS_WAYPOINT_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],
             [FALLBACK_RELIEF_TOL, FALLBACK_DIRT_TOL_KM],

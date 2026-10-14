@@ -379,6 +379,75 @@ def origin(seed: int) -> str:
     return "tirage"
 
 
+def same_share(a, b, tol_m=25.0) -> float:
+    """Part des points de a (tous les ~50 m) à moins de tol_m du tracé b."""
+    import shapely
+    from shapely.geometry import LineString
+    lb = LineString([p[:2] for p in b])
+    pts, last, prev = [], -1e9, None
+    acc = 0.0
+    for p in a:
+        if prev is not None:
+            acc += g.haversine(prev[0], prev[1], p[0], p[1])
+        if acc - last >= 50.0:
+            pts.append(p)
+            last = acc
+        prev = p
+    if not pts:
+        return 0.0
+    d = shapely.distance(shapely.points([q[:2] for q in pts]), lb)
+    return float((d * 85000.0 <= tol_m).mean())
+
+
+def run_prev_check(sid, site, gh_url, steps=(2000.0, 500.0, 300.0)):
+    """Boucles publiées d'un départ recalculées depuis leurs points de passage (comme KEEP_PREVIOUS) : retrouvées à
+    l'identique (95 % du tracé à moins de 25 m, dans les deux sens), valides, et note, selon le pas des points."""
+    data = requests.get(f"{site}/web/data/starts/{sid}.json", timeout=60).json()
+    gh = GH(gh_url)
+    st = data["start"]
+    rows = []
+    for o in data["options"]:
+        prof = o.get("profile") or g.LEVELS[o["level"]]["profiles"][0]
+        d = o["duration_target_min"] / 60.0
+        row = {"id": o["id"], "score": o["score"], "km": o["distance_km"], "origin": "retouche" if o.get("retouched")
+               else "croisement" if o.get("crossed") else "autre"}
+        for step in steps:
+            way = g.route_waypoints(o["coords"], step_m=step)
+            way[0] = way[-1] = [st["lon"], st["lat"]]
+            path = gh.via(way, prof, pass_through=True)
+            loop = g.analyse(path, o["level"], prof, d, 2000, None) if path else None
+            if loop is None:
+                row[f"{step:g}"] = {"ok": False}
+                continue
+            same = min(same_share(loop.coords, o["coords"]), same_share(o["coords"], loop.coords))
+            valid = (g.time_ok(loop.time_s, d) and g.overlap_ok(loop) and loop.u_turns <= g.MAX_UTURNS and g.dirt_ok(loop))
+            row[f"{step:g}"] = {"ok": True, "same": round(same, 3), "valid": valid, "score": loop.score,
+                                "points": len(way)}
+        rows.append(row)
+    return {"id": sid, "rows": rows}
+
+
+def report_prev_check(results, out_json, out_md, t0, steps=("2000", "500", "300")):
+    Path(out_json).write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    rows = [r for res in results for r in res["rows"]]
+    L = [f"# Boucles publiées retrouvées à l'identique : {len(results)} départs, {len(rows)} boucles — "
+         f"{round((time.time() - t0) / 60)} min", "",
+         "| pas | retrouvées à l'identique (≥ 95 %) | valides | identiques et valides | note ±0,5 | retouchées identiques "
+         "| croisées identiques |", "|---|---|---|---|---|---|---|"]
+    for s in steps:
+        ok = [r for r in rows if r.get(s, {}).get("ok")]
+        same = [r for r in ok if r[s]["same"] >= 0.95]
+        val = [r for r in ok if r[s]["valid"]]
+        both = [r for r in same if r[s]["valid"]]
+        sc = [r for r in both if abs(r[s]["score"] - r["score"]) <= 0.5]
+        ret = [r for r in rows if r["origin"] == "retouche"]
+        cro = [r for r in rows if r["origin"] == "croisement"]
+        L.append(f"| {s} m | {len(same)}/{len(rows)} | {len(val)} | {len(both)} | {len(sc)} | "
+                 f"{sum(1 for r in ret if r.get(s, {}).get('same', 0) >= 0.95)}/{len(ret)} | "
+                 f"{sum(1 for r in cro if r.get(s, {}).get('same', 0) >= 0.95)}/{len(cro)} |")
+    Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
+
+
 def trace_pool(gh, st_, sid, level, d, options, logf):
     """Candidates d'une durée (TRACE) : note, durée, origine, conformité, et pourquoi l'ordre des durées les écarte."""
     raw = g.level_pool(gh, st_, level, d, g.CANDIDATES, logf)
@@ -556,6 +625,9 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
             (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
     t0 = time.time()
     g._TL.trace_phase = "production"
+    if variant.endswith("+p"):                              # boucles publiées retrouvées à 300 m près, des deux côtés
+        g._TL.previous_step = 300.0
+        variant = variant[:-2]
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
     g._TL.trace_phase = "variante"
@@ -656,6 +728,8 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     else:
         b = relief_generate(gh, st_, sid, durations, levels,
                             g.RELIEF_LIMITS_V17_FLAT if variant == "flat" else g.RELIEF_LIMITS_V17)
+    if hasattr(g._TL, "previous_step"):
+        del g._TL.previous_step
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)],
            "heading_retries": gh.heading_retries, "heading_error": gh.heading_error,
            "empty_logs": locals().get("empty_logs", {}),
@@ -1467,6 +1541,7 @@ def main() -> int:
                     help="v17, flat (tirages calm_flat, Modéré 4 points par m/km), dirt (terre v17), detour (DETOUR_FIX) "
                          "ou corridor (CORRIDOR_OVERLAP), rr (RETOUCH_ROUND_ROBIN), bt (BACKTRACK_RULES)")
     ap.add_argument("--margin-test", type=float, default=None, help="marge des plages de durée essayée (ex. 0.05)")
+    ap.add_argument("--prev-check", action="store_true", help="boucles publiées retrouvées à l'identique selon le pas")
     ap.add_argument("--trace", default="", help="durées tracées « départ|durée|allure », séparées par des points-virgules")
     ap.add_argument("--margin-drops", default="", help="départs des baisses v16 (séparés par ;), pour le rapport")
     ap.add_argument("--prev-dir", default="data/v15/starts", help="boucles v15 publiées, un fichier par départ")
@@ -1549,6 +1624,12 @@ def main() -> int:
         lvl = args.levels.split()[0]
         res = run_compare(args.compare_refs, args.site, args.gh, lvl, float(args.durations.split()[0]))
         report_compare(res, args.out, args.out_md, args.note, t0)
+        return 0
+    if args.probe and args.prev_check:
+        ids = [x.strip() for x in args.probe.split(";") if x.strip()]
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            results = list(ex.map(lambda sid: run_prev_check(sid, args.site, args.gh), ids))
+        report_prev_check(results, args.out, args.out_md, t0)
         return 0
     if args.probe and args.relief_test:
         TRACE.update(x.strip() for x in args.trace.split(";") if x.strip())

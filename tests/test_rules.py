@@ -36,6 +36,7 @@ def test_reglages_v17():
     assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
     assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
     assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
+    assert g.PREVIOUS_WAYPOINT_M is None               # boucles publiées à 2 km près (v18), essai à 300 m
     assert g.MOTORWAY_NUISANCE is False                # voies rapides, en essai
 
 
