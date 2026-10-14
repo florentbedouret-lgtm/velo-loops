@@ -15,3 +15,7 @@
 
 # Configuration locale de Claude Code (propre à chaque machine)
 /.claude/
+
+# Graphe de connaissances du code (graphify, local, jamais publié)
+/graphify-out/
+/.graphifyignore
