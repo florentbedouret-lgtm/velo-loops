@@ -34,6 +34,7 @@ def test_reglages_v17():
     assert g.LIGHTS_LATE is False                      # feux en fin de boucle, en essai
     assert g.SCENIC_RETOUCH is False                   # voies agréables, en essai
     assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
+    assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
 
 
 def test_profil_plat_dans_la_configuration():
@@ -401,3 +402,23 @@ def test_couloir_jamais_plus_strict_que_v16():
     l.overlap_v16 = 0.30
     assert not g.overlap_ok(l)
     assert g.overlap_ok(SimpleNamespace(overlap=0.20, repeat_cycle_share=0.0))      # sans mesure v16 : comme avant
+
+
+def test_fallback_best_keeps_best_of_flattest():
+    """Repli de relief (FALLBACK_BEST) : la mieux notée parmi les boucles à 1 m/km de la moins vallonnée (Sant Esteve
+    de Llémena 4 h Tranquille, 14/10/2026), et non la moins vallonnée quelle que soit sa note."""
+    class L:
+        pass
+
+    def mk(dpk, sc):
+        l = L()
+        l.dplus_per_km, l.score, l.level = dpk, sc, "facile"
+        l.terrain = {"climbs": [], "max_grade_pct": 0.0}
+        return l
+    a, b, c = mk(12.0, 70.8), mk(11.9, 48.4), mk(14.0, 90.0)   # aucune sous 10 m/km
+    assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [b]          # v17 : la moins vallonnée
+    g._TL.fallback_best = True
+    try:
+        assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [a]      # 12,0 m/km à moins de 1 de 11,9
+    finally:
+        del g._TL.fallback_best

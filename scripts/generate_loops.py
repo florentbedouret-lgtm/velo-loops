@@ -184,6 +184,14 @@ SCENIC_WAYS = None               # STRtree des voies agréables, chargé dans ma
 # voit la mer de plus loin). False : désactivé.
 WATER_CITY_NEAR = False
 WATER_CITY_DEG = 0.0008
+# Repli « la mieux notée parmi les quasi-moins vallonnées » (Florent, 14/10/2026 ; diagnostic s1 / s2 : sans boucle
+# conforme en Tranquille, le repli gardait LA moins vallonnée quelle que soit sa note : Sant Esteve de Llémena 4 h,
+# 12,0 m/km note 70,8 remplacée par 11,9 m/km note 48,4 dès qu'une candidate de plus est apparue ; 5 des 7 baisses du
+# test). FALLBACK_BEST : parmi les boucles à FALLBACK_RELIEF_TOL m/km (relief) ou FALLBACK_DIRT_TOL_KM km (terre) de la
+# moins vallonnée (la moins terreuse), la mieux notée. False : la moins vallonnée seule (v17).
+FALLBACK_BEST = False
+FALLBACK_RELIEF_TOL = 1.0
+FALLBACK_DIRT_TOL_KM = 0.5
 
 
 def bin_margin():
@@ -203,6 +211,11 @@ def scenic_retouch() -> bool:
 def water_city_near() -> bool:
     """Bord d'eau à ~80 m en ville (WATER_CITY_NEAR), réglable par fil d'exécution."""
     return bool(getattr(_TL, "water_city_near", WATER_CITY_NEAR))
+
+
+def fallback_best() -> bool:
+    """Repli « la mieux notée parmi les quasi-moins vallonnées » (FALLBACK_BEST), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "fallback_best", FALLBACK_BEST))
 
 
 def lights_late() -> bool:
@@ -2146,6 +2159,8 @@ def dirt_filter(pool: list, level: str, log) -> list:
     if ok:
         return ok
     least = min(pool, key=km)
+    if fallback_best():                                      # la mieux notée parmi les quasi-moins terreuses
+        least = max((l for l in pool if km(l) <= km(least) + FALLBACK_DIRT_TOL_KM), key=lambda l: l.score)
     least.unpaved_fallback = True
     log(f"    terre : aucune boucle sous {cap:g} km ({level}), la moins terreuse gardée ({km(least):.1f} km)")
     return [least]
@@ -2160,6 +2175,8 @@ def relief_filter(pool: list, level: str, log) -> list:
     if ok:
         return ok
     flat = min(pool, key=lambda l: l.dplus_per_km)
+    if fallback_best():                                      # la mieux notée parmi les quasi-moins vallonnées
+        flat = max((l for l in pool if l.dplus_per_km <= flat.dplus_per_km + FALLBACK_RELIEF_TOL), key=lambda l: l.score)
     flat.relief_fallback = True
     log(f"    relief : aucune boucle conforme ({level}), la moins vallonnée gardée ({flat.dplus_per_km:.1f} m/km)")
     return [flat]

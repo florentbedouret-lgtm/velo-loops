@@ -537,6 +537,12 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.scenic = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.scenic
+    elif variant in ("fb", "segxfb"):                      # repli corrigé seul, ou avec le croisement par tronçon
+        g._TL.fallback_best = True
+        g._TL.cross_segments = variant == "segxfb"
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.fallback_best
+        del g._TL.cross_segments
     elif variant == "segx":                                # croisement tronçon par tronçon (essai) seul
         g._TL.cross_segments = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
