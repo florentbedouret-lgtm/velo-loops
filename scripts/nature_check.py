@@ -637,7 +637,20 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
     g._TL.trace_phase = "variante"
-    if variant in ("front", "rapide", "frontvoies"):       # front de mer, voies rapides, front de mer + voies agréables
+    if variant == "v19all":                                # mesure combinée v19 (docs/v19_proposition.md)
+        v19 = {"time_v19": True, "fallback_best": True, "cross_segments": True, "lights_late": True,
+               "scenic_retouch": True, "water_city_near": True, "seafront": True, "previous_step": 500.0}
+        for k, v in v19.items():
+            setattr(g._TL, k, v)
+        try:
+            g._TL.collect_logs, g._TL.empty_logs = True, {}
+            b = relief_generate(gh, st_, sid, durations, levels, None)
+            empty_logs = g._TL.empty_logs
+        finally:
+            for k in list(v19) + ["collect_logs", "empty_logs"]:
+                if hasattr(g._TL, k):
+                    delattr(g._TL, k)
+    elif variant in ("front", "rapide", "frontvoies"):       # front de mer, voies rapides, front de mer + voies agréables
         g._TL.seafront = variant in ("front", "frontvoies")
         g._TL.motorway = variant == "rapide"
         g._TL.scenic_retouch = variant == "frontvoies"
