@@ -161,7 +161,7 @@ DENSITY = None                   # JunctionDensity, chargé dans main()
 LIGHTS_LATE = False
 LIGHTS_LATE_MIN = 8              # au moins 8 feux sur la boucle
 LIGHTS_LATE_MAX_MEAN = 0.45      # position moyenne des feux (part de la boucle)
-LIGHTS_LATE_TOL = 0.5
+LIGHTS_LATE_TOL = 1.0             # choix de Florent (14/10/2026) ; 0,5 au 1er essai (e1 / e2) : 11 boucles inversées sur 188
 # Retouche « voies agréables » (Florent, 14/10/2026 ; diagnostic cmp5 : l'Eixample 2 h par la piste du front de mer de la
 # Barceloneta note 54,2, la boucle publiée par le couloir de la B-10 53,6, le meilleur candidat tiré aujourd'hui 50,2 :
 # aucun tirage ne passe par le front de mer). Voies agréables : pistes cyclables et voies vertes goudronnées à moins de
