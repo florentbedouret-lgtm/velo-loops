@@ -212,6 +212,13 @@ PLUS_RELIEF_MAX_GRADE = 15.0
 # un autre chemin entre deux points). PREVIOUS_WAYPOINT_M : points de passage tous les N m (avec le sens de circulation)
 # pour recalculer les boucles publiées. None : ROUTE_WAYPOINT_M (2 km, v18).
 PREVIOUS_WAYPOINT_M = None
+# Reclassement des boucles publiées (15/10/2026, mesure combinée v19 : 41 durées perdent plus de 10 points, et dans 40 cas
+# la très bonne boucle d'avant n'est plus nulle part : avec le nouveau modèle de temps, elle est estimée plus courte ou plus
+# longue, sort de la plage de sa durée, et n'est jamais proposée à la durée où elle tombe maintenant).
+# PREVIOUS_ANY_DURATION : les boucles publiées de l'allure, toutes durées confondues, sont candidates à chaque durée ; leur
+# durée estimée décide où elles tombent (time_ok). Les requêtes GraphHopper sont les mêmes d'une durée à l'autre (mémoire
+# GH_MEMO). False : seulement celles de la même durée (v18).
+PREVIOUS_ANY_DURATION = False
 # Front de mer (Florent, 14/10/2026 ; diagnostics cmp6 / y3 : la piste du passeig Marítim de la Barceloneta et le couloir
 # intérieur notent presque pareil, 53,1 contre 52,8 : la note ne voit ni la vue ni l'espace d'une promenade). SEAFRONT_BONUS :
 # SEAFRONT_PER_KM point par km roulé sans voitures (piste, voie verte) à moins de SEAFRONT_DEG (~80 m) de la côte ou d'une
@@ -367,6 +374,11 @@ def plus_relief_ok(l) -> bool:
     if any(c.get("category") in PLUS_RELIEF_BANNED_CATS for c in (l.terrain or {}).get("climbs", [])):
         return False
     return ((l.terrain or {}).get("max_grade_pct") or 0.0) < PLUS_RELIEF_MAX_GRADE
+
+
+def previous_any_duration() -> bool:
+    """Reclassement des boucles publiées (PREVIOUS_ANY_DURATION), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "previous_any", PREVIOUS_ANY_DURATION))
 
 
 def lights_late() -> bool:
@@ -3237,7 +3249,12 @@ def previous_candidates(gh, st, level, duration_h) -> list:
     """Boucles publiées de la version précédente pour ce départ, cette allure et cette durée (KEEP_PREVIOUS), recalculées
     et notées avec les règles actuelles : une nouvelle version ne perd plus une bonne boucle par malchance."""
     out = []
-    for profile, coords in (st.get("previous") or {}).get((level, round(duration_h * 60)), []):
+    prev = st.get("previous") or {}
+    if previous_any_duration():                              # toutes les durées de l'allure (reclassement)
+        items = [pc for (lv, _), lst in sorted(prev.items()) if lv == level for pc in lst]
+    else:
+        items = prev.get((level, round(duration_h * 60)), [])
+    for profile, coords in items:
         way = route_waypoints(coords, step_m=previous_step())
         way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
         path = gh.via(way, profile, pass_through=True)
@@ -3921,7 +3938,7 @@ CARRY = None                    # {"src", "by_key"} si --carry-over-from est fou
 def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres entrées de l'empreinte
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
-             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES],
+             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION],
             [PREVIOUS_WAYPOINT_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],

@@ -691,10 +691,12 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.scenic_retouch
         del g._TL.water_city_near
-    elif variant == "time19":                              # modèle de temps v19 (essai) seul
+    elif variant in ("time19", "time19r"):                 # modèle de temps v19 (essai), avec le reclassement (time19r)
         g._TL.time_v19 = True
+        g._TL.previous_any = variant == "time19r"
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.time_v19
+        del g._TL.previous_any
     elif variant == "late":                                # feux en fin de boucle (essai) seuls
         g._TL.lights_late = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
