@@ -406,6 +406,43 @@ def test_couloir_jamais_plus_strict_que_v16():
     assert g.overlap_ok(SimpleNamespace(overlap=0.20, repeat_cycle_share=0.0))      # sans mesure v16 : comme avant
 
 
+def test_params_hash_unchanged_while_v19_off():
+    """Les règles v19 sont éteintes : l'empreinte ne les compte pas (le calcul v18 en cours ne voit aucun changement) ;
+    en allumer une change l'empreinte."""
+    h0 = g.params_hash()
+    old = g.TIME_V19
+    g.TIME_V19 = True
+    try:
+        assert g.params_hash() != h0
+    finally:
+        g.TIME_V19 = old
+    assert g.params_hash() == h0
+
+
+def test_time_v19_climbs_faster_descents_slower():
+    """Modèle de temps v19 (sorties de Florent) : plus rapide qu'avant en montée (puissance +50 % à 6 %), plus lent en
+    descente (plafond de l'allure), et 15 s par feu."""
+    flat = [0.0] * 11
+    up = [i * 6.0 for i in range(11)]                    # 1 km à 6 %
+    down = [60.0 - i * 6.0 for i in range(11)]            # 1 km à −6 %
+    w = g.level_watts("modere", 2.0)
+    old = g.DENSITY
+    g.DENSITY = SimpleNamespace()                         # time_v19() exige une densité chargée
+    g._TL.time_v19 = True
+    try:
+        t = {k: g.estimate_time_s(100.0, p, w, 0.0, 0.0, 0, "modere", [0] * 11) for k, p in
+             (("flat", flat), ("up", up), ("down", down))}
+        lights = g.estimate_time_s(100.0, flat, w, 0.0, 0.0, 4, "modere", [0] * 11) - t["flat"]
+    finally:
+        del g._TL.time_v19
+        g.DENSITY = old
+    t18 = {k: g.estimate_time_s(100.0, p, w, 0.0, 0.0, 0) for k, p in (("up", up), ("down", down))}
+    assert t["up"] < t18["up"]
+    assert t["down"] > t18["down"]
+    assert t["down"] >= 1000.0 / (g.DESCENT_CAP_KMH["modere"] / 3.6) - 1e-6
+    assert abs(lights - 4 * g.SIGNAL_DELAY_V19_S) < 1e-6
+
+
 def test_fallback_best_keeps_best_of_flattest():
     """Repli de relief (FALLBACK_BEST) : la mieux notée parmi les boucles à 1 m/km de la moins vallonnée (Sant Esteve
     de Llémena 4 h Tranquille, 14/10/2026), et non la moins vallonnée quelle que soit sa note."""

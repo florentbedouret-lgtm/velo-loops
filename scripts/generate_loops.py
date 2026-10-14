@@ -3804,6 +3804,20 @@ BUDGET_END = None               # instant (time.time()) au-delà duquel on ne d�
 CARRY = None                    # {"src", "by_key"} si --carry-over-from est fourni (départs publiés, toutes versions)
 
 
+def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres entrées de l'empreinte
+    """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
+    return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
+             WATER_CITY_NEAR],
+            [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
+             JunctionDensity.CELL_M, JunctionDensity.R],
+            [FALLBACK_RELIEF_TOL, FALLBACK_DIRT_TOL_KM],
+            [LIGHTS_LATE_MIN, LIGHTS_LATE_MAX_MEAN, LIGHTS_LATE_TOL],
+            [SCENIC_SEA_M, SCENIC_RIVER_M, SCENIC_NEAR_M, SCENIC_ON_M, SCENIC_RUN_M, SCENIC_MIN_WAY_M, SCENIC_TOP,
+             SCENIC_MAX_RUNS],
+            [CROSS_SEG_MAX, CROSS_SEG_MARGIN, CROSS_SEG_TIME],
+            [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, WATER_CITY_DEG]]
+
+
 def params_hash(config_dir: str = "config") -> str:
     """Empreinte de tout ce qui influence les boucles : constantes du modèle + fichiers de configuration GraphHopper.
     Deux générations avec la même empreinte produisent les mêmes boucles pour un même départ (aux données OSM près)."""
@@ -3834,7 +3848,10 @@ def params_hash(config_dir: str = "config") -> str:
                       BACKTRACK_PLEASANT_MIN_M, BACKTRACK_DIRT_MAX_M, BACKTRACK_PISTE_GREEN, BACKTRACK_REPEAT_WEIGHT,
                       CROSSOVER, CROSS_TOP, CROSS_NEAR_M, CROSS_MAX_TRIALS, CROSS_NEIGHBOURS, CROSS_NEIGHBOUR_LOOPS,
                       RETOUCH_ROUND_ROBIN, RETOUCH_SHORTEN],
-              "v18": [DETOUR_SCORE, DETOUR_PENALTY, DETOUR_PENALTY_PER_100M, DETOUR_MAX_PENALTY]}
+              "v18": [DETOUR_SCORE, DETOUR_PENALTY, DETOUR_PENALTY_PER_100M, DETOUR_MAX_PENALTY],
+              # v19 (préparée le 14/10/2026, docs/v19_proposition.md) : comptée dès qu'une de ses règles est allumée,
+              # pour que l'empreinte ne change pas tant qu'elles sont toutes éteintes (calcul v18 en cours)
+              **({"v19": V19_PARAMS()} if any(V19_PARAMS()[0]) else {})}
     h = hashlib.sha1(json.dumps(consts, sort_keys=True, default=str).encode())
     rp = Path(__file__).parent / "remarkable_places.json"   # liste des lieux (points d'accès) : change les boucles aussi
     if rp.exists():
