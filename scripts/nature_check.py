@@ -480,7 +480,20 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
                      "origine": origin(l.seed), "dpk": round(l.dplus_per_km, 1), "relief_ok": g.relief_ok(l),
                      "repli": bool(getattr(l, "relief_fallback", False) or getattr(l, "unpaved_fallback", False)),
                      "ecartee": why})
+    prev = []                                            # boucles publiées de cette durée, notées et chronométrées
+    for profile, coords in (st_.get("previous") or {}).get((level, dm), []):
+        way = g.route_waypoints(coords, step_m=g.previous_step())
+        way[0] = way[-1] = [st_["lon"], st_["lat"]]
+        path = gh.via(way, profile, pass_through=True)
+        l = g.analyse(path, level, profile, d, 2000, None) if path else None
+        if l is None:
+            prev.append({"ok": False})
+            continue
+        fits = [f"{x:g}" for x in g.DURATION_SET if g.time_ok(l.time_s, x)]
+        prev.append({"score": l.score, "min": round(l.time_s / 60), "km": round(l.distance_m / 1000, 1),
+                     "valide_ici": g.time_ok(l.time_s, d), "plages": fits, "dpk": round(l.dplus_per_km, 1)})
     return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows,
+            "publiees": prev,
             "detail": detail}
 
 
