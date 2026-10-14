@@ -178,6 +178,12 @@ SCENIC_MIN_WAY_M = 500.0         # entre le premier et le dernier point de passa
 SCENIC_TOP = 2                   # meilleures boucles essayées par durée et allure
 SCENIC_MAX_RUNS = 2              # tronçons longés essayés par boucle
 SCENIC_WAYS = None               # STRtree des voies agréables, chargé dans main()
+# Traçage m7 (14/10/2026) : sur l'Eixample 2 h, le tronçon longé de 6,4 km (Barceloneta - Poblenou) est bien détecté, mais
+# avec trois points posés sur la voie et sans sens, la variante note 35,3 (allers-retours, morceaux à contresens).
+# SCENIC_DENSE : un point tous les SCENIC_PICK_M le long du tronçon, avec le sens de circulation de la boucle. False : trois
+# points sans sens (1er essai).
+SCENIC_DENSE = False
+SCENIC_PICK_M = 500.0
 # Bord d'eau en ville (même diagnostic : le couloir de la B-10, à 150-200 m de la mer derrière les immeubles, comptait 49 %
 # de bord d'eau, la piste du front de mer 52 %). WATER_CITY_NEAR : en ville dense (bâti de la barre de terrain), un point
 # ne compte comme bord d'eau qu'à moins de WATER_CITY_DEG (~80 m) de l'eau ; hors ville, inchangé (~100 m ; une corniche
@@ -225,6 +231,16 @@ def bin_margin():
 def time_v19() -> bool:
     """Modèle de temps v19 (TIME_V19), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "time_v19", TIME_V19)) and DENSITY is not None
+
+
+def scenic_dense() -> bool:
+    """Voies agréables : points serrés et orientés (SCENIC_DENSE), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "scenic_dense", SCENIC_DENSE))
+
+
+def spatial_shorter() -> bool:
+    """Départs voisins : durée inférieure aussi (SPATIAL_SHORTER), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "spatial_shorter", SPATIAL_SHORTER))
 
 
 def scenic_retouch() -> bool:
@@ -495,10 +511,15 @@ def neighbour_loops(st, level: str, duration_h: float) -> list:
                 data = {"options": []}
             with _NEIGHBOUR_LOCK:
                 _NEIGHBOUR_CACHE[sid] = data
-        opts = [o for o in data.get("options", []) if o.get("level") == level
-                and round(o.get("duration_target_min", 0)) == round(duration_h * 60) and o.get("coords")]
-        for o in opts[:CROSS_SPATIAL_LOOPS]:
-            out.append((o.get("profile") or LEVELS[level]["profiles"][0], o["coords"], sid, o.get("label", "")))
+        wanted = [round(duration_h * 60)]
+        if spatial_shorter() and duration_h in DURATION_SET and DURATION_SET.index(duration_h) > 0:
+            wanted.append(round(DURATION_SET[DURATION_SET.index(duration_h) - 1] * 60))   # l'approche compense
+        for dm in wanted:
+            opts = [o for o in data.get("options", []) if o.get("level") == level
+                    and round(o.get("duration_target_min", 0)) == dm and o.get("coords")]
+            for o in opts[:CROSS_SPATIAL_LOOPS]:
+                out.append((o.get("profile") or LEVELS[level]["profiles"][0], o["coords"], sid,
+                            f"{o.get('label', '')}, {dm} min"))
     return out
 
 
@@ -636,6 +657,9 @@ CROSS_SEG_TIME = 0.12
 CROSS_SPATIAL_KM = 3.0
 CROSS_SPATIAL_STARTS = 3
 CROSS_SPATIAL_LOOPS = 2
+# Traçage m8 (14/10/2026) : la boucle 1 h 30 de Horta, adaptée à Gràcia, note 64,0 (Gràcia seule : 59,7) mais dure 118 min
+# avec l'approche. SPATIAL_SHORTER : les boucles des départs voisins de la durée inférieure aussi (l'approche compense).
+SPATIAL_SHORTER = False
 NEIGHBOUR_SRC = None             # adresse du site publié (ou dossier contenant web/data/), fixée au lancement
 _NEIGHBOUR_CACHE: dict = {}
 _NEIGHBOUR_LOCK = threading.Lock()
@@ -1057,7 +1081,17 @@ def scenic_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list
                           f"{len(near) / 10:.1f} km à moins de {SCENIC_NEAR_M:.0f} m d'une voie agréable, {on / 10:.1f} km "
                           f"dessus, {len(runs)} tronçon(s) longé(s) d'au moins {SCENIC_RUN_M / 1000:g} km")
         for n, run in enumerate(runs[:SCENIC_MAX_RUNS]):
-            picks = [run[int(f * (len(run) - 1))][3] for f in (0.25, 0.5, 0.75)]
+            if scenic_dense():                               # un point tous les SCENIC_PICK_M, sens de la boucle
+                chosen, last_m = [], -1e9
+                for s_ in run:
+                    if cum[s_[0]] - last_m >= SCENIC_PICK_M:
+                        chosen.append(s_)
+                        last_m = cum[s_[0]]
+                picks = [s_[3] for s_ in chosen]
+                heads = [travel_heading(c, s_[0]) for s_ in chosen]
+            else:
+                picks = [run[int(f * (len(run) - 1))][3] for f in (0.25, 0.5, 0.75)]
+                heads = [None] * len(picks)
             if haversine(picks[0].x, picks[0].y, picks[-1].x, picks[-1].y) < SCENIC_MIN_WAY_M:
                 continue
             ia, ib = run[0][0], run[-1][0]
@@ -1065,14 +1099,15 @@ def scenic_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list
             pos = next((m for m, p in enumerate(way) if abs(p[0] - c[ia][0]) < 1e-9 and abs(p[1] - c[ia][1]) < 1e-9), None)
             if pos is None:
                 continue
-            way = way[:pos + 1] + [[p.x, p.y] for p in picks] + way[pos + 1:]
+            way = way[:pos + 1] + [[p.x, p.y] + ([h] if h is not None else []) for p, h in zip(picks, heads)] + way[pos + 1:]
             path = gh.via(way, base.profile, pass_through=True)
             loop = analyse(path, level, base.profile, duration_h, 4100 + 10 * bi + n, None) if path else None
             ok = (loop is not None and time_ok(loop.time_s, duration_h) and overlap_ok(loop)
                   and loop.u_turns <= MAX_UTURNS and dirt_ok(loop) and loop.score > base.score)
             if detail is not None:
                 detail.append(f"  voies agréables : boucle {bi + 1} ({base.score:.1f}), tronçon longé de "
-                              f"{(cum[ib] - cum[ia]) / 1000:.1f} km vers {picks[1].y:.4f},{picks[1].x:.4f} -> "
+                              f"{(cum[ib] - cum[ia]) / 1000:.1f} km vers {picks[len(picks) // 2].y:.4f},"
+                              f"{picks[len(picks) // 2].x:.4f} ({len(picks)} points) -> "
                               + ("pas d'itinéraire" if loop is None else f"note {loop.score:.1f}, {loop.time_s / 60:.0f} min")
                               + (" : gardée" if ok else " : rejetée"))
             if ok:
@@ -3849,7 +3884,7 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
             [FALLBACK_RELIEF_TOL, FALLBACK_DIRT_TOL_KM],
             [LIGHTS_LATE_MIN, LIGHTS_LATE_MAX_MEAN, LIGHTS_LATE_TOL],
             [SCENIC_SEA_M, SCENIC_RIVER_M, SCENIC_NEAR_M, SCENIC_ON_M, SCENIC_RUN_M, SCENIC_MIN_WAY_M, SCENIC_TOP,
-             SCENIC_MAX_RUNS],
+             SCENIC_MAX_RUNS, SCENIC_DENSE, SCENIC_PICK_M],
             [CROSS_SEG_MAX, CROSS_SEG_MARGIN, CROSS_SEG_TIME],
             [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, MOTORWAY_RUN_M,
              WATER_CITY_DEG]]

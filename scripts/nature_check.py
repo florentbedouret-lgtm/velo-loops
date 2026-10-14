@@ -650,14 +650,16 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
             for k in list(v19) + ["collect_logs", "empty_logs"]:
                 if hasattr(g._TL, k):
                     delattr(g._TL, k)
-    elif variant in ("front", "rapide", "frontvoies"):       # front de mer, voies rapides, front de mer + voies agréables
-        g._TL.seafront = variant in ("front", "frontvoies")
+    elif variant in ("front", "rapide", "frontvoies", "frontvoiesd"):   # front de mer, voies rapides, + voies agréables
+        g._TL.seafront = variant in ("front", "frontvoies", "frontvoiesd")
         g._TL.motorway = variant == "rapide"
-        g._TL.scenic_retouch = variant == "frontvoies"
+        g._TL.scenic_retouch = variant in ("frontvoies", "frontvoiesd")
+        g._TL.scenic_dense = variant == "frontvoiesd"            # points serrés et orientés (SCENIC_DENSE)
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.seafront
         del g._TL.motorway
         del g._TL.scenic_retouch
+        del g._TL.scenic_dense
     elif variant in ("voies", "mer80", "voies80"):           # voies agréables et / ou bord d'eau à 80 m en ville (essais)
         g._TL.scenic_retouch = variant in ("voies", "voies80")
         g._TL.water_city_near = variant in ("mer80", "voies80")
@@ -686,10 +688,12 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.cross_segments = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_segments
-    elif variant == "spatial":                             # croisement avec les départs voisins (essai) seul
+    elif variant in ("spatial", "spatiald"):               # départs voisins (essai), durée inférieure aussi (spatiald)
         g._TL.cross_spatial = True
+        g._TL.spatial_shorter = variant == "spatiald"
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_spatial
+        del g._TL.spatial_shorter
     elif variant == "soft":                                # v18 : profil plat adouci (calm_flat_soft) seul
         b = relief_generate(gh, st_, sid, durations, levels, g.RELIEF_LIMITS_V18_SOFT)
     elif variant == "dscore":                              # v18 : détours restants comptés dans la note
