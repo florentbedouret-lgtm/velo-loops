@@ -305,7 +305,7 @@
            display: flex; flex-direction: column; gap: 8px; }
     .tip p { margin: 0; font-size: 15px; line-height: 1.45; }
     .tip .tip-h { font-size: 16px; font-weight: var(--fw-medium); }
-    .tip + .rows, .tip + .tip { border-top: 0; margin-top: 0; }
+    .tip + .rows, .tip + .tip, .rows + .tip { border-top: 0; margin-top: 0; }
     .tip + .tip { padding-top: 0; }
     .tip-train { flex-direction: row; align-items: flex-start; gap: 12px; }
     .tip-train .tip-ico { flex: none; margin-top: 1px; }
@@ -1501,7 +1501,8 @@
       return sg(dk, km1(Math.abs(dk)) + ' km') + ' · ' + sg(dm, Math.abs(dm) + ' m') + ' · ' + sg(dt, Math.abs(dt) + ' min');
     }
 
-    // contenu du panneau (maquette 5c / 5d) : terrain, points clés, profil, suggestion, dépliants, autres boucles, notes
+    // contenu du panneau en trois blocs (Florent, 14/10/2026) : cette boucle (terrain, points clés, profil, « Tous les
+    // chiffres », avis sur cette boucle), autre chose (suggestions, autres boucles), à propos (« Comment ça marche », notes)
     function detailHtml(o) {
       const facts = factsHtml(o);
       // boucle qui reste en ville : proposer plus long ; et, si un départ voisin sort plus vite de la ville, le suggérer
@@ -1527,17 +1528,19 @@
         ${lc ? terrainBar(o) : '<div class="sub">' + esc(t('city_pct', { p: pctStr(Math.round(cityShare(o) * 100)) })) + '</div>'}
         ${keysHtml(o)}
         ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead">' + (o.terrain.climbs && o.terrain.climbs.length ? esc(tn('pf_climbs', o.terrain.climbs.length)) : '') + '</span></div>' + pf + '</div>' : ''}
-        ${longer}${natureNeighbour(o)}${trainStart(o)}
         <div class="rows">
           <details><summary>${esc(t('all_figures'))}</summary>
             <div class="facts">${facts}</div>
           </details>
+          ${feedbackHtml(o)}
+        </div>
+        ${longer}${natureNeighbour(o)}${trainStart(o)}
+        ${others}
+        <div class="rows">
           <details><summary>${esc(t('how_title'))}</summary>
             <div class="how">${[1, 2, 3, 4, 5, 6].map(k => '<p>' + esc(t('how_' + k)) + '</p>').join('')}</div>
           </details>
-          ${feedbackHtml(o)}
         </div>
-        ${others}
         <small class="notes">${esc(t('notes'))}</small>
         <div id="legal">${esc(t('legal_line'))} · <a href="${HOW_PAGE[LANG] || HOW_PAGE.fr}" target="_blank" rel="noopener">${esc(t('how_link'))}</a> · <a href="mentions.html" target="_blank" rel="noopener">${esc(t('legal_link'))}</a></div>`;
     }
