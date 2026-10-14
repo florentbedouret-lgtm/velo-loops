@@ -177,7 +177,19 @@ def summary(loop):
             "water_pct": round(100 * loop.scenery["water"]) if loop.scenery else None,
             "main_roads_rural_pct": round(100 * loop.shares.get("main_roads_by_urban", {}).get("rural", 0.0)),
             # points de note apportés par chaque critère (somme = note hors pénalité non goudronné)
-            "points": {k: round(100 * weights[k] * parts[k] / wsum, 1) for k in weights}}
+            "points": {k: round(100 * weights[k] * parts[k] / wsum, 1) for k in weights},
+            # relief (14/10/2026) : m/km et pénalité au-dessus de la cible de l'allure (RELIEF_LIMITS), en points
+            "dpk": round(loop.dplus_per_km, 1), "relief_pen": relief_pen(loop),
+            "detours": len(getattr(loop, "detours", []) or []), "remarkable": len(loop.remarkable or []),
+            "views": loop.views_passed}
+
+
+def relief_pen(loop) -> float:
+    """Points retirés à la note pour le relief au-dessus de la cible de l'allure (comme generate_loops.score_from)."""
+    lim = g.relief_limits().get(loop.level) or {}
+    if lim.get("pen_above") is None or loop.dplus_per_km <= lim["pen_above"]:
+        return 0.0
+    return round(100 * min(g.RELIEF_OVER_MAX, lim.get("pen_per", g.RELIEF_OVER_PENALTY) * (loop.dplus_per_km - lim["pen_above"])), 1)
 
 
 def score_v2(loop) -> float:
