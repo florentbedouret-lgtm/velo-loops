@@ -211,6 +211,8 @@ MOTORWAY_NUISANCE = False
 MOTORWAY_DEG = 0.00035
 MOTORWAY_PER_KM = 0.01
 MOTORWAY_MAX = 0.05
+MOTORWAY_RUN_M = 300.0           # v2 (i1 / i2 du 14/10 : 95 % des boucles touchées, chaque passage dessus ou dessous
+#                                 comptait) : seulement les tronçons LONGÉS sur au moins 300 m d'affilée
 MOTORWAYS = None                 # STRtree des autoroutes et voies express à l'air libre, chargé dans main()
 FALLBACK_RELIEF_TOL = 1.0
 FALLBACK_DIRT_TOL_KM = 0.5
@@ -268,7 +270,15 @@ def side_km(coords, cum, car_e, rc_e) -> tuple[float, float]:
     if motorway_nuisance():
         near = np.zeros(len(pos), dtype=bool)
         near[np.unique(MOTORWAYS.query(pts, predicate="dwithin", distance=MOTORWAY_DEG)[0])] = True
-        mw_km = 0.1 * float(sum(1 for k in range(len(pos)) if near[k] and rc_e[idx[k]] not in ("motorway", "trunk")))
+        hit = [bool(near[k]) and rc_e[idx[k]] not in ("motorway", "trunk") for k in range(len(pos))]
+        run, n_run = 0, max(1, int(round(MOTORWAY_RUN_M / 100.0)))
+        for h in hit + [False]:                              # tronçons longés seulement (MOTORWAY_RUN_M d'affilée)
+            if h:
+                run += 1
+                continue
+            if run >= n_run:
+                mw_km += 0.1 * run
+            run = 0
     return sea_km, mw_km
 
 
@@ -488,7 +498,7 @@ def neighbour_loops(st, level: str, duration_h: float) -> list:
         opts = [o for o in data.get("options", []) if o.get("level") == level
                 and round(o.get("duration_target_min", 0)) == round(duration_h * 60) and o.get("coords")]
         for o in opts[:CROSS_SPATIAL_LOOPS]:
-            out.append((o.get("profile") or LEVELS[level]["profiles"][0], o["coords"]))
+            out.append((o.get("profile") or LEVELS[level]["profiles"][0], o["coords"], sid, o.get("label", "")))
     return out
 
 
@@ -1008,6 +1018,8 @@ def scenic_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list
     """Retouche « voies agréables » (SCENIC_RETOUCH) des meilleures boucles du pool : seulement les variantes valides qui
     notent mieux que leur boucle de départ."""
     import shapely
+    if detail is None:                                       # traçage d'un diagnostic (nature_check --trace)
+        detail = getattr(_TL, "trace_detail", None)
     from shapely.ops import nearest_points
     bases = []
     for l in sorted(pool, key=lambda x: x.score, reverse=True):
@@ -1038,6 +1050,12 @@ def scenic_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list
             if cum[samples[k - 1][0]] - cum[samples[a][0]] >= SCENIC_RUN_M:
                 runs.append(samples[a:k])
         runs.sort(key=lambda r: -(cum[r[-1][0]] - cum[r[0][0]]))
+        if detail is not None:                               # ce que la détection voit (diagnostic)
+            near = [s_ for s_ in samples if s_[2] <= SCENIC_NEAR_M]
+            on = sum(1 for s_ in samples if s_[2] <= SCENIC_ON_M)
+            detail.append(f"  voies agréables : boucle {bi + 1} ({base.score:.1f}, {base.distance_m / 1000:.1f} km) : "
+                          f"{len(near) / 10:.1f} km à moins de {SCENIC_NEAR_M:.0f} m d'une voie agréable, {on / 10:.1f} km "
+                          f"dessus, {len(runs)} tronçon(s) longé(s) d'au moins {SCENIC_RUN_M / 1000:g} km")
         for n, run in enumerate(runs[:SCENIC_MAX_RUNS]):
             picks = [run[int(f * (len(run) - 1))][3] for f in (0.25, 0.5, 0.75)]
             if haversine(picks[0].x, picks[0].y, picks[-1].x, picks[-1].y) < SCENIC_MIN_WAY_M:
@@ -3348,7 +3366,8 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
     adopted = []
     if cross_spatial():                                      # boucles des départs voisins, adaptées à ce départ
         home = [st["lon"], st["lat"]]
-        for n, (profile, coords) in enumerate(neighbour_loops(st, level, duration_h)):
+        det = detail if detail is not None else getattr(_TL, "trace_detail", None)
+        for n, (profile, coords, nsid, nlab) in enumerate(neighbour_loops(st, level, duration_h)):
             k = min(range(len(coords)), key=lambda i: haversine(home[0], home[1], coords[i][0], coords[i][1]))
             rot = coords[k:] + coords[1:k + 1]               # même boucle, commencée au point le plus proche du départ
             way = [home] + route_waypoints(rot) + [home]
@@ -3358,6 +3377,12 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
                 parents.append(l)
                 if (time_ok(l.time_s, duration_h) and overlap_ok(l) and l.u_turns <= MAX_UTURNS and dirt_ok(l)):
                     adopted.append(l)
+            if det is not None:                              # chaque boucle voisine : adoptable ou pourquoi pas
+                why = ("pas d'itinéraire" if l is None else "durée" if not time_ok(l.time_s, duration_h) else
+                       f"répétitions ({l.overlap:.0%})" if not overlap_ok(l) else f"demi-tours ({l.u_turns})"
+                       if l.u_turns > MAX_UTURNS else "terre" if not dirt_ok(l) else "adoptable")
+                det.append(f"  départ voisin {nsid} ({nlab}) -> " + ("" if l is None else
+                           f"note {l.score:.1f}, {l.distance_m / 1000:.1f} km, {l.time_s / 60:.0f} min : ") + why)
         if detail is not None:
             detail.append(f"  départs voisins : {len(adopted)} boucle(s) adoptable(s)")
 
@@ -3826,7 +3851,8 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
             [SCENIC_SEA_M, SCENIC_RIVER_M, SCENIC_NEAR_M, SCENIC_ON_M, SCENIC_RUN_M, SCENIC_MIN_WAY_M, SCENIC_TOP,
              SCENIC_MAX_RUNS],
             [CROSS_SEG_MAX, CROSS_SEG_MARGIN, CROSS_SEG_TIME],
-            [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, WATER_CITY_DEG]]
+            [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, MOTORWAY_RUN_M,
+             WATER_CITY_DEG]]
 
 
 def params_hash(config_dir: str = "config") -> str:

@@ -450,7 +450,12 @@ def report_prev_check(results, out_json, out_md, t0, steps=("2000", "500", "300"
 
 def trace_pool(gh, st_, sid, level, d, options, logf):
     """Candidates d'une durée (TRACE) : note, durée, origine, conformité, et pourquoi l'ordre des durées les écarte."""
-    raw = g.level_pool(gh, st_, level, d, g.CANDIDATES, logf)
+    g._TL.trace_detail = []                              # détail des voies agréables et des départs voisins
+    try:
+        raw = g.level_pool(gh, st_, level, d, g.CANDIDATES, logf)
+        detail = list(g._TL.trace_detail)
+    finally:
+        del g._TL.trace_detail
     lo, hi = g.order_bounds(options, level, d)
     dm = round(d * 60)
     taken = {o.get("route_key") for o in options if o["level"] == level and o["duration_target_min"] != dm}
@@ -463,7 +468,8 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
                      "origine": origin(l.seed), "dpk": round(l.dplus_per_km, 1), "relief_ok": g.relief_ok(l),
                      "repli": bool(getattr(l, "relief_fallback", False) or getattr(l, "unpaved_fallback", False)),
                      "ecartee": why})
-    return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows}
+    return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows,
+            "detail": detail}
 
 
 def option_row(o) -> dict:
