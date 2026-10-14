@@ -190,6 +190,23 @@ WATER_CITY_DEG = 0.0008
 # test). FALLBACK_BEST : parmi les boucles à FALLBACK_RELIEF_TOL m/km (relief) ou FALLBACK_DIRT_TOL_KM km (terre) de la
 # moins vallonnée (la moins terreuse), la mieux notée. False : la moins vallonnée seule (v17).
 FALLBACK_BEST = False
+# Front de mer (Florent, 14/10/2026 ; diagnostics cmp6 / y3 : la piste du passeig Marítim de la Barceloneta et le couloir
+# intérieur notent presque pareil, 53,1 contre 52,8 : la note ne voit ni la vue ni l'espace d'une promenade). SEAFRONT_BONUS :
+# SEAFRONT_PER_KM point par km roulé sans voitures (piste, voie verte) à moins de SEAFRONT_DEG (~80 m) de la côte ou d'une
+# plage, SEAFRONT_MAX points au plus. False : désactivé.
+SEAFRONT_BONUS = False
+SEAFRONT_DEG = 0.0008
+SEAFRONT_PER_KM = 0.01
+SEAFRONT_MAX = 0.05
+# Voies rapides (Florent, 14/10/2026, à tester) : longer une autoroute ou une voie express (bruit, gaz d'échappement) est
+# désagréable même sur une piste séparée. MOTORWAY_NUISANCE : MOTORWAY_PER_KM point par km roulé à moins de MOTORWAY_DEG
+# (~30 m) d'une autoroute ou voie express à l'air libre (tunnels et sections couvertes exclus), hors trajet SUR la voie
+# elle-même (déjà compté dans les grands axes), MOTORWAY_MAX points au plus. False : désactivé.
+MOTORWAY_NUISANCE = False
+MOTORWAY_DEG = 0.00035
+MOTORWAY_PER_KM = 0.01
+MOTORWAY_MAX = 0.05
+MOTORWAYS = None                 # STRtree des autoroutes et voies express à l'air libre, chargé dans main()
 FALLBACK_RELIEF_TOL = 1.0
 FALLBACK_DIRT_TOL_KM = 0.5
 
@@ -216,6 +233,65 @@ def water_city_near() -> bool:
 def fallback_best() -> bool:
     """Repli « la mieux notée parmi les quasi-moins vallonnées » (FALLBACK_BEST), réglable par fil d'exécution."""
     return bool(getattr(_TL, "fallback_best", FALLBACK_BEST))
+
+
+def seafront_bonus() -> bool:
+    """Bonus « front de mer » (SEAFRONT_BONUS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "seafront", SEAFRONT_BONUS))
+
+
+def motorway_nuisance() -> bool:
+    """Pénalité « voie rapide » (MOTORWAY_NUISANCE), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "motorway", MOTORWAY_NUISANCE)) and MOTORWAYS is not None
+
+
+def side_km(coords, cum, car_e, rc_e) -> tuple[float, float]:
+    """(km sans voitures en front de mer, km à côté d'une voie rapide), mesurés tous les 100 m."""
+    import numpy as np
+    import shapely
+    if LANDSCAPE is None or cum[-1] < 100.0:
+        return 0.0, 0.0
+    pos = np.arange(0.0, cum[-1], 100.0)
+    idx = np.clip(np.searchsorted(cum, pos, side="right") - 1, 0, len(car_e) - 1)
+    pts = shapely.points(np.array(sample_points(coords, cum, 100.0)[:len(pos)]))
+    sea_km = mw_km = 0.0
+    sea = LANDSCAPE.trees.get("sea")
+    if seafront_bonus() and sea is not None:
+        near = np.zeros(len(pos), dtype=bool)
+        near[np.unique(sea.query(pts, predicate="dwithin", distance=SEAFRONT_DEG)[0])] = True
+        sea_km = 0.1 * float(sum(1 for k in range(len(pos)) if near[k] and not car_e[idx[k]]))
+    if motorway_nuisance():
+        near = np.zeros(len(pos), dtype=bool)
+        near[np.unique(MOTORWAYS.query(pts, predicate="dwithin", distance=MOTORWAY_DEG)[0])] = True
+        mw_km = 0.1 * float(sum(1 for k in range(len(pos)) if near[k] and rc_e[idx[k]] not in ("motorway", "trunk")))
+    return sea_km, mw_km
+
+
+def load_motorways(pbf: Path, workdir: Path):
+    """Autoroutes et voies express à l'air libre (MOTORWAY_NUISANCE) : STRtree de leurs lignes, ou None."""
+    import shutil
+    import subprocess
+    from shapely.geometry import shape
+    from shapely.strtree import STRtree
+    if not pbf.exists() or not shutil.which("osmium"):
+        return None
+    filt, out = workdir / "motorways.osm.pbf", workdir / "motorways.geojson"
+    try:
+        subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway=motorway,trunk", "-o", str(filt), "--overwrite"],
+                       check=True, capture_output=True)
+        subprocess.run(["osmium", "export", str(filt), "-f", "geojson", "-o", str(out), "--overwrite"],
+                       check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! voies rapides : extraction échouée ({e.stderr.decode()[:200]})", file=sys.stderr)
+        return None
+    lines = []
+    for f in json.loads(out.read_text(encoding="utf-8")).get("features", []):
+        p, g = f.get("properties", {}), f.get("geometry", {})
+        if g.get("type") != "LineString" or p.get("tunnel") in ("yes", "building_passage") or p.get("covered") == "yes":
+            continue
+        lines.append(shape(g))
+    print(f"voies rapides à l'air libre : {len(lines)} tronçons")
+    return STRtree(lines) if lines else None
 
 
 def lights_late() -> bool:
@@ -2071,6 +2147,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.signal_m = signal_m                                 # positions des feux (croisement tronçon par tronçon)
     loop.doubt_ways = doubt_ways(det, coords, cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
+    loop.seafront_km, loop.motorway_km = (side_km(coords, cum, car, rc_e) if (seafront_bonus() or motorway_nuisance())
+                                          else (0.0, 0.0))
     loop.score = score(loop)
     return loop
 
@@ -2120,6 +2198,10 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     total -= min(0.3, max(per_km * dirt_km, max(0.0, l.shares["unpaved"] - 0.03) * 2.0))
     total += min(REMARKABLE_MAX_BONUS, REMARKABLE_BONUS * len(l.remarkable))   # Tibidabo, belvédères connus…
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
+    if seafront_bonus():                                  # front de mer sans voitures (SEAFRONT_BONUS)
+        total += min(SEAFRONT_MAX, SEAFRONT_PER_KM * getattr(l, "seafront_km", 0.0))
+    if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
+        total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
     if detour_score() and getattr(l, "detours", None):    # détours inutiles restants (DETOUR_SCORE, v18)
@@ -4153,7 +4235,7 @@ def main() -> int:
     res = machine_resources()
     print(f"Machine : {res['cpu_count']} CPU, {res['ram_gb']} Go de RAM ; {args.workers} départ(s) en parallèle", flush=True)
 
-    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY, SCENIC_WAYS
+    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY, SCENIC_WAYS, MOTORWAYS
     places_path = Path(args.places)
     pbf_path = Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf"
     SIGNALS = load_signals(pbf_path, places_path.parent)
@@ -4169,6 +4251,8 @@ def main() -> int:
         LANDSCAPE = None
     print("Paysage OSM chargé : " + (", ".join(f"{k} {v}" for k, v in LANDSCAPE.counts.items()) if LANDSCAPE
                                      else "non disponible"), flush=True)
+    if MOTORWAY_NUISANCE:                                    # voies rapides à l'air libre
+        MOTORWAYS = load_motorways(pbf_path, places_path.parent)
     if SCENIC_RETOUCH:                                       # voies agréables (retouche)
         SCENIC_WAYS = load_scenic_ways(pbf_path, places_path.parent, LANDSCAPE)
     try:

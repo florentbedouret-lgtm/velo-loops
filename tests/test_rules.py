@@ -35,6 +35,8 @@ def test_reglages_v17():
     assert g.SCENIC_RETOUCH is False                   # voies agréables, en essai
     assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
     assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
+    assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
+    assert g.MOTORWAY_NUISANCE is False                # voies rapides, en essai
 
 
 def test_profil_plat_dans_la_configuration():
