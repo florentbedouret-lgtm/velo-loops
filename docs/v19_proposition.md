@@ -35,4 +35,21 @@ durées (O-63), puis remesurer.
    (temps v19 et voies agréables changent toutes deux les durées).
 3. Allumer les interrupteurs retenus, `GENERATOR_VERSION = "19"`, mettre à jour `tests/test_rules.py` (interrupteurs) ;
    l'empreinte compte alors la v19 (`V19_PARAMS`) : calcul complet (`mode=full`, `reuse=true`, `chain`).
-4. À la fin : version 19 partout, aucun `stale` ; vérifier les durées annoncées sur les départs des sorties de Florent.
+4. Publier les textes de l'app (section suivante) avec le site de la v19.
+5. À la fin : version 19 partout, aucun `stale` ; vérifier les durées annoncées sur les départs des sorties de Florent.
+
+## Textes de l'app à publier avec la v19 (validés par Florent le 14/10/2026)
+
+Les textes actuels restent justes pour la v18 : ne les changer qu'au lancement de la v19.
+
+1. `notes` (`i18n.js`, sous chaque boucle) — « en mouvement » était trompeur (les arrêts aux feux sont comptés) :
+   - FR : Durées estimées sans les pauses, arrêts aux feux compris. Dénivelé : estimation.
+   - EN : Estimated times without breaks, stops at traffic lights included. Climbing is an estimate.
+   - ES : Tiempos estimados sin pausas, paradas en semáforos incluidas. Desnivel: estimación.
+   - CA : Temps estimats sense pauses, aturades als semàfors incloses. Desnivell: estimació.
+2. `how_4` (`i18n.js`) et la question « Comment la durée est-elle estimée ? » des quatre pages « Comment ça marche »
+   (texte visible et FAQ en JSON-LD) ; seul le début change, la suite sur la FTP reste :
+   - FR : La durée est estimée pour ton allure (tranquille, modéré, sportif) : un peu plus d'effort dans les montées, des descentes prudentes, un ralentissement dans les quartiers denses, et environ 15 s par feu (arrêt, freinage et relance). Les pauses ne sont pas comptées. Ce calcul a été recalé sur des sorties réelles.
+   - EN : The time is estimated for your pace (easy, moderate, sporty): a little more effort on climbs, careful descents, slower riding in dense neighbourhoods, and about 15 s per traffic light (stopping, braking and getting going again). Breaks are not counted. The estimate was calibrated on real rides.
+   - ES : La duración se estima para tu ritmo (tranquilo, moderado, deportivo): algo más de esfuerzo en las subidas, bajadas prudentes, más lento en los barrios densos y unos 15 s por semáforo (parada, frenada y arranque). Las pausas no se cuentan. El cálculo se ha ajustado con salidas reales.
+   - CA : La durada es calcula per al teu ritme (tranquil, moderat, esportiu): una mica més d'esforç a les pujades, baixades prudents, més lent als barris densos i uns 15 s per semàfor (aturada, frenada i arrencada). Les pauses no es compten. El càlcul s'ha ajustat amb sortides reals.
