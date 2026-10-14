@@ -1,9 +1,9 @@
 {
- "_note": "L'Eixample, Modéré, 3 h (Florent, 14/10/2026) : la boucle équilibrée publiée (v18) passe par l'intérieur ; tracé rouge de Florent par le bord de l'eau. Points de passage seulement : ceux de la boucle publiée tous les 2 km, et pour le tracé rouge, des points sur les voies OSM (Barceloneta : Joan de Borbó 1241379531, Mare Nostrum 74073251, passeig Marítim 280405219 ; Besòs : Parc Fluvial 93661443, 499498827, 504030572, Gran Via). Utilisée par nature_check.py --compare-refs (diag_part=cmp5).",
+ "_note": "L'Eixample, Modéré, 3 h (Florent, 14/10/2026) : la boucle équilibrée publiée (v18) passe par l'intérieur ; tracé rouge de Florent par le bord de l'eau. Points de passage seulement : ceux de la boucle publiée tous les 2 km, et pour le tracé rouge des points sur les voies OSM. Besòs : une seule rive du Parc Fluvial (93661443, 1013701150, 1013701154), puis Gran Via (v2 : la v1 mêlait les deux rives, demi-tours). Utilisée par nature_check.py --compare-refs (diag_part=cmp5).",
  "start": "l-eixample",
  "loops": [
   {
-   "name": "Besòs : Parc Fluvial del Besòs puis Gran Via (tracé rouge de Florent)",
+   "name": "Besòs : Parc Fluvial del Besòs (une seule rive) puis Gran Via (tracé rouge de Florent)",
    "source": "Florent, capture annotée (14/10/2026) ; points sur les voies OSM",
    "waypoints": [
     [
@@ -87,20 +87,16 @@
      41.46128
     ],
     [
-     2.20137,
-     41.44902
-    ],
-    [
      2.20725,
      41.44463
     ],
     [
-     2.21066,
-     41.43371
+     2.21076,
+     41.43671
     ],
     [
-     2.21564,
-     41.42861
+     2.21273,
+     41.43274
     ],
     [
      2.20799,

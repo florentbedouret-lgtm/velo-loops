@@ -1,5 +1,5 @@
 {
- "_note": "L'Eixample, Modéré, 2 h (Florent, 14/10/2026) : la boucle équilibrée publiée (v18) passe par l'intérieur ; tracé rouge de Florent par le bord de l'eau. Points de passage seulement : ceux de la boucle publiée tous les 2 km, et pour le tracé rouge, des points sur les voies OSM (Barceloneta : Joan de Borbó 1241379531, Mare Nostrum 74073251, passeig Marítim 280405219 ; Besòs : Parc Fluvial 93661443, 499498827, 504030572, Gran Via). Utilisée par nature_check.py --compare-refs (diag_part=cmp5).",
+ "_note": "L'Eixample, Modéré, 2 h (Florent, 14/10/2026) : la boucle équilibrée publiée (v18) passe par l'intérieur ; tracé rouge de Florent par le bord de l'eau. Points de passage seulement : ceux de la boucle publiée tous les 2 km, et pour le tracé rouge des points sur les voies OSM. Barceloneta : Joan de Borbó 1241379531, passeig Marítim 83711428 puis 280405219 (v2 : sans le point de la pointe, qui faisait passer par les rues). Utilisée par nature_check.py --compare-refs (diag_part=cmp5).",
  "start": "l-eixample",
  "loops": [
   {
@@ -15,12 +15,12 @@
      41.3789
     ],
     [
-     2.189,
-     41.3725
+     2.1908,
+     41.3765
     ],
     [
-     2.1939,
-     41.3817
+     2.19393,
+     41.38168
     ],
     [
      2.19896,

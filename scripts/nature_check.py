@@ -1327,7 +1327,9 @@ def run_compare(refs_path, site, gh_url, level, duration):
             if loop is not None and (best is None or loop.score > best.score):
                 best = loop
         out["refs"].append({"name": ref["name"], "loop": summary(best), "error": None if best else (gh.last_error or "pas de boucle"),
-                            "uturns_at": [list(u) for u in g.uturn_points(best.coords)] if best else []})
+                            "uturns_at": [list(u) for u in g.uturn_points(best.coords)] if best else [],
+                            # tracé suivi par GraphHopper (14/10/2026) : vérifier qu'il suit bien la boucle voulue
+                            "coords": [[round(c[0], 5), round(c[1], 5)] for c in best.coords] if best else []})
     pool = g.level_pool(gh, st_, level, duration, g.CANDIDATES, lambda *_: None)
     if g.OUTBACK_DRAWS:                                    # détail des allers-retours au bord de l'eau (essai)
         out["outback_trials"] = []
