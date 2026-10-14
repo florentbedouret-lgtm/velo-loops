@@ -487,6 +487,7 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0),
                              "lights": o["traffic_lights"], "light_mean": g.light_mean(l),
                              "late": bool(getattr(l, "lights_late", False)),
+                             "scenic": bool(getattr(l, "scenic_retouched", False)),
                              "useful": o.get("backtracks", []), "retouched": bool(o.get("retouched")),
                              "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed")),
                              # tracé gardé pour relire les allers-retours jugés utiles (09/10/2026)
@@ -518,7 +519,13 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "time19":                                # modèle de temps v19 (essai) seul
+    if variant in ("voies", "mer80", "voies80"):           # voies agréables et / ou bord d'eau à 80 m en ville (essais)
+        g._TL.scenic_retouch = variant in ("voies", "voies80")
+        g._TL.water_city_near = variant in ("mer80", "voies80")
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.scenic_retouch
+        del g._TL.water_city_near
+    elif variant == "time19":                              # modèle de temps v19 (essai) seul
         g._TL.time_v19 = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.time_v19
@@ -1447,6 +1454,7 @@ def main() -> int:
     g.STOPS = g.load_points(pbf, wd, ["n/highway=stop"], "stops")
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     g.POIS = g.load_pois(pbf, wd)                       # lieux remarquables (tirages ciblés, bonus) comme la production
+    g.SCENIC_WAYS = g.load_scenic_ways(pbf, wd, g.LANDSCAPE)   # voies agréables (essai), utilisées seulement si allumé
     g.NEIGHBOUR_SRC = args.site                          # boucles publiées des départs voisins (CROSS_SPATIAL)
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")

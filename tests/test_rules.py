@@ -32,6 +32,8 @@ def test_reglages_v17():
     assert g.SCENIC_AREAS is False                     # zones agréables, en essai
     assert g.TIME_V19 is False                         # modèle de temps v19, en essai
     assert g.LIGHTS_LATE is False                      # feux en fin de boucle, en essai
+    assert g.SCENIC_RETOUCH is False                   # voies agréables, en essai
+    assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
 
 
 def test_profil_plat_dans_la_configuration():

@@ -162,6 +162,28 @@ LIGHTS_LATE = False
 LIGHTS_LATE_MIN = 8              # au moins 8 feux sur la boucle
 LIGHTS_LATE_MAX_MEAN = 0.45      # position moyenne des feux (part de la boucle)
 LIGHTS_LATE_TOL = 0.5
+# Retouche « voies agréables » (Florent, 14/10/2026 ; diagnostic cmp5 : l'Eixample 2 h par la piste du front de mer de la
+# Barceloneta note 54,2, la boucle publiée par le couloir de la B-10 53,6, le meilleur candidat tiré aujourd'hui 50,2 :
+# aucun tirage ne passe par le front de mer). Voies agréables : pistes cyclables et voies vertes goudronnées à moins de
+# SCENIC_SEA_M de la côte ou SCENIC_RIVER_M d'une rivière. Si l'une des meilleures boucles les longe à moins de
+# SCENIC_NEAR_M pendant au moins SCENIC_RUN_M sans les emprunter, on essaie d'y passer (trois points de passage pris sur
+# la voie, au quart, à la moitié et aux trois quarts du tronçon longé) ; la note tranche. False : désactivé.
+SCENIC_RETOUCH = False
+SCENIC_SEA_M = 60.0
+SCENIC_RIVER_M = 100.0
+SCENIC_NEAR_M = 400.0
+SCENIC_ON_M = 30.0               # plus près : la boucle est déjà sur la voie
+SCENIC_RUN_M = 1000.0
+SCENIC_MIN_WAY_M = 500.0         # entre le premier et le dernier point de passage sur la voie
+SCENIC_TOP = 2                   # meilleures boucles essayées par durée et allure
+SCENIC_MAX_RUNS = 2              # tronçons longés essayés par boucle
+SCENIC_WAYS = None               # STRtree des voies agréables, chargé dans main()
+# Bord d'eau en ville (même diagnostic : le couloir de la B-10, à 150-200 m de la mer derrière les immeubles, comptait 49 %
+# de bord d'eau, la piste du front de mer 52 %). WATER_CITY_NEAR : en ville dense (bâti de la barre de terrain), un point
+# ne compte comme bord d'eau qu'à moins de WATER_CITY_DEG (~80 m) de l'eau ; hors ville, inchangé (~100 m ; une corniche
+# voit la mer de plus loin). False : désactivé.
+WATER_CITY_NEAR = False
+WATER_CITY_DEG = 0.0008
 
 
 def bin_margin():
@@ -171,6 +193,16 @@ def bin_margin():
 def time_v19() -> bool:
     """Modèle de temps v19 (TIME_V19), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "time_v19", TIME_V19)) and DENSITY is not None
+
+
+def scenic_retouch() -> bool:
+    """Retouche « voies agréables » (SCENIC_RETOUCH), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "scenic_retouch", SCENIC_RETOUCH)) and SCENIC_WAYS is not None
+
+
+def water_city_near() -> bool:
+    """Bord d'eau à ~80 m en ville (WATER_CITY_NEAR), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "water_city_near", WATER_CITY_NEAR))
 
 
 def lights_late() -> bool:
@@ -835,6 +867,104 @@ class JunctionDensity:
         return out
 
 
+def load_scenic_ways(pbf: Path, workdir: Path, landscape):
+    """Voies agréables (SCENIC_RETOUCH) : pistes cyclables et voies vertes goudronnées au bord de la mer ou d'une rivière.
+    Retourne un STRtree de leurs lignes, ou None."""
+    import shutil
+    import subprocess
+    from shapely.geometry import shape
+    from shapely.strtree import STRtree
+    if landscape is None or not pbf.exists() or not shutil.which("osmium"):
+        return None
+    filt, out = workdir / "scenic_ways.osm.pbf", workdir / "scenic_ways.geojson"
+    try:
+        subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway=cycleway,path,footway,pedestrian", "-o", str(filt),
+                        "--overwrite"], check=True, capture_output=True)
+        subprocess.run(["osmium", "export", str(filt), "-f", "geojson", "-o", str(out), "--overwrite"],
+                       check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"! voies agréables : extraction échouée ({e.stderr.decode()[:200]})", file=sys.stderr)
+        return None
+    sea, river = landscape.trees.get("sea"), landscape.trees.get("river")
+    ways = []
+    for f in json.loads(out.read_text(encoding="utf-8")).get("features", []):
+        p, g = f.get("properties", {}), f.get("geometry", {})
+        if g.get("type") != "LineString":
+            continue
+        hw = p.get("highway")
+        if hw != "cycleway" and p.get("bicycle") not in ("yes", "designated"):
+            continue
+        if p.get("surface") in UNPAVED or (p.get("surface") is None and hw == "path"):
+            continue                                       # goudronnées seulement (vélo de route)
+        line = shape(g)
+        mid = line.interpolate(0.5, normalized=True)
+        if ((sea is not None and len(sea.query(mid, predicate="dwithin", distance=SCENIC_SEA_M / 85000.0)))
+                or (river is not None and len(river.query(mid, predicate="dwithin", distance=SCENIC_RIVER_M / 85000.0)))):
+            ways.append(line)
+    print(f"voies agréables : {len(ways)} tronçons")
+    return STRtree(ways) if ways else None
+
+
+def scenic_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list:
+    """Retouche « voies agréables » (SCENIC_RETOUCH) des meilleures boucles du pool : seulement les variantes valides qui
+    notent mieux que leur boucle de départ."""
+    import shapely
+    from shapely.ops import nearest_points
+    bases = []
+    for l in sorted(pool, key=lambda x: x.score, reverse=True):
+        if all(similarity(l, b) < 0.6 for b in bases):
+            bases.append(l)
+        if len(bases) >= SCENIC_TOP:
+            break
+    found = []
+    for bi, base in enumerate(bases):
+        c, cum = base.coords, _cum_cache(base)
+        samples, last = [], -1e9                           # un point tous les ~100 m : (indice, voie la plus proche, m)
+        for i, d in enumerate(cum):
+            if d - last >= 100.0:
+                pt = shapely.Point(c[i][0], c[i][1])
+                j = SCENIC_WAYS.nearest(pt)
+                way = SCENIC_WAYS.geometries[int(j)]
+                q = nearest_points(pt, way)[1]
+                samples.append((i, way, haversine(c[i][0], c[i][1], q.x, q.y), q))
+                last = d
+        runs, k = [], 0
+        while k < len(samples):
+            if not (SCENIC_ON_M < samples[k][2] <= SCENIC_NEAR_M):
+                k += 1
+                continue
+            a = k
+            while k < len(samples) and SCENIC_ON_M < samples[k][2] <= SCENIC_NEAR_M:
+                k += 1
+            if cum[samples[k - 1][0]] - cum[samples[a][0]] >= SCENIC_RUN_M:
+                runs.append(samples[a:k])
+        runs.sort(key=lambda r: -(cum[r[-1][0]] - cum[r[0][0]]))
+        for n, run in enumerate(runs[:SCENIC_MAX_RUNS]):
+            picks = [run[int(f * (len(run) - 1))][3] for f in (0.25, 0.5, 0.75)]
+            if haversine(picks[0].x, picks[0].y, picks[-1].x, picks[-1].y) < SCENIC_MIN_WAY_M:
+                continue
+            ia, ib = run[0][0], run[-1][0]
+            way = route_waypoints(c, skip=[(ia, ib)])
+            pos = next((m for m, p in enumerate(way) if abs(p[0] - c[ia][0]) < 1e-9 and abs(p[1] - c[ia][1]) < 1e-9), None)
+            if pos is None:
+                continue
+            way = way[:pos + 1] + [[p.x, p.y] for p in picks] + way[pos + 1:]
+            path = gh.via(way, base.profile, pass_through=True)
+            loop = analyse(path, level, base.profile, duration_h, 4100 + 10 * bi + n, None) if path else None
+            ok = (loop is not None and time_ok(loop.time_s, duration_h) and overlap_ok(loop)
+                  and loop.u_turns <= MAX_UTURNS and dirt_ok(loop) and loop.score > base.score)
+            if detail is not None:
+                detail.append(f"  voies agréables : boucle {bi + 1} ({base.score:.1f}), tronçon longé de "
+                              f"{(cum[ib] - cum[ia]) / 1000:.1f} km vers {picks[1].y:.4f},{picks[1].x:.4f} -> "
+                              + ("pas d'itinéraire" if loop is None else f"note {loop.score:.1f}, {loop.time_s / 60:.0f} min")
+                              + (" : gardée" if ok else " : rejetée"))
+            if ok:
+                loop.scenic_retouched = True
+                found.append(loop)
+    log(f"    voies agréables : {len(found)} variante(s) gardée(s)")
+    return found
+
+
 def load_density(pbf: Path, workdir: Path):
     idx = load_points(pbf, workdir, ["n/highway=crossing,traffic_signals,stop,give_way", "n/crossing=traffic_signals"],
                       "junctions")
@@ -877,6 +1007,14 @@ class LandscapeIndex:
             views = len(set(self.trees["view"].query(pts, predicate="dwithin", distance=SCENERY_VIEW_DEG)[1].tolist()))
         forest = share("forest", SCENERY_FOREST_DEG)
         water = share("water", SCENERY_WATER_DEG)
+        if water_city_near() and self.trees["water"] is not None and self.trees["buildings"] is not None and len(xy):
+            hit_w = np.zeros(len(xy), dtype=bool)          # en ville dense : bord d'eau seulement à ~80 m (WATER_CITY_NEAR)
+            hit_w[np.unique(self.trees["water"].query(pts, predicate="dwithin", distance=SCENERY_WATER_DEG)[0])] = True
+            close = np.zeros(len(xy), dtype=bool)
+            close[np.unique(self.trees["water"].query(pts, predicate="dwithin", distance=WATER_CITY_DEG)[0])] = True
+            hit_b = self.trees["buildings"].query(pts, predicate="dwithin", distance=LANDCOVER_BLD_DEG)[0]
+            dense = np.bincount(hit_b, minlength=len(xy)) >= LANDCOVER_BLD_MIN
+            water = float((hit_w & (~dense | close)).mean())
         protected = share("protected", SCENERY_PROTECTED_DEG)
         ind_mask = industrial_mask(self.trees, pts)       # par point (tous les 100 m) : surlignage dans l'appli
         industrial = float(ind_mask.mean()) if len(xy) else 0.0
@@ -3041,6 +3179,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
         pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
+    if scenic_retouch() and pool:                            # voies agréables (SCENIC_RETOUCH)
+        pool.extend(scenic_candidates(gh, st, level, duration, pool, log))
     if crossover() and len(pool) >= 2:                       # croisement des meilleures boucles (CROSSOVER, v17)
         pool.extend(crossover_candidates(gh, st, level, duration, pool, log))
     if SPUR_FIX:                                             # couper les éperons des meilleures candidates
@@ -3996,7 +4136,7 @@ def main() -> int:
     res = machine_resources()
     print(f"Machine : {res['cpu_count']} CPU, {res['ram_gb']} Go de RAM ; {args.workers} départ(s) en parallèle", flush=True)
 
-    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY
+    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY, SCENIC_WAYS
     places_path = Path(args.places)
     pbf_path = Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf"
     SIGNALS = load_signals(pbf_path, places_path.parent)
@@ -4012,6 +4152,8 @@ def main() -> int:
         LANDSCAPE = None
     print("Paysage OSM chargé : " + (", ".join(f"{k} {v}" for k, v in LANDSCAPE.counts.items()) if LANDSCAPE
                                      else "non disponible"), flush=True)
+    if SCENIC_RETOUCH:                                       # voies agréables (retouche)
+        SCENIC_WAYS = load_scenic_ways(pbf_path, places_path.parent, LANDSCAPE)
     try:
         POIS = None if args.no_landscape else load_pois(pbf_path, places_path.parent)
     except Exception as e:  # noqa: BLE001 : facultatif
