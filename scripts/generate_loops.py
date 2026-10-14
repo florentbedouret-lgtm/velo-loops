@@ -157,6 +157,11 @@ def cross_neighbours() -> bool:
     return bool(getattr(_TL, "cross_neighbours", CROSS_NEIGHBOURS))
 
 
+def scenic_areas() -> bool:
+    """Zones agréables (SCENIC_AREAS), réglables par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "scenic", SCENIC_AREAS))
+
+
 def cross_segments() -> bool:
     """Croisement tronçon par tronçon (CROSS_SEGMENTS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "cross_segments", CROSS_SEGMENTS))
@@ -436,6 +441,13 @@ CROSS_SPATIAL = False
 # meilleur des deux est pris, si la durée prévue reste à CROSS_SEG_TIME près ; CROSS_SEG_MAX essais au plus. La note de la
 # boucle entière tranche ensuite. False : désactivé.
 CROSS_SEGMENTS = False
+# Zones agréables pour GraphHopper (Florent, 14/10/2026 : l'Eixample 2 h passe par le couloir de la B-10 plutôt que par la
+# piste du bord de mer de la Barceloneta, autorisée dans OSM ; GraphHopper ne connaît pas le paysage) : profils
+# « <profil>_scenic » = profil + scripts/scenic_areas.py (bandes le long du littoral et des rivières, grands parcs, bonus
+# ×1,3 sur les voies calmes). SCENIC_AREAS : tous les itinéraires demandés avec ces profils. False : désactivé (essai :
+# copie de configuration, diagnostic z1 / z2).
+SCENIC_AREAS = False
+SCENIC_PROFILES = ("calm", "sport", "calm_flat")
 CROSS_SEG_MAX = 8
 CROSS_SEG_MARGIN = 0.03          # un tronçon remplace l'autre s'il note au moins 3 points de mieux (sur 100)
 CROSS_SEG_TIME = 0.12
@@ -1387,6 +1399,8 @@ class GraphHopper:
 
     def _route(self, body):
         import copy
+        if scenic_areas() and body.get("profile") in SCENIC_PROFILES:   # zones agréables (SCENIC_AREAS)
+            body = {**body, "profile": body["profile"] + "_scenic"}
         key = json.dumps(body, sort_keys=True)
         self.calls += 1
         if GH_MEMO and key in self._memo:

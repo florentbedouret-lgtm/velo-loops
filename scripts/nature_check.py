@@ -516,7 +516,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "segx":                                  # croisement tronçon par tronçon (essai) seul
+    if variant == "scenic":                                # zones agréables pour GraphHopper (essai) seules
+        g._TL.scenic = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.scenic
+    elif variant == "segx":                                # croisement tronçon par tronçon (essai) seul
         g._TL.cross_segments = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_segments
