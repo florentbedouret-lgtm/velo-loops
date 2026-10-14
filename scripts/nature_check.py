@@ -700,6 +700,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.cross_segments = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_segments
+    elif variant == "plusrelief":                          # « plus de relief » du Modéré (essai) seul
+        g._TL.plus_relief = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.plus_relief
     elif variant in ("spatial", "spatiald"):               # départs voisins (essai), durée inférieure aussi (spatiald)
         g._TL.cross_spatial = True
         g._TL.spatial_shorter = variant == "spatiald"

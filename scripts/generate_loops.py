@@ -196,6 +196,17 @@ WATER_CITY_DEG = 0.0008
 # test). FALLBACK_BEST : parmi les boucles à FALLBACK_RELIEF_TOL m/km (relief) ou FALLBACK_DIRT_TOL_KM km (terre) de la
 # moins vallonnée (la moins terreuse), la mieux notée. False : la moins vallonnée seule (v17).
 FALLBACK_BEST = False
+# Option « plus de relief » du Modéré (Florent, 14/10/2026 : la boucle de l'Eixample qu'il a roulée et aimée, 17,5 m/km,
+# perdait 10 points de pénalité de relief, l'option proposée aujourd'hui 16 ; la pénalité au-dessus de 15 m/km, voulue pour
+# garder le Modéré modéré, écartait les boucles vallonnées de l'option faite pour elles). PLUS_RELIEF_RULES : pour CHOISIR
+# cette option (seuil de 80 % de la recommandée, la plus vallonnée), pas de pénalité jusqu'à PLUS_RELIEF_PEN_ABOVE m/km
+# (choix de Florent : 20), la pénalité habituelle au-delà ; interdits (parcours vraiment trop dur) : montée de catégorie
+# PLUS_RELIEF_BANNED_CATS, rampe de PLUS_RELIEF_MAX_GRADE % ou plus (pente maximale lissée sur 500 m). La recommandée et
+# « moins de relief » gardent la règle du Modéré. False : désactivé.
+PLUS_RELIEF_RULES = False
+PLUS_RELIEF_PEN_ABOVE = 20.0
+PLUS_RELIEF_BANNED_CATS = ("1", "HC")
+PLUS_RELIEF_MAX_GRADE = 15.0
 # Boucles publiées retrouvées à l'identique (14/10/2026, traçage m1 : la boucle publiée de Sant Martí 3 h Tranquille, 72,2,
 # retouchée, n'était pas retrouvée par KEEP_PREVIOUS, recalculée d'un point de passage tous les 2 km : GraphHopper prend
 # un autre chemin entre deux points). PREVIOUS_WAYPOINT_M : points de passage tous les N m (avec le sens de circulation)
@@ -331,6 +342,31 @@ def load_motorways(pbf: Path, workdir: Path):
 def previous_step() -> float:
     """Pas des points de passage des boucles publiées remises en jeu (PREVIOUS_WAYPOINT_M), réglable par fil d'exécution."""
     return getattr(_TL, "previous_step", PREVIOUS_WAYPOINT_M) or ROUTE_WAYPOINT_M
+
+
+def plus_relief_rules() -> bool:
+    """Option « plus de relief » du Modéré (PLUS_RELIEF_RULES), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "plus_relief", PLUS_RELIEF_RULES))
+
+
+def plus_relief_score(l) -> float:
+    """Note de la boucle pour choisir l'option « plus de relief » : la pénalité de relief au-dessus de la cible de l'allure
+    est remplacée par celle au-dessus de PLUS_RELIEF_PEN_ABOVE (Modéré seulement)."""
+    lim = relief_limits().get(l.level) or {}
+    if l.level != "modere" or lim.get("pen_above") is None:
+        return l.score
+    per = lim.get("pen_per", RELIEF_OVER_PENALTY)
+    pen = lambda above: min(RELIEF_OVER_MAX, per * max(0.0, l.dplus_per_km - above))  # noqa: E731
+    return l.score + 100.0 * (pen(lim["pen_above"]) - pen(PLUS_RELIEF_PEN_ABOVE))
+
+
+def plus_relief_ok(l) -> bool:
+    """Option « plus de relief » du Modéré : pas de montée trop dure ni de rampe trop raide (PLUS_RELIEF_RULES)."""
+    if l.level != "modere":
+        return True
+    if any(c.get("category") in PLUS_RELIEF_BANNED_CATS for c in (l.terrain or {}).get("climbs", [])):
+        return False
+    return ((l.terrain or {}).get("max_grade_pct") or 0.0) < PLUS_RELIEF_MAX_GRADE
 
 
 def lights_late() -> bool:
@@ -3519,6 +3555,11 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
         if flat.dplus_per_km <= best.dplus_per_km - 3.0:
             chosen.append(("moins_de_relief", flat))
             rest = [l for l in rest if l is not flat and similarity(l, flat) < 0.6]
+        if plus_relief_rules():                              # « plus de relief » du Modéré (PLUS_RELIEF_RULES)
+            used = [l for _, l in chosen]
+            rest = [l for l in pool[1:] if plus_relief_score(l) >= 0.8 * best.score and plus_relief_ok(l)
+                    and all(similarity(l, u) < 0.6 for u in used) and not any(same_route(l, a) for a in avoid)
+                    and secondary_ok(l, best)]
         if rest:
             hilly = max(rest, key=lambda l: l.dplus_per_km)
             if hilly.dplus_per_km >= best.dplus_per_km + 3.0:
@@ -3880,10 +3921,11 @@ CARRY = None                    # {"src", "by_key"} si --carry-over-from est fou
 def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres entrées de l'empreinte
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
-             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None],
+             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES],
             [PREVIOUS_WAYPOINT_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],
+            [PLUS_RELIEF_RULES, PLUS_RELIEF_PEN_ABOVE, PLUS_RELIEF_BANNED_CATS, PLUS_RELIEF_MAX_GRADE],
             [FALLBACK_RELIEF_TOL, FALLBACK_DIRT_TOL_KM],
             [LIGHTS_LATE_MIN, LIGHTS_LATE_MAX_MEAN, LIGHTS_LATE_TOL],
             [SCENIC_SEA_M, SCENIC_RIVER_M, SCENIC_NEAR_M, SCENIC_ON_M, SCENIC_RUN_M, SCENIC_MIN_WAY_M, SCENIC_TOP,
