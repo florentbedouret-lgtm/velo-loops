@@ -30,6 +30,8 @@ def test_reglages_v17():
     assert g.CROSS_SPATIAL is False                    # départs voisins, en essai
     assert g.CROSS_SEGMENTS is False                   # tronçon par tronçon, en essai
     assert g.SCENIC_AREAS is False                     # zones agréables, en essai
+    assert g.TIME_V19 is False                         # modèle de temps v19, en essai
+    assert g.LIGHTS_LATE is False                      # feux en fin de boucle, en essai
 
 
 def test_profil_plat_dans_la_configuration():

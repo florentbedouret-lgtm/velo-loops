@@ -131,10 +131,51 @@ DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
 DURATION_BIN_MARGIN = 0.05        # v17 (test v4 : aucune durée perdue grâce au filet ordered_pool)
 ORDER_GAP_S = 180.0              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
 _TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
+# Modèle de temps v19 (14/10/2026), recalé sur les 3 sorties de Florent ensemble (Gràcia 28/09 et 01/10, Eixample 13/10 ;
+# traces gardées hors du dépôt), tranches de 100 m, ajustement commun (aucun réglage par sortie). Constats :
+# - en montée on pousse plus fort que sur le plat : +50 % de puissance à 6 % et plus (proportionnel en dessous). Avec ce
+#   bonus, la puissance sur le plat retrouvée est celle de l'allure Modéré (162 / 158 / 148 W pour 157 W) ;
+# - en descente, Florent ne dépasse pas ~25 km/h de moyenne (sinueux, prudence) quand la physique donnait ~43 km/h ;
+# - en ville, le ralentissement dépend de la densité de carrefours (passages piétons, feux, stops, cédez-le-passage dans un
+#   carré de 700 m), pas du fait d'être sur une piste cyclable : 0 dans le delta, jusqu'à 19 % au-delà de 420 carrefours ;
+#   l'ancienne règle (25 % sur toute la « ville » de GraphHopper, rayon 1,5 km) comptait Vallvidrera comme l'Eixample ;
+# - feux : 12,5 s d'arrêt + 2,5 s perdues en roulant (freinage avant, relance après, cales) = 15 s par feu franchi.
+#   Feux et densité ajustés ensemble (sans coût en roulant, la densité monte à 37 % : pas de double compte).
+# Écart à la durée réelle (hors pause) : −1 %, −2 %, −3 % (modèle actuel : jusqu'à +12 % sur l'Eixample).
+# Plafond de descente : 25 km/h mesuré sur Florent, qui se dit plus prudent que la moyenne ; 28 km/h retenu en Modéré
+# (choix de Florent, 14/10/2026 : ne pas calquer sa prudence, rester prudent). Tranquille et Sportif : estimations, sans
+# sortie pour les confirmer. Effet : Eixample 2 h « plus de relief » 106 min à 25 km/h, 102 à 30. False : modèle v18.
+TIME_V19 = False
+CLIMB_POWER_BONUS = 0.5          # puissance × 1,5 à CLIMB_POWER_FULL_GRADE et au-delà
+CLIMB_POWER_FULL_GRADE = 0.06
+DESCENT_CAP_KMH = {"facile": 22.0, "modere": 28.0, "soutenu": 32.0}   # sous −2 %
+DENSITY_SLOWDOWN = 0.19          # ralentissement maximal en roulant, atteint à DENSITY_FULL carrefours dans le carré
+DENSITY_FULL = 420.0
+SIGNAL_DELAY_V19_S = 15.0
+DENSITY = None                   # JunctionDensity, chargé dans main()
+# Feux en fin de boucle (Florent, 14/10/2026 : « plus agréable d'avoir les feux sur la fin du parcours qu'au début, moins
+# frustrant »). Une boucle retenue dont les feux sont surtout dans la première moitié (position moyenne avant
+# LIGHTS_LATE_MAX_MEAN) est recalculée dans l'autre sens ; le sens inverse est gardé s'il est valide, note au moins aussi
+# bien à LIGHTS_LATE_TOL points près, et met ses feux plus tard. Le sens change aussi les montées (la Carretera de
+# Vallvidrera montée ou descendue) : la note tranche. False : désactivé.
+LIGHTS_LATE = False
+LIGHTS_LATE_MIN = 8              # au moins 8 feux sur la boucle
+LIGHTS_LATE_MAX_MEAN = 0.45      # position moyenne des feux (part de la boucle)
+LIGHTS_LATE_TOL = 0.5
 
 
 def bin_margin():
     return getattr(_TL, "bin_margin", DURATION_BIN_MARGIN)
+
+
+def time_v19() -> bool:
+    """Modèle de temps v19 (TIME_V19), réglable par fil d'exécution pour les diagnostics."""
+    return bool(getattr(_TL, "time_v19", TIME_V19)) and DENSITY is not None
+
+
+def lights_late() -> bool:
+    """Feux en fin de boucle (LIGHTS_LATE), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "lights_late", LIGHTS_LATE))
 
 
 def dirt_rules() -> dict:
@@ -748,6 +789,56 @@ def load_points(pbf: Path, workdir: Path, filters: list, name: str):
 
 def load_signals(pbf: Path, workdir: Path):
     return load_points(pbf, workdir, ["n/highway=traffic_signals", "n/crossing=traffic_signals"], "signals")
+
+
+class JunctionDensity:
+    """Carrefours (passages piétons, feux, stops, cédez-le-passage) dans un carré de (2 * R + 1) cellules de 100 m autour
+    d'un point (modèle de temps v19) : grille de comptes cumulés, lecture en temps constant."""
+
+    CELL_M = 100.0
+    R = 3
+
+    def __init__(self, points):
+        import numpy as np
+        a = np.array(points, dtype=float)
+        lat_m = float(a[:, 1].mean())
+        self.cx = self.CELL_M / (111320.0 * math.cos(math.radians(lat_m)))
+        self.cy = self.CELL_M / 110540.0
+        self.lon0, self.lat0 = float(a[:, 0].min()), float(a[:, 1].min())
+        ix = ((a[:, 0] - self.lon0) / self.cx).astype(int)
+        iy = ((a[:, 1] - self.lat0) / self.cy).astype(int)
+        h = np.zeros((ix.max() + 1, iy.max() + 1), dtype=np.int32)
+        np.add.at(h, (ix, iy), 1)
+        self.s = np.pad(h.cumsum(0).cumsum(1), ((1, 0), (1, 0)), "constant")
+        self.nx, self.ny = h.shape
+
+    def at(self, lon: float, lat: float) -> int:
+        i, j = int((lon - self.lon0) // self.cx), int((lat - self.lat0) // self.cy)
+        i0, i1 = max(0, i - self.R), min(self.nx - 1, i + self.R)
+        j0, j1 = max(0, j - self.R), min(self.ny - 1, j + self.R)
+        if i0 > i1 or j0 > j1:
+            return 0
+        s = self.s
+        return int(s[i1 + 1, j1 + 1] - s[i0, j1 + 1] - s[i1 + 1, j0] + s[i0, j0])
+
+    def along(self, coords, cum, n: int, ds: float) -> list:
+        """Densité aux points du profil d'altitude (un point tous les ds m, n + 1 points)."""
+        out = []
+        for k in range(n + 1):
+            d = k * ds
+            i = min(max(1, bisect.bisect_right(cum, d)), len(cum) - 1)
+            s0, s1 = cum[i - 1], cum[i]
+            t = 0.0 if s1 == s0 else min(1.0, (d - s0) / (s1 - s0))
+            lon = coords[i - 1][0] + t * (coords[i][0] - coords[i - 1][0])
+            lat = coords[i - 1][1] + t * (coords[i][1] - coords[i - 1][1])
+            out.append(self.at(lon, lat))
+        return out
+
+
+def load_density(pbf: Path, workdir: Path):
+    idx = load_points(pbf, workdir, ["n/highway=crossing,traffic_signals,stop,give_way", "n/crossing=traffic_signals"],
+                      "junctions")
+    return JunctionDensity(idx.points) if idx is not None else None
 
 
 # --------------------------------------------------------------------------- proxy "paysage" (OSM)
@@ -1364,10 +1455,23 @@ def _back_gap(kept, i, d=30.0) -> float:
 
 
 def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_share: float,
-                    n_signals: int | None = None) -> float:
+                    n_signals: int | None = None, level: str | None = None, dens: list | None = None) -> float:
     """Temps estimé : vitesse déduite de la puissance sur le profil lissé (un point tous les ~100 m),
     + attente moyenne par feu tricolore (SIGNAL_DELAY_S). Sans données de feux, on garde une majoration
-    forfaitaire plus forte en ville."""
+    forfaitaire plus forte en ville. Avec dens (densité de carrefours aux points du profil) et le modèle v19 : voir
+    TIME_V19."""
+    if dens is not None and n_signals is not None and time_v19():
+        cap = DESCENT_CAP_KMH.get(level, DESCENT_CAP_KMH["modere"]) / 3.6
+        t = 0.0
+        for k in range(1, len(profile)):
+            grade = max(-0.20, min(0.20, (profile[k] - profile[k - 1]) / ds))
+            p = watts * (1.0 + CLIMB_POWER_BONUS * min(1.0, max(0.0, grade) / CLIMB_POWER_FULL_GRADE))
+            v = speed_from_power(p, grade) * REAL_WORLD_FACTOR
+            if grade < -0.02:
+                v = min(v, cap)
+            d = 0.5 * (dens[k - 1] + dens[k])
+            t += ds / v * (1.0 + DENSITY_SLOWDOWN * min(1.0, d / DENSITY_FULL))
+        return t + n_signals * SIGNAL_DELAY_V19_S
     t = 0.0
     for k in range(1, len(profile)):
         grade = max(-0.20, min(0.20, (profile[k] - profile[k - 1]) / ds))
@@ -1788,7 +1892,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         profile=profile, level=level, duration_h=duration_h, seed=seed, heading=heading,
         coords=coords, distance_m=total,
         ascend_m=ascend, descend_m=descend, ascend_gh_m=float(path.get("ascend", 0.0)),
-        time_s=estimate_time_s(ds, prof, watts, city, resid, n_signals),
+        time_s=estimate_time_s(ds, prof, watts, city, resid, n_signals, level,
+                               DENSITY.along(coords, cum, len(prof) - 1, ds) if time_v19() else None),
         shares=shares, overlap=repeated / total, signals=n_signals, exit_dense_m=exit_dense,
         stops=n_stops, surface_mix=surface_mix, terrain=terrain, u_turns=u_turns, longest_repeat_m=longest_repeat,
         repeat_cycle_share=(rep_cycle / repeated) if repeated > 0 else 0.0,
@@ -3115,12 +3220,49 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
     return chosen
 
 
+def light_mean(l) -> float | None:
+    """Position moyenne des feux franchis (0 : au départ, 1 : à l'arrivée) ; None sans feux connus."""
+    pos = getattr(l, "signal_m", None)
+    if not pos:
+        return None
+    return sum(pos) / len(pos) / max(l.distance_m, 1.0)
+
+
+def lights_late_swap(gh, level: str, duration_h: float, picks: list, log) -> list:
+    """Feux en fin de boucle (LIGHTS_LATE) : sens inverse des boucles retenues dont les feux sont surtout au début."""
+    out = []
+    for n, (lab, l) in enumerate(picks):
+        m = light_mean(l)
+        if m is None or len(l.signal_m) < LIGHTS_LATE_MIN or m >= LIGHTS_LATE_MAX_MEAN or getattr(l, "same_as", None):
+            out.append((lab, l))
+            continue
+        way = route_waypoints(l.coords[::-1])
+        way[0] = way[-1] = [l.coords[0][0], l.coords[0][1]]
+        path = gh.via(way, l.profile, pass_through=True)
+        r = analyse(path, level, l.profile, duration_h, 4000 + n, None) if path else None
+        ok = (r is not None and time_ok(r.time_s, duration_h) and overlap_ok(r) and r.u_turns <= MAX_UTURNS
+              and dirt_ok(r) and relief_ok(r) and (light_mean(r) or 0.0) > m and r.score >= l.score - LIGHTS_LATE_TOL)
+        log(f"    feux en fin de boucle ({lab}) : feux à {m:.0%} en moyenne, "
+            + ("pas d'itinéraire inverse" if r is None else
+               f"sens inverse à {(light_mean(r) or 0.0):.0%}, note {l.score:.1f} -> {r.score:.1f}")
+            + (" : sens inverse gardé" if ok else " : sens gardé"))
+        if ok:
+            r.lights_late = True
+            for attr in ("relief_fallback", "unpaved_fallback"):
+                if getattr(l, attr, False):
+                    setattr(r, attr, True)
+        out.append((lab, r if ok else l))
+    return out
+
+
 def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prior: list, log) -> list:
     """Options d'un niveau (O-18) : pick_options sans doublon d'allure. Si une option secondaire n'a AUCUNE boucle
     différente de l'allure inférieure, on garde quand même la boucle qu'elle aurait eue, marquée « même parcours qu'à
     l'allure inférieure » (same_as : allure et km en plus), plutôt que de retirer l'option (choix de Florent, 26/09/2026 :
     une prolongation dans la durée ne gagne que 3 à 5 km, c'est la même boucle). gh, st : inutilisés (signature stable)."""
     picks = pick_options(pool, prior)
+    if lights_late() and picks:                              # feux en fin de boucle (LIGHTS_LATE)
+        picks = lights_late_swap(gh, level, duration_h, picks, log)
     full = pick_options(pool)
     if not prior or not picks or len(picks) >= len(full):
         return picks
@@ -3854,10 +3996,12 @@ def main() -> int:
     res = machine_resources()
     print(f"Machine : {res['cpu_count']} CPU, {res['ram_gb']} Go de RAM ; {args.workers} départ(s) en parallèle", flush=True)
 
-    global SIGNALS, STOPS, LANDSCAPE, POIS
+    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY
     places_path = Path(args.places)
     pbf_path = Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf"
     SIGNALS = load_signals(pbf_path, places_path.parent)
+    if TIME_V19:                                             # densité de carrefours (modèle de temps v19)
+        DENSITY = load_density(pbf_path, places_path.parent)
     print(f"Feux tricolores OSM chargés : {len(SIGNALS.points) if SIGNALS else 0}", flush=True)
     STOPS = load_points(pbf_path, places_path.parent, ["n/highway=stop"], "stops")
     print(f"Panneaux stop OSM chargés : {len(STOPS.points) if STOPS else 0}", flush=True)

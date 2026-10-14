@@ -485,6 +485,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              **detour_cols(o["coords"]), **corridor_col(o["coords"]),
                              "overlap": o["overlap"], "outback": bool(o.get("out_and_back")),
                              "uturns": o.get("u_turns", 0), "spurs": o.get("spurs", 0),
+                             "lights": o["traffic_lights"], "light_mean": g.light_mean(l),
+                             "late": bool(getattr(l, "lights_late", False)),
                              "useful": o.get("backtracks", []), "retouched": bool(o.get("retouched")),
                              "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed")),
                              # tracé gardé pour relire les allers-retours jugés utiles (09/10/2026)
@@ -516,7 +518,15 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "scenic":                                # zones agréables pour GraphHopper (essai) seules
+    if variant == "time19":                                # modèle de temps v19 (essai) seul
+        g._TL.time_v19 = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.time_v19
+    elif variant == "late":                                # feux en fin de boucle (essai) seuls
+        g._TL.lights_late = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.lights_late
+    elif variant == "scenic":                              # zones agréables pour GraphHopper (essai) seules
         g._TL.scenic = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.scenic
@@ -1431,6 +1441,7 @@ def main() -> int:
 
     pbf, wd = Path(args.pbf), Path(args.workdir)
     g.SIGNALS = g.load_signals(pbf, wd)
+    g.DENSITY = g.load_density(pbf, wd)                  # modèle de temps v19 (essai), utilisé seulement s'il est allumé
     g.STOPS = g.load_points(pbf, wd, ["n/highway=stop"], "stops")
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     g.POIS = g.load_pois(pbf, wd)                       # lieux remarquables (tirages ciblés, bonus) comme la production
