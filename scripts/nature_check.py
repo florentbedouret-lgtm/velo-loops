@@ -1351,6 +1351,9 @@ def run_compare(refs_path, site, gh_url, level, duration):
     if RETOUCH:
         out["retouch_trials"] = []
         pool = pool + g.retouch_candidates(gh, st_, level, duration, pool, print, detail=out["retouch_trials"])
+    if g.scenic_retouch():                                 # voies agréables (essai) : détail des essais
+        out["scenic_trials"] = []
+        pool = pool + g.scenic_candidates(gh, st_, level, duration, pool, print, detail=out["scenic_trials"])
     picks = g.choose_options(gh, st_, level, duration, pool, [], lambda *_: None)
     out["pool"] = sorted((summary(l) for l in pool), key=lambda x: -x["score"])
     out["picks"] = [{"label": lab, **summary(l)} for lab, l in picks]
@@ -1385,6 +1388,8 @@ def report_compare(res, out_json, out_md, note, t0):
         L += ["\n## Allers-retours au bord de l'eau : détail", "", "```", *res["outback_trials"], "```"]
     if res.get("retouch_trials"):
         L += ["\n## Retouche : détail des essais", "", "```", *res["retouch_trials"], "```"]
+    if "scenic_trials" in res:
+        L += ["\n## Voies agréables : détail des essais", "", "```", *(res["scenic_trials"] or ["aucun tronçon longé"]), "```"]
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L[:30]), flush=True)
 
@@ -1434,6 +1439,7 @@ def main() -> int:
     ap.add_argument("--retouch-dedupe", action="store_true", help="essai : retouches aux mêmes points de passage, une seule")
     ap.add_argument("--lacets", action="store_true", help="essai : les lacets ne comptent pas comme demi-tours (filtre et note)")
     ap.add_argument("--compare-refs", default=None, help="boucles de référence (points de passage) contre la production")
+    ap.add_argument("--trials", default="", help="essais allumés (voies, mer80), séparés par des virgules")
     ap.add_argument("--references", default=None,
                     help="v5 : fichier de boucles de référence (reference_loops.json) ; remplace la comparaison A/B")
     args = ap.parse_args()
@@ -1474,6 +1480,10 @@ def main() -> int:
         g.RETOUCH = RETOUCH    # couloir, retouche à tour de rôle, retours sur ses pas, marge) : retouche comprise, comme la production
     if args.retouch_trials:
         g.RETOUCH_MAX_TRIALS = args.retouch_trials
+    if "voies" in args.trials.split(","):                   # essais allumés pour la comparaison (14/10/2026)
+        g.SCENIC_RETOUCH = True
+    if "mer80" in args.trials.split(","):
+        g.WATER_CITY_NEAR = True
     if args.retouch_prefilter is not None:
         g.RETOUCH_PREFILTER = args.retouch_prefilter
     g.RETOUCH_DEDUPE = args.retouch_dedupe or g.RETOUCH_DEDUPE
