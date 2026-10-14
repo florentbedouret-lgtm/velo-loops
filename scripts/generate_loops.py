@@ -157,6 +157,40 @@ def cross_neighbours() -> bool:
     return bool(getattr(_TL, "cross_neighbours", CROSS_NEIGHBOURS))
 
 
+def cross_spatial() -> bool:
+    """Boucles des départs voisins pour le croisement (CROSS_SPATIAL), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "cross_spatial", CROSS_SPATIAL)) and bool(NEIGHBOUR_SRC)
+
+
+def neighbour_loops(st, level: str, duration_h: float) -> list:
+    """Boucles publiées des départs voisins (voir CROSS_SPATIAL) : [(profil, coords)], la plus proche d'abord."""
+    with _NEIGHBOUR_LOCK:
+        if "index" not in _NEIGHBOUR_CACHE:
+            try:
+                _NEIGHBOUR_CACHE["index"] = _read_json(NEIGHBOUR_SRC, "web/data/index.json").get("starts", [])
+            except Exception:  # noqa: BLE001 : sans index, pas de voisins
+                _NEIGHBOUR_CACHE["index"] = []
+        idx = _NEIGHBOUR_CACHE["index"]
+    near = sorted((haversine(st["lon"], st["lat"], e["lon"], e["lat"]), e["id"]) for e in idx)
+    near = [sid for d, sid in near if 50.0 < d <= CROSS_SPATIAL_KM * 1000.0][:CROSS_SPATIAL_STARTS]
+    out = []
+    for sid in near:
+        with _NEIGHBOUR_LOCK:
+            data = _NEIGHBOUR_CACHE.get(sid)
+        if data is None:
+            try:
+                data = _read_json(NEIGHBOUR_SRC, f"web/data/starts/{sid}.json")
+            except Exception:  # noqa: BLE001
+                data = {"options": []}
+            with _NEIGHBOUR_LOCK:
+                _NEIGHBOUR_CACHE[sid] = data
+        opts = [o for o in data.get("options", []) if o.get("level") == level
+                and round(o.get("duration_target_min", 0)) == round(duration_h * 60) and o.get("coords")]
+        for o in opts[:CROSS_SPATIAL_LOOPS]:
+            out.append((o.get("profile") or LEVELS[level]["profiles"][0], o["coords"]))
+    return out
+
+
 def crossover() -> bool:
     """Croisement des meilleures boucles (CROSSOVER), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "crossover", CROSSOVER))
@@ -266,6 +300,18 @@ CROSS_MAX_TRIALS = 12
 # les CROSS_NEIGHBOUR_LOOPS premières boucles publiées (KEEP_PREVIOUS) des durées voisines, recalculées. False : désactivé.
 CROSS_NEIGHBOURS = True           # v17
 CROSS_NEIGHBOUR_LOOPS = 2
+# Boucles des départs voisins (Florent, 14/10/2026, Gràcia Modéré 2 h « plus de relief » : l'Eixample, à 1,5 km, passe
+# par le coll del Portell, Gràcia non ; chaque départ est calculé seul et ne voit pas les boucles de ses voisins).
+# CROSS_SPATIAL : les boucles publiées (même durée, même allure) des CROSS_SPATIAL_STARTS départs les plus proches à moins
+# de CROSS_SPATIAL_KM, adaptées au départ (du départ au point le plus proche de la boucle voisine, la boucle, retour),
+# deviennent des candidates et des parents du croisement. Source : site publié (NEIGHBOUR_SRC). False : désactivé.
+CROSS_SPATIAL = False
+CROSS_SPATIAL_KM = 3.0
+CROSS_SPATIAL_STARTS = 3
+CROSS_SPATIAL_LOOPS = 2
+NEIGHBOUR_SRC = None             # adresse du site publié (ou dossier contenant web/data/), fixée au lancement
+_NEIGHBOUR_CACHE: dict = {}
+_NEIGHBOUR_LOCK = threading.Lock()
 RETOUCH_SHORTEN_GAIN = 0.03
 RETOUCH_SHORTEN_AIM = 0.97
 RETOUCH_PREFILTER = 0.25         # écart max de durée PRÉVUE (longueur à vol d'oiseau des points de passage, rapportée à
@@ -2794,6 +2840,21 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
                 l = analyse(p, level, profile, duration_h, 2100, None) if p else None
                 if l is not None:
                     parents.append(l)
+    adopted = []
+    if cross_spatial():                                      # boucles des départs voisins, adaptées à ce départ
+        home = [st["lon"], st["lat"]]
+        for n, (profile, coords) in enumerate(neighbour_loops(st, level, duration_h)):
+            k = min(range(len(coords)), key=lambda i: haversine(home[0], home[1], coords[i][0], coords[i][1]))
+            rot = coords[k:] + coords[1:k + 1]               # même boucle, commencée au point le plus proche du départ
+            way = [home] + route_waypoints(rot) + [home]
+            p = gh.via(way, profile, pass_through=True)
+            l = analyse(p, level, profile, duration_h, 3500 + n, None) if p else None
+            if l is not None:
+                parents.append(l)
+                if (time_ok(l.time_s, duration_h) and overlap_ok(l) and l.u_turns <= MAX_UTURNS and dirt_ok(l)):
+                    adopted.append(l)
+        if detail is not None:
+            detail.append(f"  départs voisins : {len(adopted)} boucle(s) adoptable(s)")
 
     def sampled(l):                                          # un point tous les ~50 m : (indices, x m, y m, part du parcours)
         c = l.coords
@@ -2844,8 +2905,9 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
                           + ("pas d'itinéraire" if loop is None else
                              f"note {loop.score:.1f}, {loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min")
                           + (" : valide" if ok else " : rejeté"))
-    log(f"    croisements : {len(found)} valide(s) sur {min(len(plans), CROSS_MAX_TRIALS)} essai(s)")
-    return found
+    log(f"    croisements : {len(found)} valide(s) sur {min(len(plans), CROSS_MAX_TRIALS)} essai(s)"
+        + (f" ; boucles de départs voisins adoptables : {len(adopted)}" if adopted else ""))
+    return found + adopted
 
 
 def similarity(a: Loop, b: Loop) -> float:

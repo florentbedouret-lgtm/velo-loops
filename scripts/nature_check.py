@@ -516,7 +516,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     t0 = time.time()
     a = relief_generate(gh, st_, sid, durations, levels, None)
     t1 = time.time()
-    if variant == "soft":                                  # v18 : profil plat adouci (calm_flat_soft) seul
+    if variant == "spatial":                               # croisement avec les départs voisins (essai) seul
+        g._TL.cross_spatial = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.cross_spatial
+    elif variant == "soft":                                # v18 : profil plat adouci (calm_flat_soft) seul
         b = relief_generate(gh, st_, sid, durations, levels, g.RELIEF_LIMITS_V18_SOFT)
     elif variant == "dscore":                              # v18 : détours restants comptés dans la note
         g._TL.detour_score = True
@@ -1422,6 +1426,7 @@ def main() -> int:
     g.STOPS = g.load_points(pbf, wd, ["n/highway=stop"], "stops")
     g.LANDSCAPE = g.load_landscape(pbf, wd)
     g.POIS = g.load_pois(pbf, wd)                       # lieux remarquables (tirages ciblés, bonus) comme la production
+    g.NEIGHBOUR_SRC = args.site                          # boucles publiées des départs voisins (CROSS_SPATIAL)
     if g.LANDSCAPE is None:
         sys.exit("paysage OSM non chargé : impossible de repérer les espaces verts")
     global RETOUCH
