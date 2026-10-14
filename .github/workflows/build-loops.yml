@@ -520,7 +520,7 @@ jobs:
           if [ "${MODE#full}" != "$MODE" ]; then          # budget épuisé : les départs non recalculés gardent leur version publiée
             OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
             MAX_STARTS=1000; PER_ZONE=""
-            BUDGET=$(( 328 - ( $(date +%s) - JOB_START ) / 60 ))   # compté depuis le début du job (préparation v10 plus longue)
+            BUDGET=$(( 300 - ( $(date +%s) - JOB_START ) / 60 ))   # compté depuis le début du job ; 300 au lieu de 328 (14/10/2026 : un départ long a fait dépasser la limite de 350 min, run coupé sans publication)
             EXTRA="$EXTRA --time-budget-min $BUDGET --carry-over-from https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}"
           fi
           if [ "$MODE" = "pilot" ] && [ -z "$PER_ZONE" ]; then PER_ZONE=3; fi
