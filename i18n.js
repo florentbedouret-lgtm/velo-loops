@@ -288,6 +288,8 @@ const I18N = {
   h_removed: ['Boucle supprimée', 'Loop removed', 'Ruta eliminada', 'Ruta eliminada'],
   h_cleared: ['Boucles supprimées', 'Loops removed', 'Rutas eliminadas', 'Rutes eliminades'],
   undo: ['Annuler', 'Undo', 'Deshacer', 'Desfés'],
+  update_txt: ['Nouvelle version de l’app', 'New version of the app', 'Nueva versión de la app', 'Nova versió de l’app'],
+  update_btn: ['Recharger', 'Reload', 'Recargar', 'Recarregar'],
   see_start: ['Voir ce départ', 'See this start', 'Ver esta salida', 'Veure aquesta sortida'],
   longer_label: ['ALLER PLUS LOIN', 'GO FURTHER', 'IR MÁS LEJOS', 'ANAR MÉS LLUNY'],
   longer_txt: ['Une sortie plus longue sort de la ville.', 'A longer ride gets out of town.', 'Una ruta más larga sale de la ciudad.',

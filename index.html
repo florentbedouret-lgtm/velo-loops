@@ -173,11 +173,11 @@
                               border-right: 1.6px solid var(--color-text-2); border-bottom: 1.6px solid var(--color-text-2);
                               transform: rotate(-45deg); transition: transform .2s; }
     #history[open] summary::after { transform: rotate(45deg); }
-    #undo { position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(var(--sheet-h, 0px) + 16px);
+    #undo, #update { position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(var(--sheet-h, 0px) + 16px);
             background: var(--color-text); color: #fff; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 14px;
             display: flex; gap: 14px; align-items: center; box-shadow: 0 4px 16px rgba(36, 34, 31, .25); }
-    #undo[hidden] { display: none; }
-    #undo button { font: inherit; font-size: 14px; color: #fff; background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
+    #undo[hidden], #update[hidden] { display: none; }
+    #undo button, #update button { font: inherit; font-size: 14px; color: #fff; background: none; border: 0; text-decoration: underline; cursor: pointer; padding: 0; }
     #historyList { display: flex; flex-direction: column; margin-top: 6px; }
     #historyList .h-row { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--color-border); }
     #historyList button.h-item { flex: 1; min-width: 0; font: inherit; text-align: left; background: none; border: 0;
@@ -1909,6 +1909,30 @@
       clearTimeout(undoTimer);
       undoTimer = setTimeout(() => { el.hidden = true; }, 5000);
     }
+
+    // nouvelle version en ligne (Florent, 15/10/2026 : un onglet resté ouvert montrait encore l'ancien panneau). Le
+    // déploiement remplace __OYAN_BUILD__ par l'identifiant de la version et publie version.txt ; quand on revient sur
+    // l'app (au plus une fois toutes les 10 min), elle compare. Aucune boucle affichée : rechargement direct (la boucle et le
+    // départ sont dans l'adresse) ; sinon un bandeau « Nouvelle version · Recharger », pour ne pas couper la lecture.
+    const APP_BUILD = '__OYAN_BUILD__';
+    let buildCheckedAt = Date.now();
+    async function checkBuild() {
+      if (APP_BUILD.startsWith('__') || Date.now() - buildCheckedAt < 10 * 60 * 1000) return;
+      buildCheckedAt = Date.now();
+      try {
+        const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' });
+        const v = r.ok ? (await r.text()).trim() : '';
+        if (!/^[0-9a-f]{7,40}$/.test(v) || v === APP_BUILD) return;
+        if (sheet.hidden) { location.reload(); return; }
+        let el = document.getElementById('update');
+        if (!el) { el = document.createElement('div'); el.id = 'update'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+        el.innerHTML = '<span>' + esc(t('update_txt')) + '</span><button type="button">' + esc(t('update_btn')) + '</button>';
+        el.hidden = false;
+        el.querySelector('button').onclick = () => location.reload();
+      } catch (e) { /* hors ligne : on réessaiera */ }
+    }
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkBuild(); });
+    window.addEventListener('pageshow', e => { if (e.persisted) { buildCheckedAt = 0; checkBuild(); } });   // page reprise du cache
 
     async function shareLoop() {
       const url = loopUrl(), o = shown[current];

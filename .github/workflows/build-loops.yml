@@ -698,6 +698,9 @@ jobs:
             --exclude='/scripts' --exclude='/graph-cache' --exclude='/elevation-cache' \
             --exclude='/graphhopper-web.jar' --exclude='/gh.log' --exclude='/gh.pid' ./ _site/
           touch _site/.nojekyll
+          # version de l'app (15/10/2026) : l'app compare son identifiant à version.txt et se met à jour (onglets restés ouverts)
+          echo "$GITHUB_SHA" > _site/version.txt
+          sed -i "s/__OYAN_BUILD__/$GITHUB_SHA/" _site/index.html
           test -f _site/index.html || echo "ATTENTION : pas d'index.html à la racine du site"
           # liaisons de train directes (horaires Rodalies / FGC du jour) pour la suggestion « partir d'une gare » ;
           # si les horaires sont injoignables, le fichier reste vide et l'app ne propose simplement pas de gare
