@@ -383,7 +383,7 @@ TRACE_OUT: dict = {}            # (départ, phase) -> traces
 
 def origin(seed: int) -> str:
     """Origine d'une candidate d'après son numéro de tirage (voir generate_loops)."""
-    for lo, name in ((4100, "voies agréables"), (4000, "feux en fin"), (3600, "tronçons"), (3500, "départ voisin"),
+    for lo, name in ((4200, "grands axes contournés"), (4100, "voies agréables"), (4000, "feux en fin"), (3600, "tronçons"), (3500, "départ voisin"),
                      (3000, "croisement"), (2100, "croisement (parent)"), (2000, "boucle publiée"), (1050, "retouche raccourcie"),
                      (1000, "retouche"), (900, "tirage ciblé")):
         if seed >= lo:
@@ -717,6 +717,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.cross_segments = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_segments
+    elif variant == "axes":                                # contourner les grands axes (essai) seul
+        g._TL.axis_bypass = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.axis_bypass
     elif variant == "plusrelief":                          # « plus de relief » du Modéré (essai) seul
         g._TL.plus_relief = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

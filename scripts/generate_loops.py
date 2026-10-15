@@ -188,6 +188,16 @@ SCENIC_PICK_M = 500.0
 # 55,8 : remplacer un si long tronçon coûte ailleurs ; le tracé de Florent ne changeait que la Barceloneta (54,2 contre 53,6).
 # SCENIC_WINDOWS : en plus du tronçon entier, des portions successives d'environ SCENIC_WINDOW_M. False : tronçon entier seul.
 SCENIC_WINDOWS = False
+# Contourner les grands axes (Florent, 15/10/2026 : Gràcia 2 h « plus de relief » roule 1 km sur un grand axe là où la
+# boucle de l'Eixample passe par le Passeig de la Muntanya, 3,3 km de rues calmes, 0 % de grand axe ; aucune recherche
+# n'essayait d'éviter un tronçon de grand axe). AXIS_BYPASS : pour les AXIS_TOP meilleures boucles, chaque tronçon de grand
+# axe (primary, trunk, secondary) d'au moins AXIS_RUN_M en ville est remplacé par un passage décalé de AXIS_OFFSET_M de
+# chaque côté de l'axe (rues voisines) ; la variante est gardée si elle note mieux. False : désactivé.
+AXIS_BYPASS = False
+AXIS_RUN_M = 500.0
+AXIS_OFFSET_M = 200.0
+AXIS_TOP = 2
+AXIS_MAX_RUNS = 2
 SCENIC_WINDOW_M = 2000.0
 # Bord d'eau en ville (même diagnostic : le couloir de la B-10, à 150-200 m de la mer derrière les immeubles, comptait 49 %
 # de bord d'eau, la piste du front de mer 52 %). WATER_CITY_NEAR : en ville dense (bâti de la barre de terrain), un point
@@ -256,6 +266,76 @@ def bin_margin():
 def time_v19() -> bool:
     """Modèle de temps v19 (TIME_V19), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "time_v19", TIME_V19)) and DENSITY is not None
+
+
+def axis_bypass() -> bool:
+    """Contourner les grands axes (AXIS_BYPASS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "axis_bypass", AXIS_BYPASS))
+
+
+def axis_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list:
+    """Variantes des meilleures boucles qui contournent leurs tronçons de grand axe en ville (AXIS_BYPASS)."""
+    if detail is None:
+        detail = getattr(_TL, "trace_detail", None)
+    bases = []
+    for l in sorted(pool, key=lambda x: x.score, reverse=True):
+        if all(similarity(l, b) < 0.6 for b in bases):
+            bases.append(l)
+        if len(bases) >= AXIS_TOP:
+            break
+    found = []
+    for bi, base in enumerate(bases):
+        seq = base.road_seq or ""
+        lc = ((base.scenery or {}).get("landcover") or {}).get("cls")
+        city = landcover_seq(lc) if lc else "v" * len(seq)
+        runs, k = [], 0                                      # tronçons de grand axe (tranches de 100 m) en ville
+        while k < len(seq):
+            if seq[k] != "m":
+                k += 1
+                continue
+            a = k
+            while k < len(seq) and seq[k] == "m":
+                k += 1
+            if (k - a) * 100.0 >= AXIS_RUN_M and city[a:k].count("v") >= 0.5 * (k - a):
+                runs.append((a, k))
+        runs.sort(key=lambda r: r[0] - r[1])
+        c, cum = base.coords, _cum_cache(base)
+        if detail is not None:
+            detail.append(f"  grands axes : boucle {bi + 1} ({base.score:.1f}) : {seq.count('m') / 10:.1f} km de grands axes, "
+                          f"{len(runs)} tronçon(s) d'au moins {AXIS_RUN_M:.0f} m en ville")
+        for n, (a, b) in enumerate(runs[:AXIS_MAX_RUNS]):
+            ia = min(range(len(cum)), key=lambda i: abs(cum[i] - a * 100.0))
+            ib = min(range(len(cum)), key=lambda i: abs(cum[i] - b * 100.0))
+            im = min(range(len(cum)), key=lambda i: abs(cum[i] - (a + b) * 50.0))
+            if ib <= ia + 1:
+                continue
+            kx = 111320.0 * math.cos(math.radians(c[im][1]))
+            dx, dy = (c[ib][0] - c[ia][0]) * kx, (c[ib][1] - c[ia][1]) * 110540.0
+            norm = math.hypot(dx, dy) or 1.0
+            for side in (1, -1):                             # perpendiculaire à l'axe, d'un côté puis de l'autre
+                ox, oy = -dy / norm * AXIS_OFFSET_M * side, dx / norm * AXIS_OFFSET_M * side
+                mid = [c[im][0] + ox / kx, c[im][1] + oy / 110540.0]
+                way = route_waypoints(c, skip=[(ia, ib)])
+                pos = next((m for m, p in enumerate(way) if abs(p[0] - c[ia][0]) < 1e-9 and abs(p[1] - c[ia][1]) < 1e-9),
+                           None)
+                if pos is None:
+                    continue
+                way = way[:pos + 1] + [mid] + way[pos + 1:]
+                path = gh.via(way, base.profile, pass_through=True)
+                loop = analyse(path, level, base.profile, duration_h, 4200 + 10 * bi + 2 * n + (side > 0), None) if path else None
+                ok = (loop is not None and time_ok(loop.time_s, duration_h) and overlap_ok(loop)
+                      and loop.u_turns <= MAX_UTURNS and dirt_ok(loop) and loop.score > base.score)
+                if detail is not None:
+                    detail.append(f"  grands axes : boucle {bi + 1}, tronçon de {(b - a) / 10:.1f} km à {a / 10:.1f} km, "
+                                  f"côté {'gauche' if side > 0 else 'droit'} -> "
+                                  + ("pas d'itinéraire" if loop is None else
+                                     f"note {loop.score:.1f}, grands axes {loop.shares['main_roads']:.0%}, {loop.time_s / 60:.0f} min")
+                                  + (" : gardée" if ok else " : rejetée"))
+                if ok:
+                    loop.axis_bypassed = True
+                    found.append(loop)
+    log(f"    grands axes contournés : {len(found)} variante(s) gardée(s)")
+    return found
 
 
 def scenic_windows() -> bool:
@@ -3421,6 +3501,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
     if scenic_retouch() and pool:                            # voies agréables (SCENIC_RETOUCH)
         pool.extend(scenic_candidates(gh, st, level, duration, pool, log))
+    if axis_bypass() and pool:                               # contourner les grands axes (AXIS_BYPASS)
+        pool.extend(axis_candidates(gh, st, level, duration, pool, log))
     if crossover() and len(pool) >= 2:                       # croisement des meilleures boucles (CROSSOVER, v17)
         pool.extend(crossover_candidates(gh, st, level, duration, pool, log))
     if SPUR_FIX:                                             # couper les éperons des meilleures candidates
