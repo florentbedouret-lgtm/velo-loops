@@ -37,7 +37,7 @@ durées (O-63), puis remesurer.
 1. Attendre la fin du calcul v18 (aucun départ `stale`).
 2. Mesurer l'ensemble retenu en une fois (comme la mesure combinée de la v17) : les règles peuvent se contrarier
    (temps v19 et voies agréables changent toutes deux les durées).
-3. Allumer les interrupteurs retenus, `GENERATOR_VERSION = "19"`, mettre à jour `tests/test_rules.py` (interrupteurs) ;
+3. `python scripts/apply_v19.py .` (prêt, testé sur une copie le 15/10) : allumer les interrupteurs retenus, `GENERATOR_VERSION = "19"`, mettre à jour `tests/test_rules.py` (interrupteurs) ;
    l'empreinte compte alors la v19 (`V19_PARAMS`) : calcul complet (`mode=full`, `reuse=true`, `chain`).
 4. Publier les textes de l'app (section suivante) avec le site de la v19.
 5. À la fin : version 19 partout, aucun `stale` ; vérifier les durées annoncées sur les départs des sorties de Florent.
