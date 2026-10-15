@@ -599,7 +599,9 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
             picks = g.choose_options(gh, st_, level, d, pool, prior, logf)
             if tr is not None:                              # traçage : ce qui est finalement choisi
                 tr["choisies"] = [{"label": lab, "score": l.score, "key": g.route_key(g.simplify(l.coords, 10.0))[:6],
-                                   "origine": origin(l.seed)} for lab, l in picks]
+                                   "origine": origin(l.seed), "seed": l.seed,
+                                   "coords": [[round(p[0], 5), round(p[1], 5)] for p in g.simplify(l.coords, 15.0)]}
+                                  for lab, l in picks]
                 TRACE_OUT.setdefault((sid, getattr(g._TL, "trace_phase", "?")), {})[tkey] = tr
             if not picks and getattr(g._TL, "collect_logs", False):
                 g._TL.empty_logs[f"{d:g}|{level}"] = [str(x) for x in buf][-80:]
@@ -709,6 +711,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.foot_backtrack = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.foot_backtrack
+    elif variant == "fresh":                               # calcul à neuf : sans les boucles publiées (traçage)
+        g._TL.keep_previous = False
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.keep_previous
     elif variant == "arpen":                               # longs allers-retours annoncés et pénalisés (essai) seuls
         g._TL.backtrack_long = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

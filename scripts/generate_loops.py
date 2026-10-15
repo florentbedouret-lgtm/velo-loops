@@ -3796,7 +3796,7 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             pool.extend(ar_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
         if LIEU_TOUR:
             pool.extend(lieu_tour_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
-    if gate is None and KEEP_PREVIOUS and st.get("previous"):
+    if gate is None and KEEP_PREVIOUS and st.get("previous") and getattr(_TL, "keep_previous", True):
         pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:
         pool.extend(retouch_candidates(gh, st, level, duration, pool, log))
