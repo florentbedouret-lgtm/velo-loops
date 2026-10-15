@@ -13,6 +13,8 @@ const FB_NEG = () => FB_KEYS.map(k => [k, t('fbn_' + k)]);
 document.head.insertAdjacentHTML('beforeend', '<style>' +
   '.fb label{display:block;margin:6px 0}' +
   '.fb label.chip{display:inline-block;margin:2px 10px 2px 0}' +
+  // coches à l'encre du texte, pas le bleu du navigateur (Florent, 15/10/2026 ; l'argile reste au bouton GPX)
+  '.fb input[type=checkbox]{accent-color:var(--color-text);width:20px;height:20px;vertical-align:-4px}' +
   '.fb select,.fb input[type=number],.fb input[type=text]{font-size:16px;padding:6px;width:100%;box-sizing:border-box}' +
   // boutons secondaires (charte Oyan : l'argile est réservée au bouton GPX)
   '.fb button{font:inherit;font-size:16px;padding:10px 14px;border:1px solid var(--color-text);border-radius:var(--radius-sm);' +
