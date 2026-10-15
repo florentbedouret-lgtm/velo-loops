@@ -4358,12 +4358,13 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
              CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
-             SEG_MULTI, BACKTRACK_LONG],
+             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
             [BACKTRACK_MAX_SHARE],
             [SPATIAL_GRAFT, GRAFT_TIME_TOL],
+            [CROSS_SPATIAL, CROSS_SPATIAL_KM, CROSS_SPATIAL_STARTS, CROSS_SPATIAL_LOOPS],
             [SEG_MULTI, SEG_MULTI_BASES],
             [BACKTRACK_LONG, BACKTRACK_LONG_SHARE, BACKTRACK_LONG_PEN, BACKTRACK_LONG_PEN_PER, BACKTRACK_LONG_MAX],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
@@ -4899,11 +4900,16 @@ def main() -> int:
 
     out = Path(args.out)
     (out / "starts").mkdir(parents=True, exist_ok=True)
-    global REUSE, PARAMS_HASH, BUDGET_END, CARRY
+    global REUSE, PARAMS_HASH, BUDGET_END, CARRY, NEIGHBOUR_SRC
     PARAMS_HASH = params_hash()
     BUDGET_END = time.time() + 60.0 * args.time_budget_min if args.time_budget_min else None
     REUSE = load_reuse(args.reuse_from, args.reuse_max_age_days) if args.reuse_from else None
     CARRY = load_carry(args.carry_over_from) if args.carry_over_from else None
+    # départs voisins (CROSS_SPATIAL) : boucles du site publié (16/10/2026 : la source n'était fixée que par le diagnostic,
+    # la règle serait restée inactive sans le dire dans le calcul réel)
+    NEIGHBOUR_SRC = NEIGHBOUR_SRC or args.reuse_from or args.carry_over_from
+    if CROSS_SPATIAL and not NEIGHBOUR_SRC:
+        print("ATTENTION : CROSS_SPATIAL allumé sans site publié (--reuse-from ou --carry-over-from) : départs voisins inactifs")
     used: dict[str, int] = {}
     ids = []
     reserved = {}

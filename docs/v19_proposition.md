@@ -22,16 +22,17 @@ comprise, boucles publiées remises en jeu comme en production).
 | **Reclassement des boucles publiées** (`PREVIOUS_ANY_DURATION`) | avec un nouveau modèle de temps, une très bonne boucle sort de la plage de sa durée et n'est plus proposée nulle part (mesure combinée : 41 durées à −10 points et plus) | traçages a3 / a4 : la boucle est reprise à sa nouvelle durée (Sant Cugat 1 h 30 Sportif 74,2 → 84,1) ; la durée quittée reste à remplir (d'où le bonus en montée ramené à +30 %) | **activer** (Florent, 15/10) |
 | **« Plus de relief » du Modéré** (`PLUS_RELIEF_RULES`) | la pénalité au-dessus de 15 m/km écartait les boucles vallonnées de l'option faite pour elles | q3 / q4 : 9 durées gagnent une option « plus de relief », 5 perdent la leur (interdits) ; prendre la plus vallonnée faisait baisser la note (l'Eixample 2 h 46,5 → 41,2) : on prend désormais **la mieux notée** des nettement plus vallonnées (+3 m/km) | **activer** (Florent : 20 m/km, la mieux notée) |
 | **Contourner les grands axes** (`AXIS_BYPASS`) | aucune recherche n'essayait d'éviter un tronçon de grand axe par les rues voisines (Gràcia 2 h, idée de Florent) | a7 / a8 (16 départs) : 36 meilleures, 5 moins bonnes (−1,2 au plus), jusqu'à +6,9 ; le raccourci de Gràcia n'est pas attrapé (critère « en ville » à affiner) | **activer** (Florent, 15/10) |
+| **Départs voisins greffés** (`CROSS_SPATIAL` + `SPATIAL_GRAFT`, retenus le 16/10) | chaque départ était calculé seul et ne voyait pas les bonnes boucles de ses voisins ; reprise entière, la boucle voisine gardait sa propre sortie de ville (trop longue ou répétée) | greffe (rejointe et quittée à ses points les plus proches, durées voisines aussi) sur 15 départs de Barcelone et de la proche banlieue : **122 meilleures, 19 moins bonnes**, aucune durée perdue (la boucle voisine entière : 152 / 59) ; les Corts 1 h 30 Tranquille 48 → 56 | retenue : le rapport gains / pertes est enfin bon |
+| **Tronçon par tronçon à plusieurs boucles** (`SEG_MULTI`, idée de Florent, retenu le 16/10) | le croisement par tronçon ne combinait que deux boucles (A + tronçon 1-2 de B, mais pas aussi le tronçon 2-3 de C) | avec la greffe : **136 meilleures, 14 moins bonnes**, aucune durée perdue, note moyenne +1,5 à +3,9 | retenu : gain net modeste, rien d'abîmé |
 | **Voies agréables, points serrés** (`SCENIC_DENSE`) | trois points sans sens : la variante faisait des allers-retours | Eixample 2 h : 35,3 → 49,2 (encore sous la boucle publiée) ; portions de 2 km (`SCENIC_WINDOWS`) : pires, non retenues | **activer** avec les voies agréables |
 
 **Boucles perdues d'un calcul à l'autre (O-63, cause trouvée)** : ce n'était pas l'ordre des durées (traçage m1 à m3 : les bornes n'écartent rien). Deux causes : (1) le filet des boucles publiées ne les retrouvait pas toujours (corrigé ci-dessus) ; (2) la retouche et les croisements partent des meilleures boucles du moment : quand une règle change les notes, leurs meilleurs résultats peuvent ne plus être produits (recherche locale). La (2) reste, mais ne peut plus effacer une boucle publiée.
 
-Non retenues : zones agréables pour GraphHopper (`SCENIC_AREAS`, bonus uniforme : chutes de −25 à −29) ; croisement
-avec les départs voisins (`CROSS_SPATIAL` : Gràcia 2 h inchangée, baisses à expliquer — effet de bord de l'ordre des
-durées en Modéré, à étudier). **Les départs voisins restent à approfondir** (Florent, 14/10 : « un vrai potentiel
-d'amélioration ») : 152 boucles meilleures, des gains forts (les Corts 1 h 30 Tranquille 24 → 49, Badalona 2 h 78) ;
-comprendre pourquoi la boucle de l'Eixample par le coll del Portell n'est pas reprise pour Gràcia, corriger l'ordre des
-durées (O-63), puis remesurer.
+Non retenues : zones agréables pour GraphHopper (`SCENIC_AREAS`, bonus uniforme : chutes de −25 à −29) ; départs
+voisins repris entiers (remplacés par la greffe, ci-dessus). Gràcia 2 h Modéré : la boucle de l'Eixample par le coll del
+Portell, greffée, note 46,9, sous les boucles de Gràcia (65,7) : ce n'est plus la méthode, c'est le barème (à revoir si
+Florent la préfère après l'avoir roulée). Dans le calcul réel, les départs voisins lisent le site publié
+(`--reuse-from` ou `--carry-over-from`, corrigé le 16/10 : sinon inactifs sans le dire).
 
 ## Activer la v19
 

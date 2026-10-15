@@ -668,7 +668,9 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
                # ajouts du 15/10/2026 (choix de Florent) : voies rapides v3, reclassement, « plus de relief », grands axes,
                # points serrés des voies agréables
                "motorway": True, "previous_any": True, "plus_relief": True, "axis_bypass": True, "scenic_dense": True,
-               "fatigue": True}                         # fatigue au fil de la sortie (Florent, 15/10/2026)
+               "fatigue": True,                         # fatigue au fil de la sortie (Florent, 15/10/2026)
+               # départs voisins greffés, tronçon par tronçon à plusieurs boucles (Florent, 16/10/2026)
+               "cross_spatial": True, "spatial_graft": True, "seg_multi": True}
         for k, v in v19.items():
             setattr(g._TL, k, v)
         try:
