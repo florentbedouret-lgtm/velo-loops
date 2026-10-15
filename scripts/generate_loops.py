@@ -532,6 +532,18 @@ def backtrack_rules() -> bool:
     return bool(getattr(_TL, "backtrack_rules", BACKTRACK_RULES))
 
 
+def foot_backtrack() -> bool:
+    """Allers-retours à pied jamais utiles (FOOT_BACKTRACK), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "foot_backtrack", FOOT_BACKTRACK))
+
+
+def foot_edges(det, n) -> list:
+    """Par tronçon : True si on ne peut pas y rouler (escalier, chemin piéton ou zone piétonne sans accès vélo)."""
+    rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
+    return [rc[i] == "steps" or (rc[i] in ("footway", "pedestrian") and ba[i] not in ("yes", "designated"))
+            for i in range(n)]
+
+
 def corridor_overlap() -> bool:
     """Répétition mesurée par couloir (CORRIDOR_OVERLAP), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "corridor_overlap", CORRIDOR_OVERLAP))
@@ -951,6 +963,14 @@ CORRIDOR_OVERLAP = True           # v17
 # l'ajouter à l'empreinte (params_hash).
 BACKTRACK_RULES = True            # v17
 BACKTRACK_CLIMB_M = 40.0
+# Allers-retours à pied (Florent, 15/10/2026, el Gornal 3 h Modéré : la boucle quitte la place du Tibidabo pour monter au
+# temple du Sacré-Cœur par des chemins piétons et des escaliers, puis redescend ; la place est déjà à moins de 130 m du
+# sommet, le lieu est donc vu sans ce crochet). FOOT_BACKTRACK : un retour sur ses pas qui emprunte plus de
+# FOOT_BACKTRACK_MAX_M de chemin piéton, de zone piétonne ou d'escalier sans accès vélo n'est jamais utile (lieu compris) :
+# il est pénalisé et retiré comme tout éperon injustifié ; le lieu reste compté par le passage le plus proche
+# (remarkable_passed, à moins de 130 m du tracé). False : un lieu justifie l'aller-retour quel que soit le chemin.
+FOOT_BACKTRACK = False
+FOOT_BACKTRACK_MAX_M = 50.0
 BACKTRACK_SHARE = 0.6
 # audit du 09/10/2026 : 429 des 661 allers-retours « nature » et 33 des 53 « piste » faisaient moins de 500 m (demi-tour
 # au bout d'un chemin forestier ou d'une bretelle) : « prolonger une route agréable » demande au moins ce trajet
@@ -2304,7 +2324,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         rep_m = [cum[i + 1] - cum[i] if seen[k] > 1 else 0.0 for i, k in enumerate(keys)]
     rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
     unp_e = unpaved_edges(det, len(cum) - 1) if backtrack_rules() else None
-    useful = useful_windows(coords, level, rc_rep, unp_e) if backtrack_rules() else []
+    foot_e = foot_edges(det, len(cum) - 1) if foot_backtrack() else None
+    useful = useful_windows(coords, level, rc_rep, unp_e, foot_e) if backtrack_rules() else []
     for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
@@ -2400,14 +2421,14 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
-    loop.spurs = unjustified_spurs(coords, level, rc_rep, unp_e) if SPUR_FIX else []
+    loop.spurs = unjustified_spurs(coords, level, rc_rep, unp_e, foot_e) if SPUR_FIX else []
     loop.backtracks = [{"why": w, "m": round(cum[min(b_, len(cum) - 1)] - cum[a_]), "lat": round(coords[t][1], 5),
                         "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
                         "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2)}
                        for a_, b_, t, w in useful]
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
-        loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e) is None]
+        loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) is None]
     loop.surface_seq = surface_seq(edges, cum)
     if STEEP_DIRT_PENALTY:                                # terre (notée ou probable) sur une pente d'au moins 12 %
         n_ = min(len(loop.surface_seq), len(prof) - 1)
@@ -3300,7 +3321,7 @@ def natural_tip(p) -> bool:
     return False
 
 
-def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=None):
+def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=None, foot=None):
     """Pourquoi le passage coords[a..b], où la boucle revient sur ses pas, est utile (voir BACKTRACK_RULES) : "lieu",
     "belvédère", "relief", "nature" ou "piste" ; None s'il n'apporte rien. cyc : lettre de chaque tronçon (road_edges) ;
     unp : lettre de chaque tronçon (unpaved_edges) ; t : indice du demi-tour (sinon le point le plus éloigné de l'entrée)."""
@@ -3309,6 +3330,11 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     seg = coords[a:b + 1]
     if len(seg) < 2:
         return None
+    if foot is not None and foot_backtrack():               # jamais à pied, même pour un lieu (FOOT_BACKTRACK)
+        walk = sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
+                   for i in range(a, min(b, len(foot))) if foot[i])
+        if walk > FOOT_BACKTRACK_MAX_M:
+            return None
     pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]]))
     if POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0]):
         return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
@@ -3347,17 +3373,17 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     return None
 
 
-def useful_windows(coords, level: str, cyc=None, unp=None) -> list:
+def useful_windows(coords, level: str, cyc=None, unp=None, foot=None) -> list:
     """Allers-retours utiles de la boucle (voir BACKTRACK_RULES) : [(a, b, t, raison)] (entrée, sortie, demi-tour)."""
     out = []
     for s in spur_list(coords):
-        why = backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"])
+        why = backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot)
         if why:
             out.append((s["a"], s["b"], s["t"], why))
     return out
 
 
-def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None) -> list:
+def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None, foot=None) -> list:
     """Éperons d'au moins SPUR_MIN_M, hors départ et arrivée, qui n'apportent rien (voir SPUR_FIX ; avec
     BACKTRACK_RULES, jugés par backtrack_useful)."""
     import numpy as np
@@ -3368,7 +3394,7 @@ def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None) -> l
         if s["m"] < SPUR_MIN_M or s["start_m"] < SPUR_END_M or s["end_m"] < SPUR_END_M:
             continue
         if rules:
-            if backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"]) is None:
+            if backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot) is None:
                 out.append({"km": None, "m": round(s["m"]), "a": s["a"], "b": s["b"],
                             "lon": round(coords[s["t"]][0], 5), "lat": round(coords[s["t"]][1], 5)})
             continue
@@ -4108,8 +4134,9 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
-             CONTIGUOUS_BINS],
+             CONTIGUOUS_BINS, FOOT_BACKTRACK],
             [PREVIOUS_WAYPOINT_M],
+            [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],
