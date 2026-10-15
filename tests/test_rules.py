@@ -480,5 +480,7 @@ def test_contiguous_bins_close_the_gaps():
         assert not g.time_ok(36 * 60, 0.75)                                   # sous 45 min : tolérance de 15 %
         assert not g.time_ok(7 * 3600, 6.0)                                   # au-delà de 6 h : tolérance de 15 %
         assert not g.time_ok(100 * 60, 1.0)                                   # une « 1 h » ne prend pas 1 h 40
+        assert not g.time_ok(53 * 60, 0.75) and not g.time_ok(200 * 60, 4.0)  # ailleurs, plages inchangées
+        assert 72 <= g.bin_minutes(1.0)[1] <= 74 and abs(g.bin_minutes(1.5)[0] - g.bin_minutes(1.0)[1]) < 1e-6
     finally:
         del g._TL.contiguous_bins

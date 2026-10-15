@@ -129,14 +129,17 @@ DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
 # est plus longue que celles de la durée inférieure et plus courte que celles de la durée supérieure (order_bounds).
 # None : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash, "v16").
 DURATION_BIN_MARGIN = 0.05        # v17 (test v4 : aucune durée perdue grâce au filet ordered_pool)
-ORDER_GAP_S = 180.0
+ORDER_GAP_S = 180.0              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
 # Tranches de durée sans trou (revue de cohérence du 15/10/2026, accord de Florent) : avec TIME_TOLERANCE (15 %) en plus
 # des plages, aucune durée ne prend une boucle de 69 à 76 min (entre 1 h et 1 h 30) ni de 138 à 153 min (entre 2 h et
 # 3 h) : ces boucles sont perdues (Castelldefels 1 h 30 Sportif, traçage c4) et des durées restent vides. Avec
-# CONTIGUOUS_BINS, entre deux durées voisines seules les plages comptent (« 1 h » jusqu'à 75 min, « 1 h 30 » dès 70 min ;
-# « 2 h » jusqu'à 2 h 30, « 3 h » dès 2 h 21) ; TIME_TOLERANCE reste la limite sous 45 min et au-dessus de 6 h.
+# CONTIGUOUS_BINS, seul un trou entre deux durées voisines est comblé : chacune s'étend jusqu'au milieu du trou (« 1 h »
+# jusqu'à 73 min, « 1 h 30 » dès 73 min ; « 2 h » jusqu'à 2 h 26, « 3 h » dès 2 h 26) ; ailleurs, plages et tolérance
+# inchangées. 1re mesure (15/10/2026, 30 départs) : en élargissant toutes les plages jusqu'aux milieux des durées, la
+# durée courte prenait des boucles plus longues et poussait la suivante (Sant Feliu 1 h Sportif : 54 -> 75 min, note
+# 63 -> 46) : 12 recommandées moins bonnes.
 # False : plages bornées par TIME_TOLERANCE (production v18).
-CONTIGUOUS_BINS = False              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
+CONTIGUOUS_BINS = False
 _TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
 # Modèle de temps v19 (14/10/2026), recalé sur les 3 sorties de Florent ensemble (Gràcia 28/09 et 01/10, Eixample 13/10 ;
 # traces gardées hors du dépôt), tranches de 100 m, ajustement commun (aucun réglage par sortie). Constats :
@@ -2561,12 +2564,10 @@ def relief_filter(pool: list, level: str, log) -> list:
 def time_ok(time_s: float, duration_h: float) -> bool:
     """Durée acceptable pour la durée visée (TIME_TOLERANCE, et plages sans chevauchement si DURATION_BINS)."""
     r = time_s / (duration_h * 3600.0)
-    inner = DURATION_BINS and contiguous_bins() and duration_h in DURATION_SET
-    if inner:                                            # sans trou : la tolérance ne borne que les durées extrêmes
-        i = DURATION_SET.index(duration_h)
-        if (i == 0 and r < 1.0 - TIME_TOLERANCE) or (i + 1 == len(DURATION_SET) and r > 1.0 + TIME_TOLERANCE):
-            return False
-    elif abs(r - 1.0) > TIME_TOLERANCE:
+    if DURATION_BINS and contiguous_bins() and duration_h in DURATION_SET:
+        lo_m, hi_m = bin_minutes(duration_h)                 # plage sans trou (CONTIGUOUS_BINS)
+        return lo_m <= time_s / 60.0 <= hi_m
+    if abs(r - 1.0) > TIME_TOLERANCE:
         return False
     if not DURATION_BINS or duration_h not in DURATION_SET:
         return True
@@ -2577,6 +2578,30 @@ def time_ok(time_s: float, duration_h: float) -> bool:
     # marge vers le bas seulement (08/10/2026, 2e test : une durée qui prenait une boucle un peu trop longue vidait parfois
     # la durée suivante, calculée après elle : Argelaguer 4 h, Sant Celoni 6 h) ; une boucle un peu courte reste reprise
     return lo - m <= r <= hi
+
+
+def _bin_strict(i: int) -> tuple:
+    """Plage d'une durée en minutes, comme time_ok sans CONTIGUOUS_BINS (plages, marge vers le bas, TIME_TOLERANCE)."""
+    d = DURATION_SET[i]
+    lo = (DURATION_SET[i - 1] + d) / 2.0 / d if i > 0 else 0.0
+    hi = (DURATION_SET[i + 1] + d) / 2.0 / d if i + 1 < len(DURATION_SET) else 9.0
+    lo, hi = max(lo - (bin_margin() or 0.0), 1.0 - TIME_TOLERANCE), min(hi, 1.0 + TIME_TOLERANCE)
+    return lo * d * 60.0, hi * d * 60.0
+
+
+def bin_minutes(duration_h: float) -> tuple:
+    """Plage sans trou (CONTIGUOUS_BINS) : la plage habituelle, étendue jusqu'au milieu d'un trou avec une durée voisine."""
+    i = DURATION_SET.index(duration_h)
+    lo, hi = _bin_strict(i)
+    if i > 0:
+        below = _bin_strict(i - 1)[1]
+        if below < lo:
+            lo = (below + lo) / 2.0
+    if i + 1 < len(DURATION_SET):
+        above = _bin_strict(i + 1)[0]
+        if above > hi:
+            hi = (hi + above) / 2.0
+    return lo, hi
 
 
 def order_bounds(options: list, level: str, duration_h: float) -> tuple:
