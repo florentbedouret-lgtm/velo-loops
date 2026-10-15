@@ -186,9 +186,9 @@ def audit(source, only=None):
                     if o is not reco:
                         if o.get("route_key") and o.get("route_key") == reco.get("route_key"):
                             add("option_identique", "", lab, o)
-                        if lab == "moins_de_relief" and dpk > rdpk - 3.0:
+                        if lab == "moins_de_relief" and dpk > rdpk - 2.95:            # 0,05 : relief publié arrondi
                             add("moins_de_relief_pas_moins", "", f"{dpk:.1f} contre {rdpk:.1f} m/km", o)
-                        if lab == "plus_de_relief" and dpk < rdpk + 3.0:
+                        if lab == "plus_de_relief" and dpk < rdpk + 2.95:
                             add("plus_de_relief_pas_plus", "", f"{dpk:.1f} contre {rdpk:.1f} m/km", o)
                 if level == "modere" and rdpk > 15.0:
                     add("modere_tres_vallonne", "", f"{rdpk:.1f} m/km")
