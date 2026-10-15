@@ -707,6 +707,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.foot_backtrack = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.foot_backtrack
+    elif variant == "repli":                               # repli de dernier recours et relief (essai) seul
+        g._TL.spare_relief = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.spare_relief
     elif variant == "bins":                                # tranches de durée sans trou (essai) seules
         g._TL.contiguous_bins = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

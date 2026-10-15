@@ -94,6 +94,15 @@ RELIEF_LIMITS = RELIEF_LIMITS_V17_FLAT   # v17 (choix A de Florent, 09/10/2026) 
 # ×0,6), essai seulement (diagnostic g1 / g2 sur une copie de la configuration)
 RELIEF_LIMITS_V18_SOFT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profile": "calm_flat_soft"},
                           "modere": RELIEF_LIMITS_V17_FLAT["modere"]}
+# Repli de dernier recours et relief (revue de cohérence du 15/10/2026 : 122 boucles Tranquille trop vallonnées, avec une
+# montée de catégorie 2 ou plus ou une rampe de 20 % ou plus, toutes en repli « terre » sans repli « relief » ; Espinalbet
+# 1 h 30 : montée de catégorie 1, plus de 50 % sur un chemin de terre). Les candidates « un peu de terre » gardées en
+# dernier recours (spare, level_pool) étaient publiées sans passer par relief_filter. SPARE_RELIEF : (A) elles y passent
+# aussi (la moins vallonnée, annoncée) ; (B, accord de Florent) une allure ne propose rien quand même sa boucle de repli
+# relief dépasse RELIEF_HARD (Tranquille : montée de catégorie 1 ou HC, ou rampe de 25 % ou plus : on pousse le vélo).
+# False : réserve publiée telle quelle (production v18).
+SPARE_RELIEF = False
+RELIEF_HARD = {"facile": {"banned_cats": ("1", "HC"), "max_grade": 25.0}}
 RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible (pen_per dans RELIEF_LIMITS pour changer)
 RELIEF_OVER_MAX = 0.20
 CLIMB_LEVELS = ("soutenu",)
@@ -2526,6 +2535,21 @@ def relief_ok(l) -> bool:
     return True
 
 
+def spare_relief() -> bool:
+    """Repli de dernier recours contrôlé pour le relief (SPARE_RELIEF), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "spare_relief", SPARE_RELIEF))
+
+
+def relief_hard_ok(l) -> bool:
+    """Boucle de repli encore faisable à son allure (RELIEF_HARD ; toujours vraie sans SPARE_RELIEF)."""
+    hard = RELIEF_HARD.get(l.level) if spare_relief() else None
+    if not hard:
+        return True
+    if any(c.get("category") in hard["banned_cats"] for c in l.terrain.get("climbs", [])):
+        return False
+    return (l.terrain.get("max_grade_pct") or 0.0) < hard["max_grade"]
+
+
 def dirt_filter(pool: list, level: str, log) -> list:
     """Terre v17 : pool réduit aux boucles sous le plafond ; sans aucune, la moins terreuse seule, marquée
     unpaved_fallback (l'app l'annonce). Désactivé si DIRT_RULES est vide."""
@@ -2555,6 +2579,10 @@ def relief_filter(pool: list, level: str, log) -> list:
     flat = min(pool, key=lambda l: l.dplus_per_km)
     if fallback_best():                                      # la mieux notée parmi les quasi-moins vallonnées
         flat = max((l for l in pool if l.dplus_per_km <= flat.dplus_per_km + FALLBACK_RELIEF_TOL), key=lambda l: l.score)
+    if not relief_hard_ok(flat):                            # même le repli n'est pas faisable à cette allure (B)
+        log(f"    relief : aucune boucle faisable ({level}) : la moins vallonnée ({flat.dplus_per_km:.1f} m/km) a une "
+            f"montée trop dure ou une rampe de {flat.terrain.get('max_grade_pct') or 0:.0f} %, durée non proposée")
+        return []
     flat.relief_fallback = True
     log(f"    relief : aucune boucle conforme ({level}), la moins vallonnée gardée ({flat.dplus_per_km:.1f} m/km)")
     return [flat]
@@ -3643,6 +3671,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
     if spare:
         log(f"    repli : {len(spare)} candidat(s) avec un peu de terre (au plus {FALLBACK_UNPAVED_KM:g} km / "
             f"{FALLBACK_UNPAVED_SHARE:.0%}), signalé(s)")
+    if spare and spare_relief():                             # le repli passe aussi par les règles de relief (A)
+        return relief_filter(spare, level, log)
     return spare
 
 
@@ -4159,9 +4189,10 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
-             CONTIGUOUS_BINS, FOOT_BACKTRACK],
+             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
+            [SPARE_RELIEF, RELIEF_HARD],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],
