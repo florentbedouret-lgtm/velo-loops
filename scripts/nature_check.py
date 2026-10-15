@@ -707,6 +707,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.foot_backtrack = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.foot_backtrack
+    elif variant == "arlong":                              # plafond des allers-retours utiles (essai) seul
+        g._TL.backtrack_max_share = g.BACKTRACK_MAX_SHARE_TRIAL
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.backtrack_max_share
     elif variant == "repli":                               # repli de dernier recours et relief (essai) seul
         g._TL.spare_relief = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

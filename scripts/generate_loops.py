@@ -544,6 +544,11 @@ def backtrack_rules() -> bool:
     return bool(getattr(_TL, "backtrack_rules", BACKTRACK_RULES))
 
 
+def backtrack_max_share():
+    """Plafond des allers-retours utiles (BACKTRACK_MAX_SHARE), réglable par fil d'exécution."""
+    return getattr(_TL, "backtrack_max_share", BACKTRACK_MAX_SHARE)
+
+
 def foot_backtrack() -> bool:
     """Allers-retours à pied jamais utiles (FOOT_BACKTRACK), réglable par fil d'exécution."""
     return bool(getattr(_TL, "foot_backtrack", FOOT_BACKTRACK))
@@ -987,6 +992,12 @@ BACKTRACK_SHARE = 0.6
 # audit du 09/10/2026 : 429 des 661 allers-retours « nature » et 33 des 53 « piste » faisaient moins de 500 m (demi-tour
 # au bout d'un chemin forestier ou d'une bretelle) : « prolonger une route agréable » demande au moins ce trajet
 BACKTRACK_PLEASANT_MIN_M = 1000.0
+# Revue de cohérence du 15/10/2026 : 320 allers-retours « utiles » font plus de 25 % du parcours, jusqu'à 47 km (Sant Martí
+# 1 h Tranquille refait 10 km sur 16 pour la « nature ») : la boucle devient un aller-retour. BACKTRACK_MAX_SHARE : au-delà
+# de cette part du parcours (aller et retour comptés), un retour sur ses pas n'est jamais utile (pénalisé, retiré comme
+# un éperon). None : pas de plafond (production v18).
+BACKTRACK_MAX_SHARE = None
+BACKTRACK_MAX_SHARE_TRIAL = 0.20
 # relecture de Florent (09/10/2026, 29 cas : lieux 6/6 utiles, belvédères 5/6, relief 1 utile et 4 « demi-tour soudain »,
 # nature 1/6, piste 3/6) : (1) jamais sur un chemin de terre ou de gravier (« galérer sur un chemin de terre pour qu'on
 # me dise de revenir sur mes pas »), sauf pour atteindre un lieu remarquable ; (2) un demi-tour se fait à un endroit
@@ -3388,6 +3399,13 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                    for i in range(a, min(b, len(foot))) if foot[i])
         if walk > FOOT_BACKTRACK_MAX_M:
             return None
+    cap = backtrack_max_share()
+    if cap is not None:                                      # trop long : la boucle devient un aller-retour
+        part = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
+        whole = part + sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
+                           for i in list(range(0, a)) + list(range(b, len(coords) - 1)))
+        if part > cap * whole:
+            return None
     pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]]))
     if POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0]):
         return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
@@ -4189,10 +4207,11 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
-             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF],
+             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
+            [BACKTRACK_MAX_SHARE],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],
