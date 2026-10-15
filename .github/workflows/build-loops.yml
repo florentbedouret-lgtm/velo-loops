@@ -92,7 +92,7 @@ concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
   # diag_part=surf (carte seule) et les parties lancées depuis le 08/10/2026 au soir (o1, o2, cmp3) : chacune dans sa file,
   # elles tournent en parallèle sans prendre la place d'un diagnostic en attente
-  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","o1","o2","cmp2","cmp3","cmp3b","cmp4","cmp5","cmp6","cmp7","w1","w2","b1","b2","t1","t2","1","2","3","4","v1","v2","k1","k2","x1","x2","k3","x3","x4","v3","f1","f2","g1","g2","p1","p2","n1","n2","s1","s2","z1","z2","h1","h2","e1","e2","y1","y2","y3","q1","q2","q3","q4","u1","u2","j1","j2","l1","l2","l3","i1","i2","i3","i4","m1","m2","m3","m4","m5","m6","m7","m8","m9","m0","a3","a4","a5","a6","a7","a8","a9","c1","c2","c3","c4","a1","a2"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
+  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","audit","o1","o2","cmp2","cmp3","cmp3b","cmp4","cmp5","cmp6","cmp7","w1","w2","b1","b2","t1","t2","1","2","3","4","v1","v2","k1","k2","x1","x2","k3","x3","x4","v3","f1","f2","g1","g2","p1","p2","n1","n2","s1","s2","z1","z2","h1","h2","e1","e2","y1","y2","y3","q1","q2","q3","q4","u1","u2","j1","j2","l1","l2","l3","i1","i2","i3","i4","m1","m2","m3","m4","m5","m6","m7","m8","m9","m0","a3","a4","a5","a6","a7","a8","a9","c1","c2","c3","c4","a1","a2"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
@@ -227,7 +227,7 @@ jobs:
 
       - name: Démarrer GraphHopper (import OSM + altitude, puis serveur local)
         # diag_part=surf : lecture de la carte seule, sans GraphHopper
-        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') && !(steps.resolve_mode.outputs.mode == 'nature_check' && inputs.diag_part == 'surf') }}
+        if: ${{ steps.resolve_mode.outputs.mode != 'plan' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') && !(steps.resolve_mode.outputs.mode == 'nature_check' && (inputs.diag_part == 'surf' || inputs.diag_part == 'audit')) }}
         env:
           MODE: ${{ steps.resolve_mode.outputs.mode }}
           DIAG_PART: ${{ inputs.diag_part }}
@@ -307,6 +307,11 @@ jobs:
           DIAG_PART: ${{ inputs.diag_part }}   # entrée passée par l'environnement, pas collée dans le script (audit B1)
         run: |
           # revêtements « compactés » (08/10/2026, piste de la plage du Bogatell évitée comme de la terre) : carte seule
+          if [ "$DIAG_PART" = "audit" ]; then         # revue de cohérence des boucles publiées (15/10/2026), sans GraphHopper
+            python scripts/audit_loops.py --site "https://florentbedouret-lgtm.github.io/velo-loops" --out data/audit
+            cat data/audit.md >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "$DIAG_PART" = "surf" ]; then
             python scripts/surface_check.py --pbf data/region.osm.pbf               --index "https://florentbedouret-lgtm.github.io/velo-loops/web/data/index.json"               --out data/surface_check.json --out-md data/surface_check.md
             cat data/surface_check.md >> "$GITHUB_STEP_SUMMARY"
@@ -516,6 +521,8 @@ jobs:
             data/relief_*.json
             data/prev_check.json
             data/prev_check.md
+            data/audit.json
+            data/audit.md
             data/surface_check.json
             data/surface_check.md
             data/pages_test.txt
