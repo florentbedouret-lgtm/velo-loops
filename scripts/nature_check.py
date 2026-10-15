@@ -721,10 +721,12 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.cross_segments = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_segments
-    elif variant == "axes":                                # contourner les grands axes (essai) seul
+    elif variant in ("axes", "axesm"):                     # contourner les grands axes (essai), par morceaux (axesm)
         g._TL.axis_bypass = True
+        g._TL.axis_chunks = variant == "axesm"
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.axis_bypass
+        del g._TL.axis_chunks
     elif variant == "plusrelief":                          # « plus de relief » du Modéré (essai) seul
         g._TL.plus_relief = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

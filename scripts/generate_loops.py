@@ -211,6 +211,12 @@ AXIS_RUN_M = 500.0
 AXIS_OFFSET_M = 200.0
 AXIS_TOP = 2
 AXIS_MAX_RUNS = 2
+# Découpage (traçage a6, 15/10/2026 : à Gràcia, le grand axe court 5,1 km d'affilée de Vallcarca vers Collserola ; un seul
+# point décalé au milieu ne reproduit pas un détour local comme le Passeig de la Muntanya). AXIS_CHUNKS : les tronçons de
+# plus de 1,5 × AXIS_CHUNK_M sont essayés morceau par morceau (AXIS_MAX_TRIES essais au plus par boucle). False : entier.
+AXIS_CHUNKS = False
+AXIS_CHUNK_M = 1000.0
+AXIS_MAX_TRIES = 6
 SCENIC_WINDOW_M = 2000.0
 # Bord d'eau en ville (même diagnostic : le couloir de la B-10, à 150-200 m de la mer derrière les immeubles, comptait 49 %
 # de bord d'eau, la piste du front de mer 52 %). WATER_CITY_NEAR : en ville dense (bâti de la barre de terrain), un point
@@ -318,11 +324,20 @@ def axis_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list:
             if (k - a) * 100.0 >= AXIS_RUN_M and city[a:k].count("v") >= 0.5 * (k - a):
                 runs.append((a, k))
         runs.sort(key=lambda r: r[0] - r[1])
+        if getattr(_TL, "axis_chunks", AXIS_CHUNKS):         # morceaux d'environ AXIS_CHUNK_M (AXIS_CHUNKS)
+            step = max(1, int(round(AXIS_CHUNK_M / 100.0)))
+            pieces = []
+            for a, b in runs[:AXIS_MAX_RUNS]:
+                if (b - a) * 100.0 > 1.5 * AXIS_CHUNK_M:
+                    pieces += [(x, min(b, x + step)) for x in range(a, b, step) if min(b, x + step) - x >= 5]
+                else:
+                    pieces.append((a, b))
+            runs = pieces[:AXIS_MAX_TRIES]
         c, cum = base.coords, _cum_cache(base)
         if detail is not None:
             detail.append(f"  grands axes : boucle {bi + 1} ({base.score:.1f}) : {seq.count('m') / 10:.1f} km de grands axes, "
                           f"{len(runs)} tronçon(s) d'au moins {AXIS_RUN_M:.0f} m en ville")
-        for n, (a, b) in enumerate(runs[:AXIS_MAX_RUNS]):
+        for n, (a, b) in enumerate(runs if getattr(_TL, "axis_chunks", AXIS_CHUNKS) else runs[:AXIS_MAX_RUNS]):
             ia = min(range(len(cum)), key=lambda i: abs(cum[i] - a * 100.0))
             ib = min(range(len(cum)), key=lambda i: abs(cum[i] - b * 100.0))
             im = min(range(len(cum)), key=lambda i: abs(cum[i] - (a + b) * 50.0))
@@ -4086,6 +4101,7 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
             [SCENIC_SEA_M, SCENIC_RIVER_M, SCENIC_NEAR_M, SCENIC_ON_M, SCENIC_RUN_M, SCENIC_MIN_WAY_M, SCENIC_TOP,
              SCENIC_MAX_RUNS, SCENIC_DENSE, SCENIC_PICK_M, SCENIC_WINDOWS, SCENIC_WINDOW_M],
             [CROSS_SEG_MAX, CROSS_SEG_MARGIN, CROSS_SEG_TIME],
+            [AXIS_CHUNKS, AXIS_CHUNK_M, AXIS_MAX_TRIES],
             [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, MOTORWAY_RUN_M,
              MOTORWAY_TRUNK,
              WATER_CITY_DEG]]
