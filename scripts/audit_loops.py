@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import requests
+import urllib.request
 
 SITE = "https://florentbedouret-lgtm.github.io/velo-loops"
 DURATIONS = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
@@ -36,9 +36,10 @@ CHECKS = {
     "terre_plus_1km": (1, "Défauts", "Plus de 1 km de terre sans repli annoncé"),
     "tranquille_rampe": (1, "Défauts", "Tranquille avec une rampe de 20 % ou plus"),
     "repetition": (1, "Défauts", "Plus de 25 % du parcours emprunté deux fois (hors aller-retour annoncé)"),
-    "chemin_repete": (2, "Défauts", "Même chemin parcouru deux fois sur plus de 1 km d'affilée"),
+    "chemin_repete": (2, "Défauts", "Même chemin parcouru deux fois sur plus de 1 km d'affilée, hors aller-retour jugé utile"),
+    "aller_retour_long": (2, "Défauts", "Aller-retour jugé utile de plus de 25 % du parcours (au moins 5 km)"),
     "demi_tours": (3, "Défauts", "1 ou 2 demi-tours (admis : impasses, retours utiles)"),
-    "allers_retours": (3, "Défauts", "Aller-retour ou retour sur ses pas annoncé"),
+    "allers_retours": (3, "Défauts", "Aller-retour annoncé ou jugé utile (nature, lieu, belvédère, relief, piste)"),
     # 2. durées
     "duree_hors_tolerance": (1, "Durées", "Durée annoncée à plus de 15 % de la durée visée"),
     "ordre_durees": (1, "Durées", "Recommandée plus courte que celle de la durée inférieure (même allure)"),
@@ -63,7 +64,7 @@ CHECKS = {
 RANKINGS = {
     "feux au km": ("lights_km", True), "part de grands axes": ("main_roads", True),
     "part répétée": ("overlap", True), "plus long chemin répété (km)": ("longest_repeat_km", True),
-    "demi-tours": ("u_turns", True), "terre (km)": ("dirt_km", True), "note de la recommandée": ("score", False),
+    "demi-tours": ("u_turns", True), "aller-retour jugé utile (km)": ("backtrack_km", True), "terre (km)": ("dirt_km", True), "note de la recommandée": ("score", False),
     "écart à la durée visée": ("time_gap", True), "sortie de ville (km)": ("exit_city_km", True),
 }
 
@@ -75,15 +76,16 @@ def app_link(sid, dur_min, level):
 def load(source):
     """(index, {départ: données}) depuis l'adresse du site ou un dossier (index.json, starts/)."""
     if source.startswith("http"):
-        idx = requests.get(f"{source}/web/data/index.json", timeout=60).json()
+        def get(url):
+            with urllib.request.urlopen(url, timeout=60) as r:
+                return json.loads(r.read().decode("utf-8"))
+        idx = get(f"{source}/web/data/index.json")
 
         def fetch(sid):
             for _ in range(3):
                 try:
-                    r = requests.get(f"{source}/web/data/starts/{sid}.json", timeout=60)
-                    if r.status_code == 200:
-                        return sid, r.json()
-                except requests.RequestException:
+                    return sid, get(f"{source}/web/data/starts/{sid}.json")
+                except Exception:                            # coupure réseau, lecture incomplète : on réessaie
                     pass
             return sid, None
         with ThreadPoolExecutor(max_workers=16) as ex:
@@ -97,9 +99,10 @@ def load(source):
     return idx, data
 
 
-def audit(source):
+def audit(source, only=None):
+    """only : identifiants de départs à garder (comparaison sur les mêmes départs)."""
     idx, data = load(source)
-    starts = idx["starts"]
+    starts = [e for e in idx["starts"] if only is None or e["id"] in only]
     issues, rows = defaultdict(list), []
     stale, missing_files = [], []
     for e in starts:
@@ -137,7 +140,9 @@ def audit(source):
                     dpk = o["ascend_m"] / max(km, 0.1)
                     dirt = o["shares"].get("unpaved", 0) * km
                     terr = o.get("terrain") or {}
-                    rows.append({"sid": sid, "name": name, "level": level, "dur": dur, "label": lab, "reco": o is reco,
+                    bts = o.get("backtracks") or []
+                    bt_km = sum(b["m"] for b in bts) / 1000.0         # longueur parcourue (aller et retour)
+                    rows.append({"sid": sid, "backtrack_km": bt_km, "oab": bool(o.get("out_and_back")), "name": name, "level": level, "dur": dur, "label": lab, "reco": o is reco,
                                  "link": link, "km": km, "time": t, "time_gap": abs(t / dm - 1.0), "dpk": dpk,
                                  "lights_km": o.get("traffic_lights_per_km") or 0.0,
                                  "main_roads": o["shares"].get("main_roads", 0.0), "overlap": o.get("overlap", 0.0),
@@ -153,12 +158,16 @@ def audit(source):
                         add("demi_tours_hors_regle", "", f"{o['u_turns']}", o)
                     elif o.get("u_turns", 0) > 0:
                         add("demi_tours", "", f"{o['u_turns']}", o)
-                    if o.get("out_and_back") or o.get("backtracks"):
+                    if o.get("out_and_back") or bts:
                         add("allers_retours", "", "aller-retour" if o.get("out_and_back")
-                            else f"{len(o['backtracks'])} retour(s) sur ses pas", o)
+                            else ", ".join(f"{b['why']} {b['m'] / 1000:.1f} km" for b in bts), o)
+                    if bt_km >= max(5.0, 0.25 * km):
+                        add("aller_retour_long", "", f"{bt_km:.1f} km sur {km:.0f} ("
+                            + ", ".join(sorted({b['why'] for b in bts})) + ")", o)
                     if o.get("overlap", 0) > 0.25 and not o.get("out_and_back"):
                         add("repetition", "", f"{o['overlap']:.0%}", o)
-                    if (o.get("longest_repeat_km") or 0) > 1.0 and not o.get("out_and_back"):
+                    explained = max((b["m"] / 2000.0 for b in bts), default=0.0) + 0.2   # un aller-retour utile répète m/2
+                    if (o.get("longest_repeat_km") or 0) > max(1.0, explained) and not o.get("out_and_back"):
                         add("chemin_repete", "", f"{o['longest_repeat_km']:.1f} km", o)
                     if dirt > 1.05 and not o.get("unpaved_fallback"):
                         add("terre_plus_1km", "", f"{dirt:.1f} km", o)
@@ -209,16 +218,19 @@ def indicators(res):
         if not r:
             continue
         med = lambda k: round(st.median(x[k] for x in r), 2)  # noqa: E731
-        ex = [x["exit_city_km"] for x in r if x["exit_city_km"] is not None]
+        town = [x for x in r if x["exit_city_km"] != 0]           # 0 : départ hors de la ville ; None : reste en ville
+        ex = [x["exit_city_km"] for x in town if x["exit_city_km"] is not None]
         lo, hi = RELIEF_TARGET.get(level, (None, None))
         out[level] = {"recommandées": len(r), "note médiane": med("score"), "relief médian (m/km)": med("dpk"),
                       "dans la cible de relief": (f"{sum(1 for x in r if lo <= x['dpk'] <= hi) / len(r):.0%}"
                                                   if lo is not None else "-"),
                       "grands axes médians": f"{st.median(x['main_roads'] for x in r):.0%}",
-                      "feux/km médians": med("lights_km"), "sortie de ville médiane (km)": round(st.median(ex), 1) if ex else "-",
+                      "feux/km médians": med("lights_km"), "départs en ville : sortie médiane (km)": round(st.median(ex), 1) if ex else "-",
+                      "départs en ville : restent en ville": f"{(len(town) - len(ex)) / len(town):.0%}" if town else "-",
                       "terre > 1 km": sum(1 for x in r if x["dirt_km"] > 1.05),
                       "écart médian à la durée": f"{st.median(x['time_gap'] for x in r):.0%}",
-                      "boucles à demi-tours": f"{sum(1 for x in r if x['u_turns'] > 0) / len(r):.0%}"}
+                      "boucles à demi-tours": f"{sum(1 for x in r if x['u_turns'] > 0) / len(r):.0%}",
+                      "plus long chemin répété médian (km)": med("longest_repeat_km")}
     return out
 
 
@@ -236,14 +248,16 @@ def report(res, out, prev=None):
         L.append(f"| {fam} | {sev} | {label} | {len(R(key))} | {c['facile']} | {c['modere']} | {c['soutenu']} |")
     ind = indicators(res)
     old = indicators(prev) if prev else None
-    L += ["", "## Promesses par allure (boucles recommandées)" + (f", comparées à la v{prev['generator_version']}" if old else ""), ""]
+    L += ["", "## Promesses par allure (boucles recommandées)"
+          + (f", comparées à la v{prev['generator_version']} sur les mêmes départs" if old else ""), ""]
     keys = list(next(iter(ind.values())).keys()) if ind else []
     L += ["| indicateur | " + " | ".join(LEVEL_NAME[l] + (f" (v{prev['generator_version']} → v{res['generator_version']})" if old else "")
                                         for l in ind) + " |", "|---" * (len(ind) + 1) + "|"]
     for k in keys:
         L.append(f"| {k} | " + " | ".join((f"{old[l][k]} → {ind[l][k]}" if old and l in old else f"{ind[l][k]}") for l in ind) + " |")
     if prev:
-        L += ["", f"## Incohérences : v{prev['generator_version']} → v{res['generator_version']}", "",
+        L += ["", f"## Incohérences : v{prev['generator_version']} → v{res['generator_version']} (mêmes départs)", "",
+              "Les allers-retours jugés utiles sont publiés depuis la v17 : avant, ils n'apparaissaient pas.", "",
               "| vérification | avant | maintenant |", "|---|---|---|"]
         for key, (sev, fam, label) in sorted(CHECKS.items(), key=lambda kv: (kv[1][1], kv[1][0])):
             L.append(f"| {label} | {len(prev['issues'].get(key, []))} | {len(R(key))} |")
@@ -254,7 +268,8 @@ def report(res, out, prev=None):
         L += [f"### {title}", ""]
         for x in r[:10]:
             val = f"{x[k]:.0%}" if k in ("main_roads", "overlap", "time_gap") else (f"{x[k]:.1f}" if isinstance(x[k], float) else x[k])
-            L.append(f"- [{x['name']}, {LEVEL_NAME[x['level']]}, {x['dur']:g} h, « {x['label']} »]({x['link']}) : {val}")
+            L.append(f"- [{x['name']}, {LEVEL_NAME[x['level']]}, {x['dur']:g} h, « {x['label']} »]({x['link']}) : {val}"
+                     + (" (aller-retour annoncé)" if x.get("oab") else ""))
         L.append("")
     L += ["## Détail des incohérences", ""]
     for key, (sev, fam, label) in sorted(CHECKS.items(), key=lambda kv: (kv[1][0], kv[1][1])):
@@ -282,7 +297,7 @@ def main() -> int:
     ap.add_argument("--out", default="data/audit")
     a = ap.parse_args()
     res = audit(a.site.rstrip("/"))
-    prev = audit(a.compare.rstrip("/")) if a.compare else None
+    prev = audit(a.compare.rstrip("/"), only={r["sid"] for r in res["rows"]}) if a.compare else None
     report(res, a.out, prev)
     print(f"{len(res['rows'])} boucles revues ; " + ", ".join(f"{k} {len(v)}" for k, v in res["issues"].items()))
     return 0
