@@ -56,7 +56,7 @@
     .keys div[data-hl]:active, .rows summary:active, #history summary:active { background: var(--color-bg); }
     /* survol : seulement avec une souris (au doigt, il resterait « collé » après le toucher) */
     @media (hover: hover) and (pointer: fine) {
-      .btn:hover, .stepper button:not(:disabled):hover, .share:hover, .vcard:hover, #me:hover { border-color: var(--color-text-2); }
+      .btn:hover, .stepper button:not(:disabled):hover, .share:hover, .alt-row:hover, #me:hover { border-color: var(--color-text-2); }
       .seg button:not([aria-pressed=true]):hover, .optseg .alt:not([aria-pressed=true]):hover { color: var(--color-text); }
       .btn-accent:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
       .suggest button:hover, .rows summary:hover, #history summary:hover, .keys div[data-hl]:hover { background: var(--color-bg); }
@@ -69,8 +69,8 @@
     .lang-btn::before { content: ''; position: absolute; inset: -6px -2px; }
     .round::before, #historyList .h-del::before { content: ''; position: absolute; inset: -4px; }
     /* lignes : pas de mot seul en fin de ligne */
-    .tip-h, .empty-msg, .suggest p, #where { text-wrap: balance; }
-    .how p, .tip p, .keys .txt, .gpx-help, .row-help { text-wrap: pretty; }
+    .alts-h, .empty-msg, .suggest p, #where { text-wrap: balance; }
+    .how p, .alts-why, .alt-row .ar-l, .keys .txt, .gpx-help, .row-help { text-wrap: pretty; }
     /* mouvement réduit : plus de glissement, la feuille et les boutons changent d'état sans bouger */
     @media (prefers-reduced-motion: reduce) {
       #sheet, #locate, .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right, button, summary::after { transition: none !important; }
@@ -81,7 +81,7 @@
     #paceHint { color: var(--color-text); }
     #paceHint .ftp { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); margin-left: 8px; white-space: nowrap; }
     /* chiffres alignés (km, %, durées) */
-    .figs, .sum-line, .keys .fig, #durVal, .terrain-legend b, .tip-fig, .vd, .dlt, #pfRead, #pill .sum { font-variant-numeric: tabular-nums; }
+    .figs, .sum-line, .keys .fig, #durVal, .terrain-legend b, .ar-f, .dlt, #pfRead, #pill .sum { font-variant-numeric: tabular-nums; }
     /* libellés : casse normale, Hanken medium (07/10/2026 : les capitales mono espacées faisaient « interface générée ») */
     .label { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); }
     input, select { font: inherit; font-size: 16px; padding: 8px; color: var(--color-text); background: var(--color-surface);
@@ -302,26 +302,24 @@
     .pf-block { margin-top: 18px; }
     .pf-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
     #pfRead { font-family: var(--font-mono); font-size: 12px; color: var(--color-text); }
-    /* cartes : suggestion (fond chaux) et autres boucles (filet) */
-    .tip { border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); padding: 16px 0; margin-top: 18px;
-           display: flex; flex-direction: column; gap: 8px; }
-    .tip p { margin: 0; font-size: 15px; line-height: 1.45; }
-    .tip .tip-h { font-size: 16px; font-weight: var(--fw-medium); }
-    .tip + .rows, .tip + .tip, .rows + .tip { border-top: 0; margin-top: 0; }
-    .tip + .tip { padding-top: 0; }
-    .tip-train { flex-direction: row; align-items: flex-start; gap: 12px; }
-    .tip-train .tip-ico { flex: none; margin-top: 1px; }
-    .tip-train .tip-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-    .tip-train .tip-here { color: var(--color-text-2); white-space: nowrap; }
-    .tip-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 4px; }
-    .tip .tip-fig { font-family: var(--font-mono); font-size: 13px; color: var(--color-text); }
-    .tip .tip-note { font-size: 13px; color: var(--color-text-2); line-height: 1.4; }
-    .tip .btn { align-self: flex-start; font-size: 15px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); }
-    .vcard { font: inherit; text-align: left; width: 100%; margin-top: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-             padding: 14px 16px; display: flex; align-items: center; gap: 12px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
-    .vcard .vc { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-    .vcard .vs { font-size: 17px; }
-    .vcard .vd { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-2); }
+    /* « Autres façons de rouler » (critique du 16/10/2026) : un titre, puis une seule forme de ligne pour toutes les
+       propositions (durée plus longue, départ voisin, train, autres boucles) ; la ligne entière se touche (56 px au moins),
+       contour au gris des contrôles (3:1), chiffres comparables en chasse fixe */
+    .alts { margin-top: 28px; }
+    .alts-h { margin: 0; font-size: 16px; font-weight: var(--fw-medium); line-height: 1.35; }
+    .alts-why { margin: 4px 0 0; font-size: 15px; line-height: 1.45; color: var(--color-text-2); }
+    .alt-row { font: inherit; text-align: left; width: 100%; min-height: 56px; margin-top: 10px; padding: 12px 14px 12px 16px;
+               border: 1px solid var(--color-control-off); border-radius: var(--radius-sm); background: var(--color-surface);
+               color: var(--color-text); display: flex; align-items: center; gap: 12px; cursor: pointer; }
+    .alt-row .ar-c { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .alt-row .ar-t { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: var(--fw-medium); line-height: 1.35; }
+    .alt-row .ar-t svg { flex: none; }
+    .alt-row .ar-l { font-size: 15px; line-height: 1.45; }
+    .alt-row .ar-f { font-family: var(--font-mono); font-size: 13px; line-height: 1.5; color: var(--color-text-2); }
+    .alt-row .ar-n { margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--color-text-2); }
+    .alt-row > svg { flex: none; color: var(--color-text-2); }
+    .alts + .rows { margin-top: 28px; }
+    #where .back { margin-top: 6px; }
     /* dépliants en lignes à chevron */
     .rows { border-top: 1px solid var(--color-border); margin-top: 16px; }
     .rows details { border-bottom: 1px solid var(--color-border); }
@@ -994,8 +992,18 @@
         if (b) select(Number(b.dataset.i));
       };
       sheetBody.addEventListener('click', e => {          // carte d'une autre boucle (bas du panneau) : idem
-        const b = e.target.closest('.vcard');
-        if (b) select(Number(b.dataset.i));
+        const b = e.target.closest('.alt-row');
+        if (b) {
+          const d = b.dataset;
+          if (d.act === 'opt') {                           // autre boucle : elle devient la boucle affichée, le focus suit
+            select(Number(d.i));
+            const h = sheetHead.querySelector('.opt-label');   // replié, le nom est masqué : le haut du panneau reçoit le focus
+            if (!sheetHead.hasAttribute('tabindex')) sheetHead.tabIndex = -1;
+            ((h && h.offsetParent) ? h : sheetHead).focus({ preventScroll: true });
+          } else if (d.act === 'dur') goDuration(Number(d.min));
+          else if (d.act === 'nb') goNeighbour(d.id, Number(d.min));
+          else if (d.act === 'train') goTrain(d.id, Number(d.ab));
+        }
         const h = e.target.closest('[data-hl]');             // point clé ou montée : surligner le tronçon
         if (h) toggleHighlight(h);
       });
@@ -1271,6 +1279,7 @@
     const compareExit = c => 'exit_city_km' in c ? c.exit_city_km : c.exit_dense_km;   // bloc compare : null = reste en ville
     function natureNeighbour(o) {
       lastNeighbourId = null;
+      natureNeighbour.last = false;
       if (!modelOk || o.duration_target_min == null) return '';
       const cur = indexData.starts.find(s => s.id === startSel.value);
       if (!cur) return '';
@@ -1291,11 +1300,27 @@
       }
       lastNeighbourId = best ? best.s.id : null;
       if (!best) return '';
-      return '<div class="tip"><p class="tip-h">' +
-        t('tip_nature_txt', { name: esc(startLabel(best.s)), min: best.min, dur: hm(o.duration_target_min),
-          exit: esc(best.exit === 0 ? t('exit0') : t('exitX', { km: km(best.exit) })) }) +
-        '</p><button type="button" class="btn" onclick="goNeighbour(\'' + best.s.id + '\', ' + best.min + ')">' +
-        esc(t('go_from', { name: trName(best.s.name) })) + '</button></div>';
+      natureNeighbour.last = true;
+      const c = best.s.compare[dur][o.level];
+      const there = best.exit === 0 ? t('train_exit0') : t('train_exit', { km: km(best.exit) });
+      const here = stays ? t('vs_stays') : t('vs_km', { km: km(ex) });
+      return altRow('data-act="nb" data-id="' + best.s.id + '" data-min="' + best.min + '"',
+        esc(t('nb_t', { name: startLabel(best.s) })), esc(t('nb_line', { min: best.min }) + ' · ' + there + here),
+        outingFig(c, best.min, false), '', t('nb_aria', { name: startLabel(best.s) }));
+    }
+    // une proposition = une ligne : titre, phrase, chiffres comparables (sortie totale, km, D+), note ; la ligne entière se touche
+    const CHEVRON = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+    function altRow(attrs, title, line, fig, note, aria) {
+      return '<button type="button" class="alt-row" ' + attrs + (aria ? ' aria-label="' + esc(aria) + '"' : '') + '>' +
+        '<span class="ar-c"><span class="ar-t">' + title + '</span>' + (line ? '<span class="ar-l">' + line + '</span>' : '') +
+        (fig ? '<span class="ar-f">' + fig + '</span>' : '') + (note ? '<span class="ar-n">' + esc(note) + '</span>' : '') +
+        '</span>' + CHEVRON + '</button>';
+    }
+    // durée totale de la sortie avec l'approche aller ET retour (vélo, ou vélo + train) : le chiffre qui décide
+    function outingFig(c, approach, train) {
+      if (!c || c.min == null) return '';                  // index publié avant le 16/10/2026 : pas encore de durée
+      return esc(t(train ? 'alt_fig_train' : 'alt_fig', { t: hm(c.min + 2 * approach), km: km(c.km), m: c.dplus }));
     }
     // ---------- panel 30/09/2026 : depuis le centre-ville, suggérer un départ en gare (on y va en train, vélo compris) dont
     // la boucle de même durée et même allure est nettement meilleure (note, feux, sortie de ville : bloc compare de l'index)
@@ -1317,11 +1342,12 @@
     const TRAIN_EXIT_GAIN_KM = 3;        // et un écart visible : nature au moins 3 km plus tôt,
     const TRAIN_CITY_GAIN = 0.15;        // ou 15 points de ville en moins,
     const TRAIN_LIGHTS_RATIO = 0.5;      // ou au moins deux fois moins de feux
-    const TRAIN_ICON = '<svg class="tip-ico" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="5" y="2.5" width="12" height="13" rx="3" ' +
-      'fill="none" stroke="#24221F" stroke-width="1.5"/><path d="M5 9.5h12M8.5 5.5h5" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/>' +
-      '<circle cx="8.5" cy="12.5" r="1" fill="#24221F"/><circle cx="13.5" cy="12.5" r="1" fill="#24221F"/>' +
-      '<path d="M8 15.5l-2.5 4M14 15.5l2.5 4" stroke="#24221F" stroke-width="1.5" stroke-linecap="round"/></svg>';
+    const TRAIN_ICON = '<svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true"><rect x="5" y="2.5" width="12" height="13" rx="3" ' +
+      'fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 9.5h12M8.5 5.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<circle cx="8.5" cy="12.5" r="1" fill="currentColor"/><circle cx="13.5" cy="12.5" r="1" fill="currentColor"/>' +
+      '<path d="M8 15.5l-2.5 4M14 15.5l2.5 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
     function trainStart(o) {
+      trainStart.last = false;
       if (o.duration_target_min == null || !indexData || o.duration_target_min < TRAIN_MIN_H * 60) return '';
       const cur = indexData.starts.find(s => s.id === startSel.value);
       if (!cur || cur.kind === 'station') return '';
@@ -1336,14 +1362,14 @@
         const cand = [];
         if (cx != null && exv - cxv >= TRAIN_EXIT_GAIN_KM)
           cand.push({ k: 'exit', w: Math.min(1, (exv - cxv) / 10), there: cx === 0 ? t('train_exit0') : t('train_exit', { km: km(cx) }),
-                      here: ex == null ? t('train_here_stays') : t('train_here_km', { km: km(ex) }) });
+                      here: ex == null ? t('vs_stays') : t('vs_km', { km: km(ex) }) });
         if (c.urban_share != null && curCity - c.urban_share >= TRAIN_CITY_GAIN)
           cand.push({ k: 'city', w: (curCity - c.urban_share) * 2, there: t('train_city', { p: pctStr(Math.round(c.urban_share * 100)) }),
-                      here: t('train_here_pct', { p: pctStr(Math.round(curCity * 100)) }) });
+                      here: t('vs_pct', { p: pctStr(Math.round(curCity * 100)) }) });
         const cl = c.lights_per_km || 0;
         if (lights >= 0.5 && cl <= lights * TRAIN_LIGHTS_RATIO)
           cand.push({ k: 'lights', w: 1 - cl / lights, there: cl < 0.05 ? t('train_lights0') : t('train_lights', { l: km1(cl) }),
-                      here: t('train_here_l', { l: km1(lights) }) });
+                      here: t('vs_l', { l: km1(lights) }) });
         return cand.sort((a, b) => b.w - a.w)[0] || null;
       };
       if (!trainLinks || !trainLinks.stations) return '';
@@ -1368,25 +1394,40 @@
         }
       }
       if (!best) return '';
-      const n = Math.round(best.perH);
-      return '<div class="tip tip-train">' + TRAIN_ICON + '<div class="tip-body"><p class="tip-h">' + esc(t('train_h_' + best.r.k)) + '</p>' +
-        '<p>' + esc(t('train_route', { bike: best.bm, from: best.g.n, train: best.tmin, to: trName(best.s.name).replace(/^Gare\s+/, '') })) +
-        ' <span class="tip-here">' + esc(tn('train_freq', n)) + '</span></p>' +
-        '<p><b>' + esc(best.r.there) + '</b> <span class="tip-here">(' + esc(best.r.here) + ')</span></p>' +
-        '<div class="tip-act"><button type="button" class="btn" onclick="goTrain(\'' + best.s.id + '\')">' + esc(t('train_see')) + '</button>' +
-        '<small class="tip-note">' + esc(t('tip_train_note')) + '</small></div></div></div>';
+      trainStart.last = true;
+      const to = trName(best.s.name).replace(/^Gare\s+/, ''), ab = best.bm + best.tmin;
+      return altRow('data-act="train" data-id="' + best.s.id + '" data-ab="' + ab + '"', TRAIN_ICON + '<span>' + esc(t('train_t', { to })) + '</span>',
+        esc(t('train_line', { bike: best.bm, train: best.tmin, from: best.g.n, freq: tn('train_freq', Math.round(best.perH)) }) +
+          ' · ' + best.r.there + best.r.here),
+        outingFig(best.c, ab, true), t('tip_train_note'), t('train_aria', { to }));
     }
-    function goTrain(id) {
+    // 16/10/2026 (critique) : la durée totale de la sortie reste affichée (approche à vélo, ou vélo + train, aller et retour)
+    // et la ligne « Départ » propose de revenir au départ précédent
+    let prevStart = null;
+    function rememberStart() { prevStart = { id: startSel.value, fn: whereFn, after: whereAfter, approach: approachMin }; }
+    function backLine(sub) {
+      return sub + (prevStart ? '<div><button type="button" class="btn back" id="backStart">' + esc(t('back_start')) + '</button></div>' : '');
+    }
+    function bindBack() {
+      const b = document.getElementById('backStart');
+      if (b) b.onclick = () => {
+        const p = prevStart; prevStart = null;
+        approachMin = p.approach; setWhere(p.fn, p.after); chooseStart(p.id);
+      };
+    }
+    function goTrain(id, ab) {
       const s = indexData.starts.find(x => x.id === id);
-      setWhere(() => startLine(s, esc(t('train_where'))));
-      approachMin = null;                               // trajet en train : pas de temps d'approche chiffré
+      rememberStart();
+      setWhere(() => startLine(s, backLine(esc(t('train_where')))), bindBack);
+      approachMin = ab || null;                         // vélo jusqu'à la gare + train, à l'aller comme au retour
       chooseStart(id);
     }
     let lastNeighbourId = null;                          // départ déjà proposé par natureNeighbour (pas de doublon)
     function goNeighbour(id, min) {
       const s = indexData.starts.find(x => x.id === id);
-      setWhere(() => startLine(s, esc(t('neighbour_where', { min }))));
-      approachMin = null;                               // la position de l'utilisateur n'est pas connue ici : pas de total chiffré
+      rememberStart();
+      setWhere(() => startLine(s, backLine(esc(t('neighbour_where', { min })))), bindBack);
+      approachMin = userPos ? bikeMin(crowKm(userPos.lon, userPos.lat, s.lon, s.lat)) : min;   // depuis l'adresse si connue
       chooseStart(id);
     }
 
@@ -1574,18 +1615,22 @@
       // la promesse s'appuie sur les données, la première durée plus longue dont la boucle recommandée sort vraiment
       let longer = '';
       if (exitKm(o) == null) {
-        const out = startData.options.filter(x => x.level === o.level && x.duration_target_min > o.duration_target_min
-          && /-1$/.test(x.id) && exitKm(x) != null).map(x => x.duration_target_min).sort((a, b) => a - b)[0];
-        if (out != null) longer = '<div class="tip"><p class="tip-h">' + esc(t('longer_txt_d', { d: hm(out) })) + '</p>' +
-          '<button type="button" class="btn" onclick="goDuration(' + out + ')">' + esc(t('longer_btn_d', { d: hm(out) })) +
-          '</button></div>';
+        const lo = startData.options.filter(x => x.level === o.level && x.duration_target_min > o.duration_target_min
+          && /-1$/.test(x.id) && exitKm(x) != null).sort((a, b) => a.duration_target_min - b.duration_target_min)[0];
+        if (lo) longer = altRow('data-act="dur" data-min="' + lo.duration_target_min + '"',
+          esc(t('longer_txt_d', { d: hm(lo.duration_target_min) })), '', deltas(lo, o), '', t('longer_btn_d', { d: hm(lo.duration_target_min) }));
       }
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
-      const others = shown.map((x, k) => k === current ? '' :
-        '<button type="button" class="vcard" data-i="' + k + '"><span class="vc"><span class="sec-label">' +
-        esc(optName(x)) + '</span><span class="vs">' + km(x.distance_km) + ' km · ' +
-        esc(t('dplus_inline', { m: Math.round(x.ascend_m) })) + ' · ≈ ' + hm(x.time_est_min) + '</span><span class="vd">' + deltas(x, o) + '</span></span>' +
-        '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" fill="none" stroke="#625D55" stroke-width="1.6" stroke-linecap="round"/></svg></button>').join('');
+      // autres boucles de la même durée : lignes compactes (les chiffres absolus sont dans les pastilles de l'en-tête)
+      const others = shown.map((x, k) => k === current ? '' : altRow('data-act="opt" data-i="' + k + '"', esc(optName(x)), '',
+        deltas(x, o), '', optName(x) + ', ' + km(x.distance_km) + ' km, ' + t('dplus_inline', { m: Math.round(x.ascend_m) }) +
+        ', ' + hm(x.time_est_min))).join('');
+      const sugg = longer + natureNeighbour(o) + trainStart(o);
+      const ex0 = exitKm(o);
+      const why = (natureNeighbour.last || trainStart.last) && (ex0 == null || ex0 > 5)
+        ? '<p class="alts-why">' + esc(ex0 == null ? t('alts_why_stays') : t('alts_why_km', { km: km(ex0) })) + '</p>' : '';
+      const alts = sugg || others ? '<section class="alts" aria-labelledby="altsH"><h3 class="alts-h" id="altsH">' +
+        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + why + sugg + others + '</section>' : '';
       const pf = profileSvg(o);
 
       return `
@@ -1598,8 +1643,7 @@
           </details>
           ${feedbackHtml(o)}
         </div>
-        ${longer}${natureNeighbour(o)}${trainStart(o)}
-        ${others}
+        ${alts}
         <div class="rows">
           <details><summary>${esc(t('how_title'))}</summary>
             <div class="how">${[1, 2, 3, 4, 5, 6].map(k => '<p>' + esc(t('how_' + k)) + '</p>').join('')}</div>
@@ -1613,15 +1657,16 @@
     function segDelta(x, o) {
       const sg = v => (v > 0 ? '+' : v < 0 ? '−' : '±');
       const dk = x.distance_km - o.distance_km, dd = Math.round(x.ascend_m - o.ascend_m);
-      return sg(dk) + km(Math.abs(dk)) + ' km · ' + sg(dd) + Math.abs(dd) + ' m';
+      // 16/10/2026 : même arrondi que les lignes du bas ; sans les minutes, qui ne tiennent pas dans une pastille à 375 px
+      return sg(dk) + km1(Math.abs(dk)) + ' km · ' + sg(dd) + Math.abs(dd) + ' m';
     }
     // en-tête du panneau : nom de la boucle, pastilles des autres boucles, chiffres (colonnes ou ligne selon la hauteur)
     function headHtml(o) {
-      const seg = shown.length > 1 ? '<div class="optseg" role="group">' + shown.map((x, k) =>
+      const seg = shown.length > 1 ? '<div class="optseg" role="group" aria-label="' + esc(t('alts_group')) + '">' + shown.map((x, k) =>
         '<button type="button" class="alt" data-i="' + k + '" aria-pressed="' + (k === current) + '"><span class="l1"><i class="sw' +
         (k === current ? ' on' : '') + '"></i><span>' + esc(optName(x)) + '</span></span>' +
         (k === current ? '' : '<small class="dlt">' + esc(segDelta(x, o)) + '</small>') + '</button>').join('') + '</div>' : '';
-      return `<div class="head-row${seg ? ' has-seg' : ''}"><span class="opt-label">${esc(optName(o))}</span>${seg}</div>
+      return `<div class="head-row${seg ? ' has-seg' : ''}"><span class="opt-label" tabindex="-1">${esc(optName(o))}</span>${seg}</div>
         <div class="sum-line">${km(o.distance_km)} km · ${esc(t('dplus_inline', { m: Math.round(o.ascend_m) }))} · ≈ ${hm(o.time_est_min)}</div>
         <div class="figs">
           <div class="k">${esc(t('fig_distance'))}</div><div class="k">${esc(t('fig_dplus'))}<button type="button" class="qm" aria-expanded="false" aria-label="${esc(t('dplus_help_btn'))}" onclick="toggleDplusHelp(this)">?</button></div><div class="k">${esc(t('fig_duration'))}</div>

@@ -4330,6 +4330,8 @@ def compare_block(options: list) -> dict:
         out.setdefault(dur, {})[lvl] = {
             "score": o["score"], "lights_per_km": o["traffic_lights_per_km"], "exit_dense_km": ex,
             "urban_share": round(u["city"] + u["residential"], 2),
+            # 16/10/2026 : durée totale de la sortie depuis un départ voisin ou une gare (bloc « Autres façons de rouler »)
+            "min": o["time_est_min"], "km": o["distance_km"], "dplus": round(o["ascend_m"]),
             **({"exit_city_km": o["exit_city_km"]} if "exit_city_km" in o else {})}   # sortie mesurée par le bâti
     return out
 
