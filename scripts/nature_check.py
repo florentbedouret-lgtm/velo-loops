@@ -675,16 +675,18 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
             for k in list(v19) + ["collect_logs", "empty_logs"]:
                 if hasattr(g._TL, k):
                     delattr(g._TL, k)
-    elif variant in ("front", "rapide", "frontvoies", "frontvoiesd"):   # front de mer, voies rapides, + voies agréables
-        g._TL.seafront = variant in ("front", "frontvoies", "frontvoiesd")
+    elif variant in ("front", "rapide", "frontvoies", "frontvoiesd", "frontvoiesw"):   # front de mer, voies rapides, …
+        g._TL.seafront = variant in ("front", "frontvoies", "frontvoiesd", "frontvoiesw")
         g._TL.motorway = variant == "rapide"
-        g._TL.scenic_retouch = variant in ("frontvoies", "frontvoiesd")
-        g._TL.scenic_dense = variant == "frontvoiesd"            # points serrés et orientés (SCENIC_DENSE)
+        g._TL.scenic_retouch = variant in ("frontvoies", "frontvoiesd", "frontvoiesw")
+        g._TL.scenic_dense = variant in ("frontvoiesd", "frontvoiesw")    # points serrés et orientés (SCENIC_DENSE)
+        g._TL.scenic_windows = variant == "frontvoiesw"                    # portions de ~2 km (SCENIC_WINDOWS)
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.seafront
         del g._TL.motorway
         del g._TL.scenic_retouch
         del g._TL.scenic_dense
+        del g._TL.scenic_windows
     elif variant in ("voies", "mer80", "voies80"):           # voies agréables et / ou bord d'eau à 80 m en ville (essais)
         g._TL.scenic_retouch = variant in ("voies", "voies80")
         g._TL.water_city_near = variant in ("mer80", "voies80")

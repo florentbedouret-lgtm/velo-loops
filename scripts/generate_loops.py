@@ -184,6 +184,11 @@ SCENIC_WAYS = None               # STRtree des voies agréables, chargé dans ma
 # points sans sens (1er essai).
 SCENIC_DENSE = False
 SCENIC_PICK_M = 500.0
+# Traçage m9 (15/10/2026) : avec les points serrés, la variante par tout le front de mer (6,4 km d'un bloc) note 49,2 contre
+# 55,8 : remplacer un si long tronçon coûte ailleurs ; le tracé de Florent ne changeait que la Barceloneta (54,2 contre 53,6).
+# SCENIC_WINDOWS : en plus du tronçon entier, des portions successives d'environ SCENIC_WINDOW_M. False : tronçon entier seul.
+SCENIC_WINDOWS = False
+SCENIC_WINDOW_M = 2000.0
 # Bord d'eau en ville (même diagnostic : le couloir de la B-10, à 150-200 m de la mer derrière les immeubles, comptait 49 %
 # de bord d'eau, la piste du front de mer 52 %). WATER_CITY_NEAR : en ville dense (bâti de la barre de terrain), un point
 # ne compte comme bord d'eau qu'à moins de WATER_CITY_DEG (~80 m) de l'eau ; hors ville, inchangé (~100 m ; une corniche
@@ -251,6 +256,11 @@ def bin_margin():
 def time_v19() -> bool:
     """Modèle de temps v19 (TIME_V19), réglable par fil d'exécution pour les diagnostics."""
     return bool(getattr(_TL, "time_v19", TIME_V19)) and DENSITY is not None
+
+
+def scenic_windows() -> bool:
+    """Voies agréables par portions (SCENIC_WINDOWS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "scenic_windows", SCENIC_WINDOWS))
 
 
 def scenic_dense() -> bool:
@@ -1131,7 +1141,19 @@ def scenic_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list
             detail.append(f"  voies agréables : boucle {bi + 1} ({base.score:.1f}, {base.distance_m / 1000:.1f} km) : "
                           f"{len(near) / 10:.1f} km à moins de {SCENIC_NEAR_M:.0f} m d'une voie agréable, {on / 10:.1f} km "
                           f"dessus, {len(runs)} tronçon(s) longé(s) d'au moins {SCENIC_RUN_M / 1000:g} km")
-        for n, run in enumerate(runs[:SCENIC_MAX_RUNS]):
+        trials = []
+        for run in runs[:SCENIC_MAX_RUNS]:
+            trials.append(run)
+            if scenic_windows() and cum[run[-1][0]] - cum[run[0][0]] >= 1.5 * SCENIC_WINDOW_M:
+                k = 0                                        # portions successives d'environ SCENIC_WINDOW_M
+                while k < len(run) - 1 and len(trials) < 10:
+                    j = k
+                    while j < len(run) - 1 and cum[run[j][0]] - cum[run[k][0]] < SCENIC_WINDOW_M:
+                        j += 1
+                    if cum[run[j][0]] - cum[run[k][0]] >= SCENIC_MIN_WAY_M:
+                        trials.append(run[k:j + 1])
+                    k = j + 1
+        for n, run in enumerate(trials):
             if scenic_dense():                               # un point tous les SCENIC_PICK_M, sens de la boucle
                 chosen, last_m = [], -1e9
                 for s_ in run:
@@ -3946,7 +3968,7 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
             [FALLBACK_RELIEF_TOL, FALLBACK_DIRT_TOL_KM],
             [LIGHTS_LATE_MIN, LIGHTS_LATE_MAX_MEAN, LIGHTS_LATE_TOL],
             [SCENIC_SEA_M, SCENIC_RIVER_M, SCENIC_NEAR_M, SCENIC_ON_M, SCENIC_RUN_M, SCENIC_MIN_WAY_M, SCENIC_TOP,
-             SCENIC_MAX_RUNS, SCENIC_DENSE, SCENIC_PICK_M],
+             SCENIC_MAX_RUNS, SCENIC_DENSE, SCENIC_PICK_M, SCENIC_WINDOWS, SCENIC_WINDOW_M],
             [CROSS_SEG_MAX, CROSS_SEG_MARGIN, CROSS_SEG_TIME],
             [SEAFRONT_DEG, SEAFRONT_PER_KM, SEAFRONT_MAX, MOTORWAY_DEG, MOTORWAY_PER_KM, MOTORWAY_MAX, MOTORWAY_RUN_M,
              MOTORWAY_TRUNK,
