@@ -36,6 +36,7 @@ def test_reglages_v17():
     assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
     assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
     assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
+    assert g.SEG_MULTI is False                        # tronçon par tronçon à plusieurs boucles, en essai
     assert g.SPATIAL_GRAFT is False                    # départs voisins greffés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.SPARE_RELIEF is False                     # repli de dernier recours et relief, en essai
@@ -487,3 +488,15 @@ def test_contiguous_bins_close_the_gaps():
         assert 72 <= g.bin_minutes(1.0)[1] <= 74 and abs(g.bin_minutes(1.5)[0] - g.bin_minutes(1.0)[1]) < 1e-6
     finally:
         del g._TL.contiguous_bins
+
+
+def test_best_disjoint_takes_the_best_segment_of_each_loop():
+    """Tronçon par tronçon à plusieurs boucles (SEG_MULTI) : de 1 à 2 le tronçon de B, de 2 à 3 celui de C ; un tronçon
+    de D qui chevauche les deux et rapporte moins n'est pas pris."""
+    B, C, D = [[0, 0]], [[1, 1]], [[2, 2]]
+    b12 = (10, 20, 0, 5, 0.0, 0.05, B)
+    c23 = (20, 30, 0, 5, 0.0, 0.04, C)
+    d13 = (12, 28, 0, 5, 0.0, 0.07, D)
+    chosen = g.best_disjoint([d13, c23, b12])
+    assert [x[6] for x in sorted(chosen, key=lambda x: x[0])] == [B, C]
+    assert g.best_disjoint([]) == []

@@ -649,68 +649,113 @@ def _cum_cache(l) -> list:
     return l._cum
 
 
-def segment_crossover(gh, level: str, duration_h: float, parents: list, log, detail=None) -> list:
-    """Boucles assemblées tronçon par tronçon (voir CROSS_SEGMENTS), à partir des boucles parents."""
+def seg_swaps(A, B) -> list:
+    """Tronçons où A s'écarte de B puis la rejoint (dans le même sens) et où le tronçon de B note nettement mieux
+    (CROSS_SEG_MARGIN) : [(a0, a1, b0, b1, écart de durée en s, gain, coords de B)] (indices dans A et dans B)."""
     import numpy as np
+    ca, cb = _cum_cache(A), _cum_cache(B)
+
+    def pick(cum):                                           # points tous les ~50 m
+        out, last = [], -1e9
+        for i, d in enumerate(cum):
+            if d - last >= 50.0:
+                out.append(i)
+                last = d
+        return out
+    pa, pb = pick(ca), pick(cb)
+    kx = 111320.0 * np.cos(np.radians(A.coords[0][1]))
+    xa = np.array([[A.coords[i][0] * kx, A.coords[i][1] * 110540.0] for i in pa])
+    xb = np.array([[B.coords[i][0] * kx, B.coords[i][1] * 110540.0] for i in pb])
+    d = np.hypot(xa[:, None, 0] - xb[None, :, 0], xa[:, None, 1] - xb[None, :, 1])
+    near = d.argmin(axis=1)
+    matched = d[np.arange(len(pa)), near] < CROSS_NEAR_M
+    if matched.sum() < 4 or matched.all():
+        return []
+    swaps, k = [], 0
+    while k < len(pa):                                       # entre deux points communs consécutifs
+        if matched[k]:
+            k += 1
+            continue
+        a0 = k - 1
+        while k < len(pa) and not matched[k]:
+            k += 1
+        if a0 < 0 or k >= len(pa):
+            continue
+        b0, b1 = int(near[a0]), int(near[k])
+        if b1 <= b0 + 1:
+            continue                                         # B ne fait pas le même chemin dans le même sens
+        ma0, ma1 = ca[pa[a0]], ca[pa[k]]
+        mb0, mb1 = cb[pb[b0]], cb[pb[b1]]
+        qa, qb = segment_quality(A, ma0, ma1), segment_quality(B, mb0, mb1)
+        if qb >= qa + CROSS_SEG_MARGIN:
+            dt = B.time_s * (mb1 - mb0) / max(cb[-1], 1.0) - A.time_s * (ma1 - ma0) / max(ca[-1], 1.0)
+            swaps.append((pa[a0], pa[k], pb[b0], pb[b1], dt, qb - qa, B.coords))
+    return swaps
+
+
+def fit_swaps(A, swaps: list, target_s: float):
+    """Échanges gardés pour tenir la durée (les moins utiles retirés d'abord) : (échanges triés, durée prévue) ou None."""
+    est = (A.time_s + sum(x[4] for x in swaps)) / target_s
+    if abs(est - 1.0) > CROSS_SEG_TIME:                      # trop long ou trop court : les meilleurs échanges seuls
+        swaps = sorted(swaps, key=lambda x: -x[5])
+        while swaps and abs((A.time_s + sum(x[4] for x in swaps)) / target_s - 1.0) > CROSS_SEG_TIME:
+            swaps.pop()
+        if not swaps:
+            return None
+        est = (A.time_s + sum(x[4] for x in swaps)) / target_s
+    return sorted(swaps, key=lambda x: x[0]), est
+
+
+def best_disjoint(cands: list) -> list:
+    """Échanges sans chevauchement sur la boucle de base, de gain total maximal (ordonnancement pondéré)."""
+    cands = sorted(cands, key=lambda x: x[1])
+    best = [(0.0, [])]                                       # best[k] : meilleur choix parmi les k premiers
+    for k, c in enumerate(cands):
+        j = k
+        while j > 0 and cands[j - 1][1] > c[0]:              # dernier échange qui finit avant le début de c
+            j -= 1
+        take = (best[j][0] + c[5], best[j][1] + [c])
+        best.append(max(best[k], take, key=lambda t: t[0]))
+    return best[-1][1]
+
+
+def seg_multi() -> bool:
+    """Tronçon par tronçon à plusieurs boucles (SEG_MULTI), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "seg_multi", SEG_MULTI))
+
+
+def segment_crossover(gh, level: str, duration_h: float, parents: list, log, detail=None) -> list:
+    """Boucles assemblées tronçon par tronçon (voir CROSS_SEGMENTS ; à plusieurs boucles avec SEG_MULTI), à partir des
+    boucles parents (celles du départ, des durées voisines et des départs voisins)."""
     target_s = duration_h * 3600.0
     plans = []
-    for ai, A in enumerate(parents):
+    for ai, A in enumerate(parents):                         # deux boucles : la mieux classée sert de base
         for B in parents[ai + 1:]:
-            ca, cb = _cum_cache(A), _cum_cache(B)
-            # points de A et de B tous les ~50 m
-            def pick(c, cum):
-                out, last = [], -1e9
-                for i, d in enumerate(cum):
-                    if d - last >= 50.0:
-                        out.append(i)
-                        last = d
-                return out
-            pa, pb = pick(A.coords, ca), pick(B.coords, cb)
-            kx = 111320.0 * np.cos(np.radians(A.coords[0][1]))
-            xa = np.array([[A.coords[i][0] * kx, A.coords[i][1] * 110540.0] for i in pa])
-            xb = np.array([[B.coords[i][0] * kx, B.coords[i][1] * 110540.0] for i in pb])
-            d = np.hypot(xa[:, None, 0] - xb[None, :, 0], xa[:, None, 1] - xb[None, :, 1])
-            near = d.argmin(axis=1)
-            matched = d[np.arange(len(pa)), near] < CROSS_NEAR_M
-            if matched.sum() < 4 or matched.all():
-                continue
-            # tronçons où A s'écarte de B : entre deux points communs consécutifs
-            swaps, k = [], 0
-            while k < len(pa):
-                if matched[k]:
-                    k += 1
-                    continue
-                a0 = k - 1
-                while k < len(pa) and not matched[k]:
-                    k += 1
-                if a0 < 0 or k >= len(pa):
-                    continue
-                b0, b1 = int(near[a0]), int(near[k])
-                if b1 <= b0 + 1:
-                    continue                                 # B ne fait pas le même chemin dans le même sens
-                ma0, ma1 = ca[pa[a0]], ca[pa[k]]
-                mb0, mb1 = cb[pb[b0]], cb[pb[b1]]
-                qa, qb = segment_quality(A, ma0, ma1), segment_quality(B, mb0, mb1)
-                if qb >= qa + CROSS_SEG_MARGIN:
-                    dt = B.time_s * (mb1 - mb0) / max(cb[-1], 1.0) - A.time_s * (ma1 - ma0) / max(ca[-1], 1.0)
-                    swaps.append((pa[a0], pa[k], pb[b0], pb[b1], dt, qb - qa))
-            if not swaps:
-                continue
-            est = (A.time_s + sum(s[4] for s in swaps)) / target_s
-            if abs(est - 1.0) > CROSS_SEG_TIME:                # trop long ou trop court : les meilleurs échanges seuls
-                swaps = sorted(swaps, key=lambda s: -s[5])
-                while swaps and abs((A.time_s + sum(s[4] for s in swaps)) / target_s - 1.0) > CROSS_SEG_TIME:
-                    swaps.pop()
-                if not swaps:
-                    continue
-                est = (A.time_s + sum(s[4] for s in swaps)) / target_s
-            plans.append((sum(s[5] for s in swaps), A, B, sorted(swaps), est))
+            fit = fit_swaps(A, seg_swaps(A, B), target_s)
+            if fit is not None:
+                plans.append((sum(x[5] for x in fit[0]), A, 1, fit[0], fit[1]))
     plans.sort(key=lambda p: -p[0])
+    plans = plans[:CROSS_SEG_MAX]
+    if seg_multi():                                          # plusieurs boucles : chaque tronçon, le meilleur de toutes
+        bases = []
+        for l in sorted(parents, key=lambda x: x.score, reverse=True):
+            if all(similarity(l, b) < 0.8 for b in bases):
+                bases.append(l)
+            if len(bases) >= SEG_MULTI_BASES:
+                break
+        for A in bases:
+            cands = [x for B in parents if B is not A for x in seg_swaps(A, B)]
+            chosen = best_disjoint(cands)
+            if len({id(x[6]) for x in chosen}) < 2:
+                continue                                     # un seul donneur : déjà essayé avec les paires
+            fit = fit_swaps(A, chosen, target_s)
+            if fit is not None and len({id(x[6]) for x in fit[0]}) >= 2:
+                plans.append((sum(x[5] for x in fit[0]), A, len({id(x[6]) for x in fit[0]}), fit[0], fit[1]))
     found = []
-    for n, (gain, A, B, swaps, est) in enumerate(plans[:CROSS_SEG_MAX]):
+    for n, (gain, A, donors, swaps, est) in enumerate(plans):
         coords, cur = [], 0
-        for a0, a1, b0, b1, _, _ in swaps:
-            coords += A.coords[cur:a0] + B.coords[b0:b1 + 1]
+        for a0, a1, b0, b1, _, _, bc in swaps:
+            coords += A.coords[cur:a0] + bc[b0:b1 + 1]
             cur = a1 + 1
         coords += A.coords[cur:]
         way = route_waypoints(coords)
@@ -722,10 +767,11 @@ def segment_crossover(gh, level: str, duration_h: float, parents: list, log, det
         if ok:
             found.append(loop)
         if detail is not None:
-            detail.append(f"  tronçons {A.score:.1f} + {B.score:.1f} ({len(swaps)} échange(s), durée prévue {est:.2f}) -> "
+            detail.append(f"  tronçons {A.score:.1f} + {donors} boucle(s) ({len(swaps)} échange(s), gain {gain:.2f}, "
+                          f"durée prévue {est:.2f}) -> "
                           + ("pas d'itinéraire" if loop is None else f"note {loop.score:.1f}, {loop.time_s / 60:.0f} min")
                           + (" : valide" if ok else " : rejeté"))
-    log(f"    croisements tronçon par tronçon : {len(found)} valide(s) sur {min(len(plans), CROSS_SEG_MAX)} essai(s)")
+    log(f"    croisements tronçon par tronçon : {len(found)} valide(s) sur {len(plans)} essai(s)")
     return found
 
 
@@ -901,6 +947,14 @@ CROSS_SEGMENTS = False
 SCENIC_AREAS = False
 SCENIC_PROFILES = ("calm", "sport", "calm_flat")
 CROSS_SEG_MAX = 8
+# Tronçon par tronçon à plusieurs boucles (Florent, 15/10/2026 : A et B se croisent en 1, 2 et 3, B est meilleure de 1 à 2,
+# A de 2 à 3 : A doit prendre le tronçon 1-2 de B et garder le reste ; et si une 3e boucle C est meilleure de 2 à 3, la
+# prendre aussi). Le croisement par paires ne combinait que deux boucles. SEG_MULTI : pour chacune des SEG_MULTI_BASES
+# meilleures boucles (de ce départ ou d'un départ voisin), chaque tronçon où elle s'écarte d'une autre boucle est remplacé
+# par le meilleur tronçon parmi toutes les autres (échanges sans chevauchement, gain total maximal), si la durée tient.
+# False : par paires seulement.
+SEG_MULTI = False
+SEG_MULTI_BASES = 3
 CROSS_SEG_MARGIN = 0.03          # un tronçon remplace l'autre s'il note au moins 3 points de mieux (sur 100)
 CROSS_SEG_TIME = 0.12
 CROSS_SPATIAL_KM = 3.0
@@ -4258,12 +4312,14 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
-             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT],
+             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
+             SEG_MULTI],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
             [BACKTRACK_MAX_SHARE],
             [SPATIAL_GRAFT, GRAFT_TIME_TOL],
+            [SEG_MULTI, SEG_MULTI_BASES],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],

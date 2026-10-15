@@ -747,6 +747,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.plus_relief = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.plus_relief
+    elif variant == "spatialgs":                          # départs voisins greffés + tronçon par tronçon à plusieurs
+        g._TL.cross_spatial = g._TL.spatial_graft = g._TL.cross_segments = g._TL.seg_multi = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        for k in ("cross_spatial", "spatial_graft", "cross_segments", "seg_multi"):
+            delattr(g._TL, k)
     elif variant in ("spatial", "spatiald", "spatialg"):   # départs voisins (essai), durée inférieure (d), greffés (g)
         g._TL.cross_spatial = True
         g._TL.spatial_shorter = variant == "spatiald"
