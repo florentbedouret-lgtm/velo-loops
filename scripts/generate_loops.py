@@ -146,7 +146,10 @@ _TL = threading.local()          # réglage par fil d'exécution (diagnostics qu
 # (choix de Florent, 14/10/2026 : ne pas calquer sa prudence, rester prudent). Tranquille et Sportif : estimations, sans
 # sortie pour les confirmer. Effet : Eixample 2 h « plus de relief » 106 min à 25 km/h, 102 à 30. False : modèle v18.
 TIME_V19 = False
-CLIMB_POWER_BONUS = 0.5          # puissance × 1,5 à CLIMB_POWER_FULL_GRADE et au-delà
+CLIMB_POWER_BONUS = 0.3          # puissance × 1,3 à CLIMB_POWER_FULL_GRADE et au-delà, soit ~90 % de la FTP (choix de
+#                                 Florent, 15/10/2026) : +50 % au 1er réglage (presque la FTP, intenable sur les longues
+#                                 montées de montagne : boucles estimées trop courtes, qui sortaient de leur durée) ; avec
+#                                 +30 % et la descente à 28 km/h, écart sur les 3 sorties −1 %, −1 %, 0 %
 CLIMB_POWER_FULL_GRADE = 0.06
 DESCENT_CAP_KMH = {"facile": 22.0, "modere": 28.0, "soutenu": 32.0}   # sous −2 %
 DENSITY_SLOWDOWN = 0.19          # ralentissement maximal en roulant, atteint à DENSITY_FULL carrefours dans le carré
@@ -3683,6 +3686,10 @@ def pick_options(pool: list[Loop], avoid: list | None = None) -> list[tuple[str,
                     and secondary_ok(l, best)]
         if rest:
             hilly = max(rest, key=lambda l: l.dplus_per_km)
+            if plus_relief_rules():                          # la mieux notée des nettement plus vallonnées (Florent, 15/10)
+                hillier = [l for l in rest if l.dplus_per_km >= best.dplus_per_km + 3.0]
+                if hillier:
+                    hilly = max(hillier, key=plus_relief_score)
             if hilly.dplus_per_km >= best.dplus_per_km + 3.0:
                 chosen.append(("plus_de_relief", hilly))
     if len(chosen) == 1 and len(pool) > 1:      # pas de contraste de relief : on propose une variante

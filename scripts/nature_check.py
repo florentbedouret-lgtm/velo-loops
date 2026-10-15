@@ -664,7 +664,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
     g._TL.trace_phase = "variante"
     if variant == "v19all":                                # mesure combinée v19 (docs/v19_proposition.md)
         v19 = {"time_v19": True, "fallback_best": True, "cross_segments": True, "lights_late": True,
-               "scenic_retouch": True, "water_city_near": True, "seafront": True, "previous_step": 500.0}
+               "scenic_retouch": True, "water_city_near": True, "seafront": True, "previous_step": 500.0,
+               # ajouts du 15/10/2026 (choix de Florent) : voies rapides v3, reclassement, « plus de relief », grands axes,
+               # points serrés des voies agréables
+               "motorway": True, "previous_any": True, "plus_relief": True, "axis_bypass": True, "scenic_dense": True}
         for k, v in v19.items():
             setattr(g._TL, k, v)
         try:
