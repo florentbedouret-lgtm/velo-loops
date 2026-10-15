@@ -102,7 +102,9 @@ RELIEF_LIMITS_V18_SOFT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profil
 # relief dépasse RELIEF_HARD (Tranquille : montée de catégorie 1 ou HC, ou rampe de 25 % ou plus : on pousse le vélo).
 # False : réserve publiée telle quelle (production v18).
 SPARE_RELIEF = False
-RELIEF_HARD = {"facile": {"banned_cats": ("1", "HC"), "max_grade": 25.0}}
+# 1re mesure (16/10/2026) : 10 durées Tranquille retirées, 18 replis annoncés, Modéré et Sportif inchangés ; des replis
+# restaient très durs (el Coll 1 h : 54 m/km) : plafond de relief moyen à 25 m/km (choix de Florent).
+RELIEF_HARD = {"facile": {"banned_cats": ("1", "HC"), "max_grade": 25.0, "max_dpk": 25.0}}
 RELIEF_OVER_PENALTY = 0.02       # 2 points de note par m/km au-dessus de la cible (pen_per dans RELIEF_LIMITS pour changer)
 RELIEF_OVER_MAX = 0.20
 CLIMB_LEVELS = ("soutenu",)
@@ -2687,6 +2689,8 @@ def relief_hard_ok(l) -> bool:
         return True
     if any(c.get("category") in hard["banned_cats"] for c in l.terrain.get("climbs", [])):
         return False
+    if hard.get("max_dpk") is not None and l.dplus_per_km > hard["max_dpk"]:
+        return False
     return (l.terrain.get("max_grade_pct") or 0.0) < hard["max_grade"]
 
 
@@ -2721,7 +2725,8 @@ def relief_filter(pool: list, level: str, log) -> list:
         flat = max((l for l in pool if l.dplus_per_km <= flat.dplus_per_km + FALLBACK_RELIEF_TOL), key=lambda l: l.score)
     if not relief_hard_ok(flat):                            # même le repli n'est pas faisable à cette allure (B)
         log(f"    relief : aucune boucle faisable ({level}) : la moins vallonnée ({flat.dplus_per_km:.1f} m/km) a une "
-            f"montée trop dure ou une rampe de {flat.terrain.get('max_grade_pct') or 0:.0f} %, durée non proposée")
+            f"montée trop dure, une rampe de {flat.terrain.get('max_grade_pct') or 0:.0f} % ou un relief trop fort, "
+            "durée non proposée")
         return []
     flat.relief_fallback = True
     log(f"    relief : aucune boucle conforme ({level}), la moins vallonnée gardée ({flat.dplus_per_km:.1f} m/km)")
