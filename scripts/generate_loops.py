@@ -584,10 +584,10 @@ def foot_backtrack() -> bool:
 
 
 def foot_edges(det, n) -> list:
-    """Par tronçon : True si on ne peut pas y rouler (escalier, chemin piéton ou zone piétonne sans accès vélo)."""
+    """Par tronçon : True si on ne peut pas y rouler (escalier, chemin piéton sans accès vélo ; les zones piétonnes,
+    places et esplanades, restent roulables : château de Montjuïc, Florent, 16/10/2026)."""
     rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
-    return [rc[i] == "steps" or (rc[i] in ("footway", "pedestrian") and ba[i] not in ("yes", "designated"))
-            for i in range(n)]
+    return [rc[i] == "steps" or (rc[i] == "footway" and ba[i] not in ("yes", "designated")) for i in range(n)]
 
 
 def corridor_overlap() -> bool:
@@ -1081,6 +1081,9 @@ BACKTRACK_CLIMB_M = 40.0
 # FOOT_BACKTRACK_MAX_M de chemin piéton, de zone piétonne ou d'escalier sans accès vélo n'est jamais utile (lieu compris) :
 # il est pénalisé et retiré comme tout éperon injustifié ; le lieu reste compté par le passage le plus proche
 # (remarkable_passed, à moins de 130 m du tracé). False : un lieu justifie l'aller-retour quel que soit le chemin.
+# 2e version (1re mesure du 16/10/2026 : 40 recommandées moins bonnes, 7 meilleures ; le château de Montjuïc, où Florent
+# roule jusqu'à l'esplanade, perdait tout son aller-retour) : les zones piétonnes (places, esplanades) restent roulables,
+# et seule la fin à pied est retirée quand le reste de l'aller-retour est utile (le lieu à moins de 130 m de son bout).
 FOOT_BACKTRACK = False
 FOOT_BACKTRACK_MAX_M = 50.0
 BACKTRACK_SHARE = 0.6
@@ -3561,7 +3564,16 @@ def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None, foot
             continue
         if rules:
             if backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot) is None:
-                out.append({"km": None, "m": round(s["m"]), "a": s["a"], "b": s["b"],
+                a, b, m = s["a"], s["b"], s["m"]
+                if foot is not None and foot_backtrack():   # seule la fin à pied est retirée si le reste est utile
+                    walk = [i for i in range(a, min(b, len(foot))) if foot[i]]
+                    w_in, w_out = [i for i in walk if i < s["t"]], [i for i in walk if i >= s["t"]]
+                    if (w_in and w_out and w_in[0] > a + 1 and w_out[-1] + 2 < b
+                            and backtrack_useful(coords, a, w_in[0], level, cyc, unp, w_in[0], foot) is not None):
+                        a, b = w_in[0], w_out[-1] + 1
+                        m = sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
+                                for i in range(a, b))
+                out.append({"km": None, "m": round(m), "a": a, "b": b,
                             "lon": round(coords[s["t"]][0], 5), "lat": round(coords[s["t"]][1], 5)})
             continue
         seg = coords[s["a"]:s["t"] + 1]
