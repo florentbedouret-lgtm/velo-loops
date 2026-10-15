@@ -289,8 +289,9 @@ def axis_candidates(gh, st, level, duration_h, pool, log, detail=None) -> list:
     found = []
     for bi, base in enumerate(bases):
         seq = base.road_seq or ""
-        lc = ((base.scenery or {}).get("landcover") or {}).get("cls")
-        city = landcover_seq(lc) if lc else "v" * len(seq)
+        # « en ville » : densité urbaine de GraphHopper, ville ou résidentiel (15/10/2026 : la barre de terrain classait
+        # Vallcarca en espace ouvert, le raccourci de Gràcia n'était pas essayé) ; jamais la campagne (BV-1468)
+        city = (getattr(base, "urban_seq", "") or "").replace("r", "v") or "v" * len(seq)
         runs, k = [], 0                                      # tronçons de grand axe (tranches de 100 m) en ville
         while k < len(seq):
             if seq[k] != "m":
@@ -2363,6 +2364,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.steep_dirt_km = sum(1 for k in range(n_) if loop.surface_seq[k] in "up"
                                  and abs(prof[k + 1] - prof[k]) / ds >= STEEP_DIRT_GRADE) * ds / 1000.0
     loop.road_seq = surface_seq(road_edges(det, len(cum) - 1), cum)
+    # densité urbaine de GraphHopper tous les 100 m (v ville, r résidentiel, o campagne) : grands axes à contourner
+    loop.urban_seq = surface_seq([{"city": "v", "residential": "r"}.get(str(u).lower(), "o") for u in ud_e], cum)
     loop.signal_m = signal_m                                 # positions des feux (croisement tronçon par tronçon)
     loop.doubt_ways = doubt_ways(det, coords, cum)
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
