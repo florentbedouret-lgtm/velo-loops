@@ -510,16 +510,61 @@
     // peek = réglages ouverts (nom et chiffres seulement) ; low = replié (chiffres + GPX) ; mid = mi-hauteur ; high = ouvert
     function sheetHeights() {
       const H = window.innerHeight;
-      return { peek: 128, low: Math.min(250, Math.round(H * 0.45)), mid: Math.min(560, Math.round(H * 0.68)), high: H - 120 };
+      // replié : au moins ce que montrent l'en-tête (nom, chiffres, alerte routes principales) et le pied (GPX), plus le
+      // haut de la barre de terrain (15/10/2026 : à 250 px fixes, le bouton GPX était coupé de ~36 px sous l'alerte)
+      const grip = document.getElementById('grip');
+      const need = sheet.dataset.state === 'low' && grip ? grip.offsetHeight + sheetFoot.offsetHeight + 28 : 250;
+      return { peek: 128, low: Math.min(Math.max(250, need), Math.round(H * 0.55)), mid: Math.min(560, Math.round(H * 0.68)),
+               high: H - 120 };
     }
     function setSheetHeight(h) {
       sheet.style.height = h + 'px';
       document.documentElement.style.setProperty('--sheet-h', (sheet.hidden ? 0 : h) + 'px');
     }
+    // essai (audit du 15/10/2026, à tester par Florent avec ?glisse dans l'adresse) : pendant le geste et l'animation, le
+    // panneau GLISSE (transform, sans recalcul de la page) au lieu de changer de hauteur à chaque image ; la hauteur n'est
+    // changée qu'une fois, à l'arrêt. Le pied (bouton GPX) reste au bas de l'écran. Sans ?glisse : comportement habituel.
+    const SHEET_GLIDE = (() => {
+      try {
+        if (new URLSearchParams(location.search).has('glisse')) sessionStorage.setItem('oyan-glisse', '1');
+        return sessionStorage.getItem('oyan-glisse') === '1';
+      } catch (e) { return new URLSearchParams(location.search).has('glisse'); }
+    })();
+    let glideH = 0, glideTimer = null;                      // hauteur visible du panneau (mode ?glisse)
+    function glideShow(full, vis) {                         // panneau de hauteur full, dont vis px sont visibles
+      const dy = Math.max(0, full - vis);
+      sheet.style.transform = dy ? 'translateY(' + dy + 'px)' : '';
+      sheetFoot.style.transform = dy ? 'translateY(' + (-dy) + 'px)' : '';
+      glideH = vis;
+    }
+    function glideSettle(h) {                               // à l'arrêt : vraie hauteur, sans décalage
+      clearTimeout(glideTimer);                             // une animation en cours ne doit pas l'écraser ensuite
+      sheet.style.transition = 'none';
+      sheetFoot.style.transition = 'none';
+      setSheetHeight(h);
+      glideShow(h, h);
+    }
+    function glideTo(target) {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const cur = glideH || sheet.getBoundingClientRect().height;
+      clearTimeout(glideTimer);
+      if (reduce || sheet.hidden || Math.abs(cur - target) < 1) { glideSettle(target); return; }
+      const full = Math.max(cur, target);
+      sheet.style.transition = 'none';
+      sheetFoot.style.transition = 'none';
+      sheet.style.height = full + 'px';
+      glideShow(full, cur);
+      void sheet.offsetHeight;                              // point de départ appliqué avant l'animation
+      sheet.style.transition = 'transform 300ms var(--ease-drawer)';
+      sheetFoot.style.transition = 'transform 300ms var(--ease-drawer)';
+      glideShow(full, target);
+      document.documentElement.style.setProperty('--sheet-h', target + 'px');
+      glideTimer = setTimeout(() => glideSettle(target), 320);
+    }
     function setSheet(state) {
       sheet.dataset.state = state;
       document.documentElement.dataset.sheet = state;
-      setSheetHeight(sheetHeights()[state]);
+      if (SHEET_GLIDE) glideTo(sheetHeights()[state]); else setSheetHeight(sheetHeights()[state]);
       if (state !== 'peek' && topCard.classList.contains('open')) setSettings(false);
       if (state === 'low' || state === 'mid') sheetBody.scrollTop = 0;
       fitRoute();                                           // brief v2 : recadrer à chaque changement de cran
@@ -541,20 +586,31 @@
       let drag = null, justDragged = false;
       grip.addEventListener('pointerdown', e => {
         if (e.target.closest('button') || !startData) return;  // pastilles = boutons ; sans départ, rien à ouvrir
-        drag = { y: e.clientY, h: sheet.getBoundingClientRect().height, moved: false, t: Date.now(), pts: [[Date.now(), e.clientY]] };
+        drag = { y: e.clientY, h: SHEET_GLIDE && glideH ? glideH : sheet.getBoundingClientRect().height, moved: false,
+                 t: Date.now(), pts: [[Date.now(), e.clientY]] };
         grip.setPointerCapture(e.pointerId);                   // le doigt peut sortir de l'en-tête sans perdre le panneau
       });
       grip.addEventListener('pointermove', e => {
         if (!drag) return;
         const dy = drag.y - e.clientY;
         if (!drag.moved && Math.abs(dy) < 6) return;
-        if (!drag.moved) { drag.moved = true; sheet.style.transition = 'none'; }
+        if (!drag.moved) {
+          drag.moved = true;
+          sheet.style.transition = 'none';
+          if (SHEET_GLIDE) {                                   // une seule mise en page : pleine hauteur, puis glissement
+            clearTimeout(glideTimer);
+            sheetFoot.style.transition = 'none';
+            sheet.style.height = sheetHeights().high + 'px';
+            glideShow(sheetHeights().high, drag.h);
+          }
+        }
         const hs = sheetHeights(), raw = drag.h + dy;
         drag.pts.push([Date.now(), e.clientY]);
         if (drag.pts.length > 6) drag.pts.shift();
         // au-delà des butées, la feuille résiste au lieu de s'arrêter net (Emil Kowalski : friction, pas de mur)
         const rub = x => Math.sign(x) * 40 * (1 - Math.exp(-Math.abs(x) / 120));
-        setSheetHeight(raw > hs.high ? hs.high + rub(raw - hs.high) : raw < hs.peek ? hs.peek + rub(raw - hs.peek) : raw);
+        const vis = raw > hs.high ? hs.high + rub(raw - hs.high) : raw < hs.peek ? hs.peek + rub(raw - hs.peek) : raw;
+        if (SHEET_GLIDE) glideShow(hs.high, Math.min(hs.high, vis)); else setSheetHeight(vis);
       });
       const end = e => {
         if (!drag) return;
@@ -562,7 +618,7 @@
         sheet.style.transition = '';
         if (!d.moved) return;
         justDragged = true; setTimeout(() => { justDragged = false; }, 0);
-        const hs = sheetHeights(), h = sheet.getBoundingClientRect().height;
+        const hs = sheetHeights(), h = SHEET_GLIDE ? glideH : sheet.getBoundingClientRect().height;
         const p0 = d.pts.find(p => Date.now() - p[0] <= 120) || d.pts[d.pts.length - 1];   // vitesse des 120 dernières ms
         const v = (p0[1] - e.clientY) / Math.max(1, Date.now() - p0[0]);      // px/ms, positif vers le haut
         const order = ['low', 'mid', 'high'];
@@ -582,7 +638,10 @@
         setSheet(next);
         fitRoute();
       });
-      window.addEventListener('resize', () => { if (!sheet.hidden) setSheetHeight(sheetHeights()[sheet.dataset.state]); });
+      window.addEventListener('resize', () => {
+        if (sheet.hidden) return;
+        if (SHEET_GLIDE) glideSettle(sheetHeights()[sheet.dataset.state]); else setSheetHeight(sheetHeights()[sheet.dataset.state]);
+      });
     })();
 
     const map = new maplibregl.Map({
@@ -1584,6 +1643,10 @@
       sheetFoot.hidden = false;
       sheetBody.innerHTML = detailHtml(o);
       sheetBody.scrollTop = 0;
+      if (!sheet.hidden && sheet.dataset.state === 'low') {   // replié : hauteur selon le contenu affiché (GPX jamais coupé)
+        const hLow = sheetHeights().low;
+        if (SHEET_GLIDE) glideSettle(hLow); else setSheetHeight(hLow);
+      }
       map.getSource('cursor').setData(EMPTY);
       const pf = sheetBody.querySelector('svg.pf');
       if (pf) bindProfile(pf, pos => map.getSource('cursor').setData(pos
