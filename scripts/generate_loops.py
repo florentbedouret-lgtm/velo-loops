@@ -573,6 +573,22 @@ def backtrack_rules() -> bool:
     return bool(getattr(_TL, "backtrack_rules", BACKTRACK_RULES))
 
 
+def backtrack_long() -> bool:
+    """Allers-retours longs annoncés et pénalisés (BACKTRACK_LONG), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "backtrack_long", BACKTRACK_LONG))
+
+
+def long_backtrack(l):
+    """Le plus long aller-retour utile de la boucle s'il dépasse BACKTRACK_LONG_SHARE du parcours : (part, aller-retour),
+    sinon None."""
+    bts = getattr(l, "backtracks", None) or []
+    if not bts or not l.distance_m:
+        return None
+    b = max(bts, key=lambda x: x["m"])
+    share = b["m"] / l.distance_m
+    return (share, b) if share > BACKTRACK_LONG_SHARE else None
+
+
 def backtrack_max_share():
     """Plafond des allers-retours utiles (BACKTRACK_MAX_SHARE), réglable par fil d'exécution."""
     return getattr(_TL, "backtrack_max_share", BACKTRACK_MAX_SHARE)
@@ -1096,6 +1112,17 @@ BACKTRACK_PLEASANT_MIN_M = 1000.0
 # un éperon). None : pas de plafond (production v18).
 BACKTRACK_MAX_SHARE = None
 BACKTRACK_MAX_SHARE_TRIAL = 0.20
+# Mesure du plafond (16/10/2026, 16 départs) : 30 -> 0 longs allers-retours, mais 37 recommandées moins bonnes et 2 durées
+# perdues (Sant Martí 1 h Tranquille 55 -> 39, Bescanó 45 min 87 -> 57) : ces allers-retours longent souvent de beaux
+# endroits ; le vrai défaut est qu'ils ne sont pas annoncés (choix de Florent : annoncer et pénaliser, pas interdire).
+# BACKTRACK_LONG : un aller-retour utile de plus de BACKTRACK_LONG_SHARE du parcours est annoncé dans l'app
+# (long_backtrack) et coûte BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER par part au-delà (au plus BACKTRACK_LONG_MAX) :
+# à qualité proche une vraie boucle passe devant, une boucle bien plus belle reste. False : gratuit et non annoncé.
+BACKTRACK_LONG = False
+BACKTRACK_LONG_SHARE = 0.25
+BACKTRACK_LONG_PEN = 0.03
+BACKTRACK_LONG_PEN_PER = 0.20
+BACKTRACK_LONG_MAX = 0.12
 # relecture de Florent (09/10/2026, 29 cas : lieux 6/6 utiles, belvédères 5/6, relief 1 utile et 4 « demi-tour soudain »,
 # nature 1/6, piste 3/6) : (1) jamais sur un chemin de terre ou de gravier (« galérer sur un chemin de terre pour qu'on
 # me dise de revenir sur mes pas »), sauf pour atteindre un lieu remarquable ; (2) un demi-tour se fait à un endroit
@@ -2616,6 +2643,10 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         total += min(SEAFRONT_MAX, SEAFRONT_PER_KM * getattr(l, "seafront_km", 0.0))
     if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
         total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
+    if backtrack_long():                                  # long aller-retour annoncé, plus gratuit (BACKTRACK_LONG)
+        lb = long_backtrack(l)
+        if lb is not None:
+            total -= min(BACKTRACK_LONG_MAX, BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER * (lb[0] - BACKTRACK_LONG_SHARE))
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
     if detour_score() and getattr(l, "detours", None):    # détours inutiles restants (DETOUR_SCORE, v18)
@@ -4182,6 +4213,8 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
         **({"kept": True} if l.seed >= 2000 else {}),             # boucle de la version précédente (KEEP_PREVIOUS)
         **({"spurs": len(l.spurs)} if l.spurs else {}),
         **({"backtracks": l.backtracks} if getattr(l, "backtracks", None) else {}),   # allers-retours jugés utiles (v17)
+        **({"long_backtrack": {"km": round(long_backtrack(l)[1]["m"] / 2000.0, 1), "why": long_backtrack(l)[1]["why"]}}
+           if backtrack_long() and long_backtrack(l) is not None else {}),       # annoncé dans l'app (BACKTRACK_LONG)
         **({"shortened": True} if getattr(l, "shortened", False) else {}),   # retouche raccourcie (RETOUCH_SHORTEN, v17)           # éperons injustifiés restants (SPUR_FIX)
         **({"remarkable": l.remarkable} if l.remarkable else {}),  # lieux remarquables traversés (appli, GPX)
         **({"views_passed": l.views_passed} if l.views_passed else {}),   # belvédères devant lesquels on passe
@@ -4325,13 +4358,14 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
              CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
-             SEG_MULTI],
+             SEG_MULTI, BACKTRACK_LONG],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
             [BACKTRACK_MAX_SHARE],
             [SPATIAL_GRAFT, GRAFT_TIME_TOL],
             [SEG_MULTI, SEG_MULTI_BASES],
+            [BACKTRACK_LONG, BACKTRACK_LONG_SHARE, BACKTRACK_LONG_PEN, BACKTRACK_LONG_PEN_PER, BACKTRACK_LONG_MAX],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],

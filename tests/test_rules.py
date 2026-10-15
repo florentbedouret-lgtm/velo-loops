@@ -38,6 +38,7 @@ def test_reglages_v17():
     assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
     assert g.SEG_MULTI is False                        # tronçon par tronçon à plusieurs boucles, en essai
     assert g.SPATIAL_GRAFT is False                    # départs voisins greffés, en essai
+    assert g.BACKTRACK_LONG is False                   # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.SPARE_RELIEF is False                     # repli de dernier recours et relief, en essai
     assert g.FOOT_BACKTRACK is False                   # allers-retours à pied, en essai
