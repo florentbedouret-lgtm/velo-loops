@@ -406,6 +406,35 @@ def scenic_dense() -> bool:
     return bool(getattr(_TL, "scenic_dense", SCENIC_DENSE))
 
 
+def spatial_graft() -> bool:
+    """Départs voisins greffés (SPATIAL_GRAFT), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "spatial_graft", SPATIAL_GRAFT))
+
+
+def graft_way(home, coords, time_min: float, target_s: float):
+    """Points de passage d'une boucle voisine greffée à ce départ (SPATIAL_GRAFT), ou None si la durée estimée est trop
+    loin de la durée visée : (points, durée estimée en s, m d'approche)."""
+    cum = [0.0]
+    for a, b in zip(coords, coords[1:]):
+        cum.append(cum[-1] + haversine(a[0], a[1], b[0], b[1]))
+    tot = max(cum[-1], 1.0)
+    dist = [haversine(home[0], home[1], c[0], c[1]) for c in coords]
+    first = [i for i in range(len(coords)) if cum[i] <= 0.5 * tot]
+    second = [i for i in range(len(coords)) if cum[i] > 0.5 * tot]
+    if not first or not second:
+        return None
+    i = min(first, key=lambda k: dist[k])
+    j = min(second, key=lambda k: dist[k])
+    if j - i < 2:
+        return None
+    speed = tot / max(time_min * 60.0, 1.0)                  # m/s de la boucle voisine
+    approach = dist[i] + dist[j]
+    est = time_min * 60.0 * (cum[j] - cum[i]) / tot + 1.3 * approach / speed
+    if abs(est / target_s - 1.0) > GRAFT_TIME_TOL:
+        return None
+    return [home] + route_waypoints(coords[i:j + 1]) + [home], est, approach
+
+
 def spatial_shorter() -> bool:
     """Départs voisins : durée inférieure aussi (SPATIAL_SHORTER), réglable par fil d'exécution."""
     return bool(getattr(_TL, "spatial_shorter", SPATIAL_SHORTER))
@@ -730,12 +759,16 @@ def neighbour_loops(st, level: str, duration_h: float) -> list:
         wanted = [round(duration_h * 60)]
         if spatial_shorter() and duration_h in DURATION_SET and DURATION_SET.index(duration_h) > 0:
             wanted.append(round(DURATION_SET[DURATION_SET.index(duration_h) - 1] * 60))   # l'approche compense
+        if spatial_graft() and duration_h in DURATION_SET:   # greffe : durées voisines aussi (la durée estimée tranche)
+            i_d = DURATION_SET.index(duration_h)
+            wanted += [round(DURATION_SET[j] * 60) for j in (i_d - 1, i_d + 1)
+                       if 0 <= j < len(DURATION_SET) and round(DURATION_SET[j] * 60) not in wanted]
         for dm in wanted:
             opts = [o for o in data.get("options", []) if o.get("level") == level
                     and round(o.get("duration_target_min", 0)) == dm and o.get("coords")]
             for o in opts[:CROSS_SPATIAL_LOOPS]:
                 out.append((o.get("profile") or LEVELS[level]["profiles"][0], o["coords"], sid,
-                            f"{o.get('label', '')}, {dm} min"))
+                            f"{o.get('label', '')}, {dm} min", o.get("time_est_min") or dm))
     return out
 
 
@@ -876,6 +909,14 @@ CROSS_SPATIAL_LOOPS = 2
 # Traçage m8 (14/10/2026) : la boucle 1 h 30 de Horta, adaptée à Gràcia, note 64,0 (Gràcia seule : 59,7) mais dure 118 min
 # avec l'approche. SPATIAL_SHORTER : les boucles des départs voisins de la durée inférieure aussi (l'approche compense).
 SPATIAL_SHORTER = False
+# Greffe (approfondissement demandé par Florent, 15/10/2026) : la boucle voisine était reprise ENTIÈRE, plus l'aller et le
+# retour jusqu'à elle ; elle gardait donc sa propre sortie de ville (le tronçon proche de SON départ) en plus de la nôtre :
+# trop longue (Horta 1 h 30 adaptée à Gràcia : 118 min) ou répétée. SPATIAL_GRAFT : on rejoint la boucle voisine à son
+# point le plus proche de notre départ dans sa première moitié, on la quitte à son point le plus proche dans sa seconde
+# moitié (sa sortie de ville est remplacée par la nôtre) ; boucles voisines de la durée inférieure, de la même et de la
+# supérieure, gardées si la durée estimée est à GRAFT_TIME_TOL près. False : boucle voisine entière seulement.
+SPATIAL_GRAFT = False
+GRAFT_TIME_TOL = 0.25
 NEIGHBOUR_SRC = None             # adresse du site publié (ou dossier contenant web/data/), fixée au lancement
 _NEIGHBOUR_CACHE: dict = {}
 _NEIGHBOUR_LOCK = threading.Lock()
@@ -3722,12 +3763,22 @@ def crossover_candidates(gh, st, level, duration_h, pool, log, detail=None) -> l
     if cross_spatial():                                      # boucles des départs voisins, adaptées à ce départ
         home = [st["lon"], st["lat"]]
         det = detail if detail is not None else getattr(_TL, "trace_detail", None)
-        for n, (profile, coords, nsid, nlab) in enumerate(neighbour_loops(st, level, duration_h)):
-            k = min(range(len(coords)), key=lambda i: haversine(home[0], home[1], coords[i][0], coords[i][1]))
-            rot = coords[k:] + coords[1:k + 1]               # même boucle, commencée au point le plus proche du départ
-            way = [home] + route_waypoints(rot) + [home]
+        tries = []
+        for n, (profile, coords, nsid, nlab, ntime) in enumerate(neighbour_loops(st, level, duration_h)):
+            if round(ntime) and abs(ntime * 60.0 / target_s - 1.0) <= 0.15 + 1e-9 or not spatial_graft():
+                k = min(range(len(coords)), key=lambda i: haversine(home[0], home[1], coords[i][0], coords[i][1]))
+                rot = coords[k:] + coords[1:k + 1]           # même boucle, commencée au point le plus proche du départ
+                tries.append((profile, [home] + route_waypoints(rot) + [home], nsid, nlab, 3500 + n))
+            if spatial_graft():                              # greffe : la sortie de ville du voisin remplacée par la nôtre
+                gw = graft_way(home, coords, ntime, target_s)
+                if gw is not None:
+                    tries.append((profile, gw[0], nsid, f"{nlab}, greffée ({gw[2] / 1000:.1f} km d'approche, "
+                                  f"{gw[1] / 60:.0f} min prévues)", 3600 + n))
+                elif det is not None:
+                    det.append(f"  départ voisin {nsid} ({nlab}) greffé : durée estimée trop loin de la cible")
+        for profile, way, nsid, nlab, seed in tries:
             p = gh.via(way, profile, pass_through=True)
-            l = analyse(p, level, profile, duration_h, 3500 + n, None) if p else None
+            l = analyse(p, level, profile, duration_h, seed, None) if p else None
             if l is not None:
                 parents.append(l)
                 if (time_ok(l.time_s, duration_h) and overlap_ok(l) and l.u_turns <= MAX_UTURNS and dirt_ok(l)):
@@ -4207,11 +4258,12 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
-             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None],
+             CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
             [BACKTRACK_MAX_SHARE],
+            [SPATIAL_GRAFT, GRAFT_TIME_TOL],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],

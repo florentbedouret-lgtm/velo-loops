@@ -747,12 +747,14 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.plus_relief = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.plus_relief
-    elif variant in ("spatial", "spatiald"):               # départs voisins (essai), durée inférieure aussi (spatiald)
+    elif variant in ("spatial", "spatiald", "spatialg"):   # départs voisins (essai), durée inférieure (d), greffés (g)
         g._TL.cross_spatial = True
         g._TL.spatial_shorter = variant == "spatiald"
+        g._TL.spatial_graft = variant == "spatialg"
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.cross_spatial
         del g._TL.spatial_shorter
+        del g._TL.spatial_graft
     elif variant == "soft":                                # v18 : profil plat adouci (calm_flat_soft) seul
         b = relief_generate(gh, st_, sid, durations, levels, g.RELIEF_LIMITS_V18_SOFT)
     elif variant == "dscore":                              # v18 : détours restants comptés dans la note
