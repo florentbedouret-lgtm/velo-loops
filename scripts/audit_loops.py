@@ -33,8 +33,9 @@ CHECKS = {
     "terre_plus_1km": (1, "Plus de 1 km de terre sans repli annoncé"),
     "repetition": (1, "Plus de 25 % du parcours emprunté deux fois (hors aller-retour annoncé)"),
     "vitesse_implausible": (2, "Vitesse moyenne implicite hors de la plage plausible de l'allure"),
-    "demi_tours": (2, "Demi-tour(s) dans la boucle"),
-    "modere_tres_vallonne": (2, "Modéré recommandé au-dessus de 15 m/km"),
+    "demi_tours_hors_regle": (1, "Plus de 2 demi-tours (limite du calcul)"),
+    "demi_tours": (3, "1 ou 2 demi-tours (admis : impasses, retours utiles)"),
+    "modere_tres_vallonne": (3, "Modéré recommandé au-dessus de 15 m/km (pénalisé, pas interdit)"),
     "duree_manquante": (2, "Durée sans aucune boucle pour une allure"),
     "note_tres_basse": (3, "Boucle recommandée notée sous 25"),
     "feux_nombreux": (3, "Plus de 4 feux par km"),
@@ -67,8 +68,9 @@ def audit(site):
     n_opts, n_reco, stale, missing_files = 0, 0, [], []
     for e in starts:
         sid = e["id"]
-        if e.get("stale"):
+        if e.get("stale"):                                   # pas encore recalculé dans la version en cours : à part
             stale.append(sid)
+            continue
         d = data.get(sid)
         if d is None:
             missing_files.append(sid)
@@ -101,7 +103,9 @@ def audit(site):
                     lo, hi = SPEED_KMH[level]
                     if not lo <= v <= hi:
                         issues["vitesse_implausible"].append({"ou": ow, "lien": link, "valeur": f"{v:.1f} km/h"})
-                    if o.get("u_turns", 0) > 0:
+                    if o.get("u_turns", 0) > 2:
+                        issues["demi_tours_hors_regle"].append({"ou": ow, "lien": link, "valeur": f"{o['u_turns']}"})
+                    elif o.get("u_turns", 0) > 0:
                         issues["demi_tours"].append({"ou": ow, "lien": link, "valeur": f"{o['u_turns']}"})
                     if o.get("overlap", 0) > 0.25 and not o.get("out_and_back"):
                         issues["repetition"].append({"ou": ow, "lien": link, "valeur": f"{o['overlap']:.0%}"})
