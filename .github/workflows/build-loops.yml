@@ -308,7 +308,10 @@ jobs:
         run: |
           # revêtements « compactés » (08/10/2026, piste de la plage du Bogatell évitée comme de la terre) : carte seule
           if [ "$DIAG_PART" = "audit" ]; then         # revue de cohérence des boucles publiées (15/10/2026), sans GraphHopper
-            python scripts/audit_loops.py --site "https://florentbedouret-lgtm.github.io/velo-loops" --out data/audit
+            # comparaison avec la v16 complète (données du calcul du 08/10/2026, run 37795447304, gardées jusqu'au 22/10)
+            gh run download 37795447304 --repo "$GITHUB_REPOSITORY" -n loops-data -D data/v16 || echo "données v16 indisponibles"
+            CMP=""; [ -f data/v16/index.json ] && CMP="--compare data/v16"
+            python scripts/audit_loops.py --site "https://florentbedouret-lgtm.github.io/velo-loops" $CMP --out data/audit
             cat data/audit.md >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
