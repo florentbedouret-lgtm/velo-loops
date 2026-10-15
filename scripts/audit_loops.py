@@ -149,7 +149,7 @@ def audit(source, only=None):
                                  "longest_repeat_km": o.get("longest_repeat_km") or 0.0, "u_turns": o.get("u_turns", 0),
                                  "dirt_km": dirt, "score": o.get("score", 0.0), "exit_city_km": o.get("exit_city_km"),
                                  "max_grade": terr.get("max_grade_pct") or 0.0})
-                    if t and abs(t / dm - 1.0) > 0.15:
+                    if t and abs(t - dm) > 0.15 * dm + 1:              # 1 min de marge : durées publiées arrondies
                         add("duree_hors_tolerance", "", f"{t} min pour {dm}", o)
                     v = km / max(t / 60.0, 0.1)
                     if not SPEED_KMH[level][0] <= v <= SPEED_KMH[level][1]:
@@ -240,7 +240,8 @@ def report(res, out, prev=None):
     L = [f"# Revue de cohérence des boucles publiées (v{res['generator_version']})", "",
          f"{res['starts'] - len(res['stale'])} départs revus, {len(res['rows'])} boucles dont {reco_n} recommandées ; "
          f"départs pas encore recalculés (écartés) : {len(res['stale'])} ; fichiers illisibles : {len(res['missing_files'])}.",
-         "Gravité : 1 incohérence (règle ou promesse non tenue), 2 à vérifier, 3 signal. Détours en pâté de maisons : non "
+         "Les notes ne se comparent pas d'une version à l'autre (le barème change, par exemple la pénalité de relief du "
+         "Tranquille en v17).", "Gravité : 1 incohérence (règle ou promesse non tenue), 2 à vérifier, 3 signal. Détours en pâté de maisons : non "
          "vérifiables ici (tracés publiés simplifiés).", "",
          "| famille | gravité | vérification | cas | Tranquille | Modéré | Sportif |", "|---|---|---|---|---|---|---|"]
     for key, (sev, fam, label) in sorted(CHECKS.items(), key=lambda kv: (kv[1][1], kv[1][0])):
