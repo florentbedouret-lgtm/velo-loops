@@ -36,6 +36,7 @@ def test_reglages_v17():
     assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
     assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
     assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
+    assert g.FATIGUE_V19 is False                      # fatigue au fil de la sortie, en essai
     assert g.AXIS_BYPASS is False                      # contourner les grands axes, en essai
     assert g.PREVIOUS_ANY_DURATION is False            # reclassement des boucles publiées, en essai
     assert g.PLUS_RELIEF_RULES is False                # « plus de relief » du Modéré, en essai

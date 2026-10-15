@@ -155,6 +155,16 @@ DESCENT_CAP_KMH = {"facile": 22.0, "modere": 28.0, "soutenu": 32.0}   # sous −
 DENSITY_SLOWDOWN = 0.19          # ralentissement maximal en roulant, atteint à DENSITY_FULL carrefours dans le carré
 DENSITY_FULL = 420.0
 SIGNAL_DELAY_V19_S = 15.0
+# Fatigue au fil de la sortie (Florent, 15/10/2026 : « un même cycliste ne montera pas à la même vitesse les 300 m de D+
+# d'une boucle d'1 h 30 que les 1 200 d'une boucle de 6 h ») : à la place de la marche à 3 h (LONG_RIDE_DROP, toute la
+# boucle), la puissance de base baisse de FATIGUE_PER_H par heure au-delà de FATIGUE_FROM_H (temps déjà roulé à cet endroit)
+# et le bonus en montée s'épuise avec le D+ déjà grimpé (exp(-D+ / FATIGUE_CLIMB_M) : moitié vers 1 000 m, un quart vers
+# 2 000 m). Ordres de grandeur de l'endurance des amateurs, à caler sur une sortie longue de Florent ; sur ses 3 sorties
+# de 2 h, écart −0,5 %, −0,6 %, +1,0 %. False : bonus constant et marche à 3 h.
+FATIGUE_V19 = False
+FATIGUE_FROM_H = 2.0
+FATIGUE_PER_H = 0.02
+FATIGUE_CLIMB_M = 1440.0
 DENSITY = None                   # JunctionDensity, chargé dans main()
 # Feux en fin de boucle (Florent, 14/10/2026 : « plus agréable d'avoir les feux sur la fin du parcours qu'au début, moins
 # frustrant »). Une boucle retenue dont les feux sont surtout dans la première moitié (position moyenne avant
@@ -264,6 +274,11 @@ FALLBACK_DIRT_TOL_KM = 0.5
 
 def bin_margin():
     return getattr(_TL, "bin_margin", DURATION_BIN_MARGIN)
+
+
+def fatigue_v19() -> bool:
+    """Fatigue au fil de la sortie (FATIGUE_V19), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "fatigue", FATIGUE_V19))
 
 
 def time_v19() -> bool:
@@ -1909,10 +1924,18 @@ def estimate_time_s(ds: float, profile, watts: float, city_share: float, resid_s
     TIME_V19."""
     if dens is not None and n_signals is not None and time_v19():
         cap = DESCENT_CAP_KMH.get(level, DESCENT_CAP_KMH["modere"]) / 3.6
-        t = 0.0
+        fat = fatigue_v19() and level in LEVELS
+        if fat:                                              # puissance de départ, sans la marche à 3 h
+            watts = LEVELS[level]["ftp_wkg"] * RIDER_KG * LEVELS[level]["intensity"]
+        t, climbed = 0.0, 0.0
         for k in range(1, len(profile)):
             grade = max(-0.20, min(0.20, (profile[k] - profile[k - 1]) / ds))
-            p = watts * (1.0 + CLIMB_POWER_BONUS * min(1.0, max(0.0, grade) / CLIMB_POWER_FULL_GRADE))
+            base, bonus = watts, CLIMB_POWER_BONUS
+            if fat:                                          # fatigue : temps déjà roulé, D+ déjà grimpé
+                base = watts * max(0.5, 1.0 - FATIGUE_PER_H * max(0.0, t / 3600.0 - FATIGUE_FROM_H))
+                bonus = CLIMB_POWER_BONUS * math.exp(-climbed / FATIGUE_CLIMB_M)
+                climbed += max(0.0, profile[k] - profile[k - 1])
+            p = base * (1.0 + bonus * min(1.0, max(0.0, grade) / CLIMB_POWER_FULL_GRADE))
             v = speed_from_power(p, grade) * REAL_WORLD_FACTOR
             if grade < -0.02:
                 v = min(v, cap)
@@ -4052,8 +4075,9 @@ CARRY = None                    # {"src", "by_key"} si --carry-over-from est fou
 def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres entrées de l'empreinte
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
-             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION],
+             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19],
             [PREVIOUS_WAYPOINT_M],
+            [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
              JunctionDensity.CELL_M, JunctionDensity.R],
             [PLUS_RELIEF_RULES, PLUS_RELIEF_PEN_ABOVE, PLUS_RELIEF_BANNED_CATS, PLUS_RELIEF_MAX_GRADE],
