@@ -703,6 +703,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.time_v19
         del g._TL.previous_any
+    elif variant == "bins":                                # tranches de durée sans trou (essai) seules
+        g._TL.contiguous_bins = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.contiguous_bins
     elif variant == "late":                                # feux en fin de boucle (essai) seuls
         g._TL.lights_late = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

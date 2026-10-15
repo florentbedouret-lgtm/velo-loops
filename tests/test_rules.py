@@ -36,6 +36,7 @@ def test_reglages_v17():
     assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
     assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
     assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
+    assert g.CONTIGUOUS_BINS is False                  # tranches de durée sans trou, en essai
     assert g.FATIGUE_V19 is False                      # fatigue au fil de la sortie, en essai
     assert g.AXIS_BYPASS is False                      # contourner les grands axes, en essai
     assert g.PREVIOUS_ANY_DURATION is False            # reclassement des boucles publiées, en essai
@@ -466,3 +467,17 @@ def test_fallback_best_keeps_best_of_flattest():
         assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [a]      # 12,0 m/km à moins de 1 de 11,9
     finally:
         del g._TL.fallback_best
+
+
+def test_contiguous_bins_close_the_gaps():
+    """Tranches sans trou (CONTIGUOUS_BINS) : une boucle de 72 min trouve une durée, la tolérance borne les extrêmes."""
+    assert not g.time_ok(72 * 60, 1.0) and not g.time_ok(72 * 60, 1.5)       # trou actuel (v18)
+    g._TL.contiguous_bins = True
+    try:
+        assert g.time_ok(72 * 60, 1.0) or g.time_ok(72 * 60, 1.5)
+        assert g.time_ok(145 * 60, 2.0) or g.time_ok(145 * 60, 3.0)
+        assert not g.time_ok(36 * 60, 0.75)                                   # sous 45 min : tolérance de 15 %
+        assert not g.time_ok(7 * 3600, 6.0)                                   # au-delà de 6 h : tolérance de 15 %
+        assert not g.time_ok(100 * 60, 1.0)                                   # une « 1 h » ne prend pas 1 h 40
+    finally:
+        del g._TL.contiguous_bins

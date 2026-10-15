@@ -129,7 +129,14 @@ DURATION_SET = (0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0)
 # est plus longue que celles de la durée inférieure et plus courte que celles de la durée supérieure (order_bounds).
 # None : désactivé (production v16). À l'activation, l'ajouter à l'empreinte (params_hash, "v16").
 DURATION_BIN_MARGIN = 0.05        # v17 (test v4 : aucune durée perdue grâce au filet ordered_pool)
-ORDER_GAP_S = 180.0              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
+ORDER_GAP_S = 180.0
+# Tranches de durée sans trou (revue de cohérence du 15/10/2026, accord de Florent) : avec TIME_TOLERANCE (15 %) en plus
+# des plages, aucune durée ne prend une boucle de 69 à 76 min (entre 1 h et 1 h 30) ni de 138 à 153 min (entre 2 h et
+# 3 h) : ces boucles sont perdues (Castelldefels 1 h 30 Sportif, traçage c4) et des durées restent vides. Avec
+# CONTIGUOUS_BINS, entre deux durées voisines seules les plages comptent (« 1 h » jusqu'à 75 min, « 1 h 30 » dès 70 min ;
+# « 2 h » jusqu'à 2 h 30, « 3 h » dès 2 h 21) ; TIME_TOLERANCE reste la limite sous 45 min et au-dessus de 6 h.
+# False : plages bornées par TIME_TOLERANCE (production v18).
+CONTIGUOUS_BINS = False              # avec la marge : une durée plus longue d'au moins 3 min que la recommandée de la durée inférieure
 _TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
 # Modèle de temps v19 (14/10/2026), recalé sur les 3 sorties de Florent ensemble (Gràcia 28/09 et 01/10, Eixample 13/10 ;
 # traces gardées hors du dépôt), tranches de 100 m, ajustement commun (aucun réglage par sortie). Constats :
@@ -276,6 +283,11 @@ MOTORWAY_RUN_M = 300.0           # v2 (i1 / i2 du 14/10 : 95 % des boucles touch
 MOTORWAYS = None                 # STRtree des autoroutes et voies express à l'air libre, chargé dans main()
 FALLBACK_RELIEF_TOL = 1.0
 FALLBACK_DIRT_TOL_KM = 0.5
+
+
+def contiguous_bins() -> bool:
+    """Tranches de durée sans trou (CONTIGUOUS_BINS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "contiguous_bins", CONTIGUOUS_BINS))
 
 
 def bin_margin():
@@ -2528,7 +2540,12 @@ def relief_filter(pool: list, level: str, log) -> list:
 def time_ok(time_s: float, duration_h: float) -> bool:
     """Durée acceptable pour la durée visée (TIME_TOLERANCE, et plages sans chevauchement si DURATION_BINS)."""
     r = time_s / (duration_h * 3600.0)
-    if abs(r - 1.0) > TIME_TOLERANCE:
+    inner = DURATION_BINS and contiguous_bins() and duration_h in DURATION_SET
+    if inner:                                            # sans trou : la tolérance ne borne que les durées extrêmes
+        i = DURATION_SET.index(duration_h)
+        if (i == 0 and r < 1.0 - TIME_TOLERANCE) or (i + 1 == len(DURATION_SET) and r > 1.0 + TIME_TOLERANCE):
+            return False
+    elif abs(r - 1.0) > TIME_TOLERANCE:
         return False
     if not DURATION_BINS or duration_h not in DURATION_SET:
         return True
@@ -4090,7 +4107,8 @@ CARRY = None                    # {"src", "by_key"} si --carry-over-from est fou
 def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres entrées de l'empreinte
     """Règles et réglages de la v19 ; le premier élément liste les interrupteurs."""
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
-             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19],
+             WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
+             CONTIGUOUS_BINS],
             [PREVIOUS_WAYPOINT_M],
             [FATIGUE_V19, FATIGUE_FROM_H, FATIGUE_PER_H, FATIGUE_CLIMB_M],
             [CLIMB_POWER_BONUS, CLIMB_POWER_FULL_GRADE, DESCENT_CAP_KMH, DENSITY_SLOWDOWN, DENSITY_FULL, SIGNAL_DELAY_V19_S,
