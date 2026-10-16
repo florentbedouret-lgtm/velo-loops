@@ -18,7 +18,7 @@ import build_start_pages as sp  # noqa: E402
 # ----------------------------------------------------------------------------- réglages de production
 def test_reglages_v17():
     """v17 + v18 : règles retenues allumées (docs/v17_proposition.md), essais non retenus éteints, version 18."""
-    assert g.GENERATOR_VERSION == "18"
+    assert g.GENERATOR_VERSION == "19"
     assert g.DURATION_BIN_MARGIN == 0.05
     assert g.RELIEF_LIMITS is g.RELIEF_LIMITS_V17_FLAT
     assert g.DIRT_RULES is g.DIRT_RULES_V17
@@ -170,6 +170,8 @@ def test_relief_tranquille(monkeypatch):
 
 def test_relief_repli(monkeypatch):
     monkeypatch.setattr(g, "RELIEF_LIMITS", g.RELIEF_LIMITS_V17)
+    monkeypatch.setattr(g, "FALLBACK_BEST", False)       # repli v17 : la moins vallonnée (v19 : la mieux notée)
+    monkeypatch.setattr(g, "SPARE_RELIEF", False)
     pool = [_relief("facile", 14.0), _relief("facile", 12.0)]
     kept = g.relief_filter(pool, "facile", lambda *_: None)
     assert len(kept) == 1 and kept[0].dplus_per_km == 12.0 and kept[0].relief_fallback
@@ -277,6 +279,8 @@ def test_liaisons_frequence(monkeypatch):
 def test_repli_relief_publie(monkeypatch):
     """Le repli de relief part dans les données publiées (l'app l'affiche) ; absent sinon."""
     monkeypatch.setattr(g, "RELIEF_LIMITS", g.RELIEF_LIMITS_V17)
+    monkeypatch.setattr(g, "FALLBACK_BEST", False)
+    monkeypatch.setattr(g, "SPARE_RELIEF", False)
     flat = g.relief_filter([_relief("facile", 13.0)], "facile", lambda *_: None)[0]
     assert getattr(flat, "relief_fallback", False)
     src = Path(g.__file__).read_text(encoding="utf-8")
@@ -290,6 +294,7 @@ def _dirt(km, dist_km=40.0):
 
 def test_terre_v17_plafond_et_repli(monkeypatch):
     monkeypatch.setattr(g, "DIRT_RULES", g.DIRT_RULES_V17)
+    monkeypatch.setattr(g, "FALLBACK_BEST", False)       # repli v17 : la moins terreuse (v19 : la mieux notée)
     kept = g.dirt_filter([_dirt(0.4), _dirt(1.6), _dirt(0.9)], "facile", lambda *_: None)
     assert sorted(round(l.shares["unpaved"] * 40, 1) for l in kept) == [0.4, 0.9]       # plafond 1 km
     only = g.dirt_filter([_dirt(2.5), _dirt(1.8)], "modere", lambda *_: None)
