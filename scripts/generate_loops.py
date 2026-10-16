@@ -602,10 +602,11 @@ def foot_backtrack() -> bool:
 
 
 def foot_edges(det, n) -> list:
-    """Par tronçon : True si on ne peut pas y rouler (escalier, chemin piéton sans accès vélo ; les zones piétonnes,
-    places et esplanades, restent roulables : château de Montjuïc, Florent, 16/10/2026)."""
-    rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
-    return [rc[i] == "steps" or (rc[i] == "footway" and ba[i] not in ("yes", "designated")) for i in range(n)]
+    """Par tronçon : True si on ne peut pas y rouler. 3e version (16/10/2026) : les escaliers seulement ; un chemin
+    piéton d'OpenStreetMap se roule souvent en vrai (montée au château de Montjuïc, où Florent roule jusqu'à
+    l'esplanade : 2e version encore 33 recommandées moins bonnes pour 8 meilleures)."""
+    rc = per_edge(det.get("road_class"), n)
+    return [rc[i] == "steps" for i in range(n)]
 
 
 def corridor_overlap() -> bool:
@@ -1103,7 +1104,7 @@ BACKTRACK_CLIMB_M = 40.0
 # roule jusqu'à l'esplanade, perdait tout son aller-retour) : les zones piétonnes (places, esplanades) restent roulables,
 # et seule la fin à pied est retirée quand le reste de l'aller-retour est utile (le lieu à moins de 130 m de son bout).
 FOOT_BACKTRACK = False
-FOOT_BACKTRACK_MAX_M = 50.0
+FOOT_BACKTRACK_MAX_M = 20.0     # 3e version : escaliers seulement, 20 m suffisent (on porte le vélo)
 BACKTRACK_SHARE = 0.6
 # audit du 09/10/2026 : 429 des 661 allers-retours « nature » et 33 des 53 « piste » faisaient moins de 500 m (demi-tour
 # au bout d'un chemin forestier ou d'une bretelle) : « prolonger une route agréable » demande au moins ce trajet
