@@ -49,6 +49,8 @@ CHECKS = {
     "repetition": (1, "Défauts", "Plus de 25 % du parcours emprunté deux fois (hors aller-retour annoncé)"),
     "chemin_repete": (2, "Défauts", "Même chemin parcouru deux fois sur plus de 1 km d'affilée, hors aller-retour jugé utile"),
     "aller_retour_long": (2, "Défauts", "Aller-retour jugé utile de plus de 25 % du parcours (au moins 5 km)"),
+    "boucle_accrochee": (2, "Défauts", "Petite boucle accrochée : revient au même point puis repart par la route d'arrivée"),
+    "escaliers": (1, "Défauts", "Plus de 20 m d'escaliers (on porte le vélo ; publié depuis la v19)"),
     "demi_tours": (3, "Défauts", "1 ou 2 demi-tours (admis : impasses, retours utiles)"),
     "allers_retours": (3, "Défauts", "Aller-retour annoncé ou jugé utile (nature, lieu, belvédère, relief, piste)"),
     # 2. durées
@@ -75,9 +77,63 @@ CHECKS = {
 RANKINGS = {
     "feux au km": ("lights_km", True), "part de grands axes": ("main_roads", True),
     "part répétée": ("overlap", True), "plus long chemin répété (km)": ("longest_repeat_km", True),
-    "demi-tours": ("u_turns", True), "aller-retour jugé utile (km)": ("backtrack_km", True), "terre (km)": ("dirt_km", True), "note de la recommandée": ("score", False),
+    "demi-tours": ("u_turns", True), "boucle accrochée (km)": ("appendix_km", True), "aller-retour jugé utile (km)": ("backtrack_km", True), "terre (km)": ("dirt_km", True), "note de la recommandée": ("score", False),
     "écart à la durée visée": ("time_gap", True), "sortie de ville (km)": ("exit_city_km", True),
 }
+
+
+def appendix_km(coords, near_m=40.0, stem_m=200.0, skip_km=()):
+    """Plus longue petite boucle accrochée (cas de Sant Fost, Florent, 16/10/2026) : le tracé revient au même point après
+    800 m à 30 % du parcours, la route d'arrivée et celle de départ sont la même (empruntée dans les deux sens sur
+    stem_m), et ce n'est pas un aller-retour (au milieu, l'aller et le retour sont loin l'un de l'autre) ; de 800 m à
+    5 km et 15 % du parcours au plus (au-delà, c'est une « raquette » ordinaire). Pas celles qui passent par un lieu
+    remarquable (skip_km : km de passage). Renvoie (km, lat, lon du point de retour) ou None."""
+    import math
+    if not coords or len(coords) < 10:
+        return None
+    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
+    xy = [(p[0] * kx, p[1] * 110540.0) for p in coords]
+    cum = [0.0]
+    for a, b in zip(xy, xy[1:]):
+        cum.append(cum[-1] + math.hypot(a[0] - b[0], a[1] - b[1]))
+    total = cum[-1]
+    # points tous les ~25 m
+    samp, last = [], -1e9
+    for i, d in enumerate(cum):
+        if d - last >= 25.0:
+            samp.append(i)
+            last = d
+    import bisect
+
+    def at(m):                                           # point du tracé à m mètres
+        m = min(max(m, 0.0), total)
+        k = min(len(cum) - 1, max(1, bisect.bisect_left(cum, m)))
+        a, b = xy[k - 1], xy[k]
+        f = (m - cum[k - 1]) / max(cum[k] - cum[k - 1], 1e-9)
+        return (a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1]))
+    dist = lambda p, q: math.hypot(p[0] - q[0], p[1] - q[1])  # noqa: E731
+    grid = {}
+    for i in samp:
+        grid.setdefault((int(xy[i][0] // near_m), int(xy[i][1] // near_m)), []).append(i)
+    best, where = 0.0, None
+    for i in samp:
+        gx, gy = int(xy[i][0] // near_m), int(xy[i][1] // near_m)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in grid.get((gx + dx, gy + dy), []):
+                    span = cum[j] - cum[i]
+                    if span < 800.0 or span > min(5000.0, 0.15 * total) or span <= best * 1000.0:
+                        continue
+                    if dist(xy[i], xy[j]) > near_m or cum[i] < stem_m or total - cum[j] < stem_m:
+                        continue
+                    if dist(at(cum[i] - stem_m), at(cum[j] + stem_m)) > near_m:
+                        continue                         # on ne repart pas par la route d'arrivée : vraie boucle
+                    if dist(at(cum[i] + 150.0), at(cum[j] - 150.0)) < 2 * near_m:
+                        continue                         # aller-retour (déjà vérifié à part)
+                    if any(cum[i] / 1000.0 - 0.2 <= k <= cum[j] / 1000.0 + 0.2 for k in skip_km):
+                        continue                         # passe par un lieu remarquable : le détour a un but
+                    best, where = span / 1000.0, (round(coords[i][1], 5), round(coords[i][0], 5))
+    return (round(best, 1), *where) if where else None
 
 
 def app_link(sid, dur_min, level):
@@ -152,8 +208,9 @@ def audit(source, only=None):
                     dirt = o["shares"].get("unpaved", 0) * km
                     terr = o.get("terrain") or {}
                     bts = o.get("backtracks") or []
+                    apx = appendix_km(o.get("coords"), skip_km=[r["km"] for r in o.get("remarkable") or [] if r.get("km") is not None])
                     bt_km = sum(b["m"] for b in bts) / 1000.0         # longueur parcourue (aller et retour)
-                    rows.append({"sid": sid, "backtrack_km": bt_km, "oab": bool(o.get("out_and_back")), "name": name, "level": level, "dur": dur, "label": lab, "reco": o is reco,
+                    rows.append({"sid": sid, "appendix_km": apx[0] if apx else 0.0, "backtrack_km": bt_km, "oab": bool(o.get("out_and_back")), "name": name, "level": level, "dur": dur, "label": lab, "reco": o is reco,
                                  "link": link, "km": km, "time": t, "time_gap": abs(t / dm - 1.0), "dpk": dpk,
                                  "lights_km": o.get("traffic_lights_per_km") or 0.0,
                                  "main_roads": o["shares"].get("main_roads", 0.0), "overlap": o.get("overlap", 0.0),
@@ -172,6 +229,10 @@ def audit(source, only=None):
                     if o.get("out_and_back") or bts:
                         add("allers_retours", "", "aller-retour" if o.get("out_and_back")
                             else ", ".join(f"{b['why']} {b['m'] / 1000:.1f} km" for b in bts), o)
+                    if apx:
+                        add("boucle_accrochee", "", f"{apx[0]:.1f} km, retour au point {apx[1]}, {apx[2]}", o)
+                    if (o.get("steps_m") or 0) > 20:
+                        add("escaliers", "", f"{o['steps_m']} m", o)
                     if bt_km >= max(5.0, 0.25 * km):
                         add("aller_retour_long", "", f"{bt_km:.1f} km sur {km:.0f} ("
                             + ", ".join(sorted({b['why'] for b in bts})) + ")", o)

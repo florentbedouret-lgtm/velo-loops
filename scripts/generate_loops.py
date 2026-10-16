@@ -2521,6 +2521,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     # le ralentissement sur toute la ville (freinages, piétons, croisements aussi sur les pistes cyclables).
     n_e = len(cum) - 1
     rc_e, ba_e, ud_e = (per_edge(det.get(k), n_e) for k in ("road_class", "bike_road_access", "urban_density"))
+    steps_m = sum(cum[i + 1] - cum[i] for i in range(n_e) if rc_e[i] == "steps")   # publié pour la revue (16/10/2026)
     car = [not (rc_e[i] == "cycleway" or (rc_e[i] in ("footway", "path", "pedestrian") and ba_e[i] in ("yes", "designated")))
            for i in range(n_e)]
     shares["urban_car"] = {u: sum(cum[i + 1] - cum[i] for i in range(n_e) if car[i] and ud_e[i] == u) / total
@@ -2569,6 +2570,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         scenery=scenery,
     )
     loop.overlap_v16, loop.repeat_cycle_share_v16 = ov16, cyc16
+    loop.steps_m = steps_m
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
@@ -4228,6 +4230,7 @@ def to_json(l: Loop, label: str, start_id: str, idx: int) -> dict:
                     "n_climbs": l.terrain.get("n_climbs"), "climbs": l.terrain.get("climbs"),
                     "avg_climb_grade_pct": l.terrain.get("avg_climb_grade_pct")},
         "u_turns": l.u_turns,
+        **({"steps_m": round(l.steps_m)} if getattr(l, "steps_m", 0) >= 5 else {}),   # escaliers (revue de cohérence)
         "longest_repeat_km": round(l.longest_repeat_m / 1000.0, 2),
         **({"out_and_back": True} if l.overlap > MAX_OVERLAP else {}),   # aller-retour sur piste (OUTBACK_OK)
         "scenery": (None if l.scenery is None else {
