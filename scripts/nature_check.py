@@ -672,7 +672,8 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
                "motorway": True, "previous_any": True, "plus_relief": True, "axis_bypass": True, "scenic_dense": True,
                "fatigue": True,                         # fatigue au fil de la sortie (Florent, 15/10/2026)
                # départs voisins greffés, tronçon par tronçon à plusieurs boucles (Florent, 16/10/2026)
-               "cross_spatial": True, "spatial_graft": True, "seg_multi": True}
+               "cross_spatial": True, "spatial_graft": True, "seg_multi": True,
+               "contiguous_bins": True}                 # tranches de durée sans trou (Florent, 16/10/2026)
         for k, v in v19.items():
             setattr(g._TL, k, v)
         try:

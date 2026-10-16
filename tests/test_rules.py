@@ -477,7 +477,8 @@ def test_fallback_best_keeps_best_of_flattest():
 
 def test_contiguous_bins_close_the_gaps():
     """Tranches sans trou (CONTIGUOUS_BINS) : une boucle de 72 min trouve une durée, la tolérance borne les extrêmes."""
-    assert not g.time_ok(72 * 60, 1.0) and not g.time_ok(72 * 60, 1.5)       # trou actuel (v18)
+    g._TL.contiguous_bins = False                                             # le trou de la v18
+    assert not g.time_ok(72 * 60, 1.0) and not g.time_ok(72 * 60, 1.5)
     g._TL.contiguous_bins = True
     try:
         assert g.time_ok(72 * 60, 1.0) or g.time_ok(72 * 60, 1.5)

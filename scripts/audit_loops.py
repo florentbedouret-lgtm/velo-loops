@@ -29,6 +29,17 @@ LEVELS = ("facile", "modere", "soutenu")
 LEVEL_NAME = {"facile": "Tranquille", "modere": "Modéré", "soutenu": "Sportif"}
 SPEED_KMH = {"facile": (11.0, 28.0), "modere": (13.0, 32.0), "soutenu": (15.0, 36.0)}   # vitesse moyenne plausible
 RELIEF_TARGET = {"facile": (5.0, 10.0), "modere": (10.0, 15.0)}                        # m/km (décision D60)
+# v19 (D75) : tranches sans trou ; les deux trous de la tolérance de 15 % sont comblés en leur milieu (minutes)
+GAP_BOUNDS_V19 = {60: (None, 72.75), 90: (72.75, None), 120: (None, 145.5), 180: (145.5, None)}
+
+
+def duration_off(t, dm, version):
+    """Durée publiée hors de la plage de sa durée (1 min de marge : durées arrondies)."""
+    lo, hi = 0.85 * dm - 1, 1.15 * dm + 1
+    if version and str(version).isdigit() and int(version) >= 19 and dm in GAP_BOUNDS_V19:
+        a, b = GAP_BOUNDS_V19[dm]
+        lo, hi = (a - 1 if a else lo), (b + 1 if b else hi)
+    return not lo <= t <= hi
 # gravité : 1 incohérence (contredit une règle ou une promesse), 2 à vérifier, 3 signal
 CHECKS = {
     # 1. défauts visibles
@@ -41,7 +52,7 @@ CHECKS = {
     "demi_tours": (3, "Défauts", "1 ou 2 demi-tours (admis : impasses, retours utiles)"),
     "allers_retours": (3, "Défauts", "Aller-retour annoncé ou jugé utile (nature, lieu, belvédère, relief, piste)"),
     # 2. durées
-    "duree_hors_tolerance": (1, "Durées", "Durée annoncée à plus de 15 % de la durée visée"),
+    "duree_hors_tolerance": (1, "Durées", "Durée annoncée hors de la plage de sa durée (±15 % ; v19 : trous comblés)"),
     "ordre_durees": (1, "Durées", "Recommandée plus courte que celle de la durée inférieure (même allure)"),
     "doublon_durees": (1, "Durées", "Même boucle proposée à deux durées de la même allure"),
     "durees_voisines_proches": (2, "Durées", "Recommandées de deux durées voisines à moins de 12 % de durée l'une de l'autre"),
@@ -149,7 +160,7 @@ def audit(source, only=None):
                                  "longest_repeat_km": o.get("longest_repeat_km") or 0.0, "u_turns": o.get("u_turns", 0),
                                  "dirt_km": dirt, "score": o.get("score", 0.0), "exit_city_km": o.get("exit_city_km"),
                                  "max_grade": terr.get("max_grade_pct") or 0.0})
-                    if t and abs(t - dm) > 0.15 * dm + 1:              # 1 min de marge : durées publiées arrondies
+                    if t and duration_off(t, dm, idx.get("generator_version")):
                         add("duree_hors_tolerance", "", f"{t} min pour {dm}", o)
                     v = km / max(t / 60.0, 0.1)
                     if not SPEED_KMH[level][0] <= v <= SPEED_KMH[level][1]:
