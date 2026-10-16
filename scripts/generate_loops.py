@@ -4597,7 +4597,8 @@ def load_reuse(src: str, max_age_days: float):
               "tout sera recalculé", file=sys.stderr)
         return None
     return {"src": src, "index": idx, "max_age_days": max_age_days,
-            "by_key": {e["key"]: e for e in idx.get("starts", []) if e.get("key")}}
+            "by_key": {e["key"]: e for e in idx.get("starts", []) if e.get("key")},
+            "no_option": set(idx.get("no_option") or [])}
 
 
 def reuse_candidate(key: str, levels):
@@ -4664,6 +4665,12 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         log(f"- {st['name']} : ignoré (budget de temps épuisé)")
         return None, buf, 0.0
     key0 = st_key(st)
+    # 16/10/2026 : la chaîne v18 se relançait sans fin : chaque run passait ~5 h sur 22 départs de montagne sans aucune
+    # boucle valide (non publiés, donc jamais réutilisés), puis manquait de budget pour 13 autres. À paramètres égaux
+    # (même empreinte), le résultat reste vide : le départ est ignoré tout de suite.
+    if REUSE is not None and key0 in REUSE.get("no_option", ()):
+        log(f"- {st['name']} : aucune option valide au calcul précédent (mêmes paramètres), départ ignoré")
+        return None, buf, 0.0
     options: list = []
     reused_entry = None
     missing_durations = list(durations)
@@ -5098,6 +5105,8 @@ def main() -> int:
         print(f"Voies au revêtement incertain empruntées : {write_ways(args.ways_out)} -> {args.ways_out}", flush=True)
     carried = sum(1 for e in index if e.get("stale"))
     skipped = [st["name"] for st, r in zip(starts, results) if not r[0]]
+    no_option = sorted(st_key(st) for st, r in zip(starts, results)            # mémorisés pour le calcul suivant
+                       if not r[0] and any("aucune option valide" in line for line in r[1]))
 
     def reason(lines):
         text = " ".join(lines)
@@ -5137,6 +5146,7 @@ def main() -> int:
         "levels": {k: {"label": v["label"]} for k, v in LEVELS.items() if k in levels},
         "attribution": "© contributeurs OpenStreetMap (ODbL) ; revêtement © ICGC (CC BY 4.0) ; calculs GraphHopper (Apache 2.0)",
         "params_hash": PARAMS_HASH,
+        "no_option": no_option,                          # départs sans aucune boucle valide (clés), ignorés au calcul suivant
         "stats": {"starts_requested": len(starts), "starts_generated": len(index),
                   "starts_reused": sum(1 for e in index if e.get("reused")),
                   "seconds_per_computed_start_by_zone": by_zone_seconds(index),
