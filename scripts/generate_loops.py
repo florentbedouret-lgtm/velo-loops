@@ -1714,6 +1714,12 @@ def landcover_classes(trees, pts, city, river_deg=RIVER_DEG, river_near_deg=RIVE
 
 LANDCOVER_CODES = "vefo"     # une lettre par point tous les 100 m : ville, eau (bord d'eau), forêt, espaces ouverts
 EXIT_CITY_RUN = 10            # sortie de ville : début du premier tronçon d'au moins 1 km (10 points) sans bâti dense
+# Sortie durable (Florent, 16/10/2026 : les Corts 2 h Tranquille annoncée « tu pars directement hors de la ville » alors
+# que la boucle reste en ville jusqu'au km 12 : les 1,5 premiers km longent le campus et les terrains de sport de la Zona
+# Universitària, sans bâti). La sortie n'est retenue que si, sur les EXIT_CITY_WIN_KM suivants, la ville pèse au plus
+# EXIT_CITY_MAX_SHARE : un parc ou un campus traversé en ville n'est pas une sortie.
+EXIT_CITY_WIN_KM = 5.0
+EXIT_CITY_MAX_SHARE = 0.4           # 0,25 : routes de périphérie entre villages jugées « en ville » ; 0,5 : les Corts au km 5,7
 
 
 def landcover_seq(cls) -> str:
@@ -1724,14 +1730,19 @@ def landcover_seq(cls) -> str:
 
 def exit_city_km(cls, dist_km: float):
     """Km où l'on sort de la ville, mesuré par le bâti comme la barre de terrain : début du premier tronçon d'au moins
-    1 km sans « ville » (un parc de 200 m n'est pas une sortie). 0 = départ hors de la ville ; None = reste en ville.
-    Les points sont recalés sur la distance officielle (comme le profil)."""
+    1 km sans « ville » (un parc de 200 m n'est pas une sortie) après lequel la ville pèse au plus EXIT_CITY_MAX_SHARE
+    des EXIT_CITY_WIN_KM suivants (un campus traversé en ville n'est pas une sortie). 0 = départ hors de la ville ;
+    None = reste en ville. Les points sont recalés sur la distance officielle (comme le profil)."""
     step = dist_km / max(len(cls), 1)
+    win = max(EXIT_CITY_RUN, round(EXIT_CITY_WIN_KM / max(step, 1e-6)))
     run = 0
     for i, c in enumerate(cls):
         run = run + 1 if int(c) != 0 else 0
         if run >= EXIT_CITY_RUN:
-            return round((i - run + 1) * step, 1)
+            a = i - run + 1
+            seg = cls[a:a + win]
+            if sum(1 for x in seg if int(x) == 0) <= EXIT_CITY_MAX_SHARE * len(seg):
+                return round(a * step, 1)
     return None
 
 
