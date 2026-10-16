@@ -596,6 +596,97 @@ def backtrack_max_share():
     return getattr(_TL, "backtrack_max_share", BACKTRACK_MAX_SHARE)
 
 
+def appendix_rule() -> bool:
+    """Petites boucles accrochées sans but (APPENDIX_RULE), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "appendix_rule", APPENDIX_RULE))
+
+
+def find_appendices(coords, cum) -> list:
+    """Petites boucles accrochées (voir APPENDIX_RULE) : [(a, b)] indices de départ et de retour, sans chevauchement,
+    les plus longues d'abord."""
+    import bisect
+    total = cum[-1]
+    if total < 3 * APPENDIX_MIN_M or len(coords) < 10:
+        return []
+    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
+    xy = [(p[0] * kx, p[1] * 110540.0) for p in coords]
+
+    def at(m):
+        m = min(max(m, 0.0), total)
+        k = min(len(cum) - 1, max(1, bisect.bisect_left(cum, m)))
+        a, b = xy[k - 1], xy[k]
+        f = (m - cum[k - 1]) / max(cum[k] - cum[k - 1], 1e-9)
+        return (a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1]))
+    d = lambda p, q: math.hypot(p[0] - q[0], p[1] - q[1])  # noqa: E731
+    samp, last = [], -1e9
+    for i, m in enumerate(cum):
+        if m - last >= 25.0:
+            samp.append(i)
+            last = m
+    near = APPENDIX_NEAR_M
+    grid: dict = {}
+    for i in samp:
+        grid.setdefault((int(xy[i][0] // near), int(xy[i][1] // near)), []).append(i)
+    hi = min(APPENDIX_MAX_M, APPENDIX_MAX_SHARE * total)
+    cands = []
+    for i in samp:
+        if cum[i] < APPENDIX_STEM_M:
+            continue
+        gx, gy = int(xy[i][0] // near), int(xy[i][1] // near)
+        best = None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for j in grid.get((gx + dx, gy + dy), []):
+                    span = cum[j] - cum[i]
+                    if not APPENDIX_MIN_M <= span <= hi or total - cum[j] < APPENDIX_STEM_M or d(xy[i], xy[j]) > near:
+                        continue
+                    if d(at(cum[i] - APPENDIX_STEM_M), at(cum[j] + APPENDIX_STEM_M)) > near:
+                        continue                         # on ne repart pas par la route d'arrivée
+                    if d(at(cum[i] + 150.0), at(cum[j] - 150.0)) < 2 * near:
+                        continue                         # aller-retour : vérifié à part
+                    if best is None or span > cum[best] - cum[i]:
+                        best = j
+        if best is not None:
+            cands.append((cum[best] - cum[i], i, best))
+    out = []
+    for _, a, b in sorted(cands, reverse=True):          # les plus longues, sans chevauchement
+        if all(b < a2 or a > b2 for a2, b2 in out):
+            out.append((a, b))
+    return out
+
+
+def appendix_spurs(loop, coords, cum, level) -> list:
+    """Petites boucles accrochées sans but de la boucle, au format des éperons injustifiés (retirées par trim_spurs)."""
+    out = []
+    lc = ""
+    if loop.scenery and (loop.scenery.get("landcover") or {}).get("cls") is not None:
+        lc = landcover_seq(loop.scenery["landcover"]["cls"])
+    road = loop.road_seq or ""
+    for a, b in find_appendices(coords, cum):
+        m0, m1 = cum[a], cum[b]
+        if any(r.get("km") is not None and m0 / 1000.0 - 0.1 <= r["km"] <= m1 / 1000.0 + 0.1 for r in loop.remarkable or []):
+            continue                                     # passe par un lieu remarquable
+        tv = LANDSCAPE.trees.get("view") if LANDSCAPE is not None else None
+        if tv is not None:
+            import numpy as np
+            import shapely
+            pts = shapely.points(np.array([(c[0], c[1]) for c in coords[a:b + 1:max(1, (b - a) // 30)]]))
+            if len(tv.query(pts, predicate="dwithin", distance=VIEW_NEAR_DEG)[0]):
+                continue                                 # passe devant un belvédère
+        k0, k1 = int(m0 // 100), max(int(m0 // 100) + 1, int(m1 // 100))
+        seg = range(k0, min(k1, len(road)))
+        green = sum(1 for k in seg if (road[k] == "c" and (k >= len(lc) or lc[k] != "v")) or (k < len(lc) and lc[k] == "e"))
+        if seg and green >= APPENDIX_GREEN * len(seg):
+            continue                                     # piste ou voie verte hors de la ville, ou bord de l'eau
+        if level == "soutenu" and len(coords[0]) > 2:
+            up = sum(max(0.0, coords[k + 1][2] - coords[k][2]) for k in range(a, b))
+            if up >= APPENDIX_CLIMB_M:
+                continue                                 # une vraie montée, en Sportif
+        out.append({"km": round(m0 / 1000.0, 1), "m": round(m1 - m0), "a": a, "b": b,
+                    "lon": round(coords[a][0], 5), "lat": round(coords[a][1], 5), "appendix": True})
+    return out
+
+
 def foot_backtrack() -> bool:
     """Allers-retours à pied jamais utiles (FOOT_BACKTRACK), réglable par fil d'exécution."""
     return bool(getattr(_TL, "foot_backtrack", FOOT_BACKTRACK))
@@ -1104,6 +1195,22 @@ BACKTRACK_CLIMB_M = 40.0
 # roule jusqu'à l'esplanade, perdait tout son aller-retour) : les zones piétonnes (places, esplanades) restent roulables,
 # et seule la fin à pied est retirée quand le reste de l'aller-retour est utile (le lieu à moins de 130 m de son bout).
 FOOT_BACKTRACK = False
+# Petites boucles accrochées (Florent, 16/10/2026, Espronceda 3 h Modéré : à Sant Fost, la boucle quitte la B-500, fait
+# 2,7 km dans des rues résidentielles et revient au même carrefour pour repartir par où elle est arrivée ; revue de la
+# v18 : 1 539 boucles). Une petite boucle accrochée revient au même point et repart par la route d'arrivée (empruntée
+# dans les deux sens sur APPENDIX_STEM_M), sans être un aller-retour, et pèse au plus APPENDIX_MAX_SHARE du parcours et
+# APPENDIX_MAX_M (au-delà, c'est un « 8 » ou une raquette, choix de Florent). APPENDIX_RULE : elle n'est gardée que si
+# elle apporte quelque chose de nommable : un lieu remarquable ou un belvédère ; au moins APPENDIX_GREEN de son parcours
+# sur piste cyclable ou voie verte HORS de la ville, ou au bord de l'eau ; en Sportif, au moins APPENDIX_CLIMB_M de
+# montée. Sinon elle est pénalisée et retirée comme un éperon injustifié (trim_spurs). False : non vérifiée.
+APPENDIX_RULE = False
+APPENDIX_MIN_M = 800.0
+APPENDIX_MAX_M = 5000.0
+APPENDIX_MAX_SHARE = 0.10
+APPENDIX_STEM_M = 200.0
+APPENDIX_NEAR_M = 40.0
+APPENDIX_GREEN = 0.5
+APPENDIX_CLIMB_M = 60.0
 FOOT_BACKTRACK_MAX_M = 20.0     # 3e version : escaliers seulement, 20 m suffisent (on porte le vélo)
 BACKTRACK_SHARE = 0.6
 # audit du 09/10/2026 : 429 des 661 allers-retours « nature » et 33 des 53 « piste » faisaient moins de 500 m (demi-tour
@@ -2595,6 +2702,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
     loop.seafront_km, loop.motorway_km = (side_km(coords, cum, car, rc_e) if (seafront_bonus() or motorway_nuisance())
                                           else (0.0, 0.0))
+    if appendix_rule() and SPUR_FIX:                         # petites boucles accrochées sans but (APPENDIX_RULE)
+        loop.spurs = loop.spurs + appendix_spurs(loop, coords, cum, level)
     loop.score = score(loop)
     return loop
 
@@ -4369,10 +4478,12 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
              CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
-             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL],
+             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
+            [APPENDIX_RULE, APPENDIX_MIN_M, APPENDIX_MAX_M, APPENDIX_MAX_SHARE, APPENDIX_STEM_M, APPENDIX_NEAR_M,
+             APPENDIX_GREEN, APPENDIX_CLIMB_M],
             [BACKTRACK_MAX_SHARE],
             [SPATIAL_GRAFT, GRAFT_TIME_TOL],
             [CROSS_SPATIAL, CROSS_SPATIAL_KM, CROSS_SPATIAL_STARTS, CROSS_SPATIAL_LOOPS],

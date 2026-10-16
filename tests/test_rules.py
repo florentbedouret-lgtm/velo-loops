@@ -40,6 +40,7 @@ def test_reglages_v17():
     assert g.SPATIAL_GRAFT is False                    # départs voisins greffés, en essai
     assert g.BACKTRACK_LONG is False                   # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
+    assert g.APPENDIX_RULE is False                    # petites boucles accrochées, en essai
     assert g.SPARE_RELIEF is False                     # repli de dernier recours et relief, en essai
     assert g.FOOT_BACKTRACK is False                   # allers-retours à pied, en essai
     assert g.CONTIGUOUS_BINS is False                  # tranches de durée sans trou, en essai
@@ -502,3 +503,33 @@ def test_best_disjoint_takes_the_best_segment_of_each_loop():
     chosen = g.best_disjoint([d13, c23, b12])
     assert [x[6] for x in sorted(chosen, key=lambda x: x[0])] == [B, C]
     assert g.best_disjoint([]) == []
+
+
+def test_find_appendices_sant_fost_shape():
+    """Petite boucle accrochée (APPENDIX_RULE) : route d'arrivée, détour d'environ 2 km qui revient au même carrefour,
+    puis départ par la route d'arrivée ; un « 8 » (deux grands lobes) n'en est pas une."""
+    import math
+    def path(pts, step=10.0):                       # points tous les ~10 m le long des sommets (en mètres)
+        out = []
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            n = max(1, int(math.hypot(x1 - x0, y1 - y0) // step))
+            out += [(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n) for k in range(n)]
+        out.append(pts[-1])
+        kx = 111320.0 * math.cos(math.radians(41.5))
+        return [[2.2 + x / kx, 41.5 + y / 110540.0] for x, y in out]
+    def cum(c):
+        r = [0.0]
+        for a, b in zip(c, c[1:]):
+            r.append(r[-1] + g.haversine(a[0], a[1], b[0], b[1]))
+        return r
+    # grande boucle de ~20 km avec, au km ~5, un aller sur 1 km, un carré de 2 km, retour par le même km
+    big = [(0, 0), (0, 4000), (0, 5000), (500, 5000), (500, 5500), (0, 5500), (0, 5000), (0, 4000),
+           (4000, 4000), (4000, 0), (0, 0)]
+    c = path(big)
+    found = g.find_appendices(c, cum(c))
+    assert len(found) == 1
+    # un « 8 » : deux lobes de 8 km
+    eight = [(0, 0), (2000, 2000), (0, 4000), (-2000, 2000), (0, 0), (2000, -2000), (0, -4000), (-2000, -2000), (0, 0)]
+    c8 = path(eight)
+    assert g.find_appendices(c8, cum(c8)) == []
+

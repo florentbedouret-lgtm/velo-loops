@@ -122,7 +122,7 @@ def appendix_km(coords, near_m=40.0, stem_m=200.0, skip_km=()):
             for dy in (-1, 0, 1):
                 for j in grid.get((gx + dx, gy + dy), []):
                     span = cum[j] - cum[i]
-                    if span < 800.0 or span > min(5000.0, 0.15 * total) or span <= best * 1000.0:
+                    if span < 800.0 or span > min(5000.0, 0.10 * total) or span <= best * 1000.0:   # au-delà : un « 8 »
                         continue
                     if dist(xy[i], xy[j]) > near_m or cum[i] < stem_m or total - cum[j] < stem_m:
                         continue

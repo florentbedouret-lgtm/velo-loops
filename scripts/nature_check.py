@@ -717,6 +717,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant == "apx":                                 # petites boucles accrochées sans but (essai) seules
+        g._TL.appendix_rule = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.appendix_rule
     elif variant == "arpen":                               # longs allers-retours annoncés et pénalisés (essai) seuls
         g._TL.backtrack_long = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
