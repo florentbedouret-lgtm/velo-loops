@@ -1203,7 +1203,13 @@ FOOT_BACKTRACK = False
 # elle apporte quelque chose de nommable : un lieu remarquable ou un belvédère ; au moins APPENDIX_GREEN de son parcours
 # sur piste cyclable ou voie verte HORS de la ville, ou au bord de l'eau ; en Sportif, au moins APPENDIX_CLIMB_M de
 # montée. Sinon elle est pénalisée et retirée comme un éperon injustifié (trim_spurs). False : non vérifiée.
+# 2e version (1re mesure du 16/10/2026 : 6 meilleures, 16 moins bonnes ; quand la boucle sans le détour ne tient plus
+# dans la durée, la même boucle gardait la lourde pénalité d'un éperon : Tordera 6 h 69 -> 41 sans rien changer) :
+# pénalité FIXE de APPENDIX_PENALTY (3 points : à note proche, une autre boucle passe devant, choix de Florent) et, pour
+# les APPENDIX_TRIM_TOP meilleures candidates (boucles publiées comprises), la même boucle sans le détour est essayée.
 APPENDIX_RULE = False
+APPENDIX_PENALTY = 0.03
+APPENDIX_TRIM_TOP = 4
 APPENDIX_MIN_M = 800.0
 APPENDIX_MAX_M = 5000.0
 APPENDIX_MAX_SHARE = 0.10
@@ -2702,8 +2708,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.wind_bins = {k: [round(x, 2) for x in v] for k, v in bins.items()}
     loop.seafront_km, loop.motorway_km = (side_km(coords, cum, car, rc_e) if (seafront_bonus() or motorway_nuisance())
                                           else (0.0, 0.0))
-    if appendix_rule() and SPUR_FIX:                         # petites boucles accrochées sans but (APPENDIX_RULE)
-        loop.spurs = loop.spurs + appendix_spurs(loop, coords, cum, level)
+    loop.appendices = appendix_spurs(loop, coords, cum, level) if appendix_rule() else []   # boucles accrochées sans but
     loop.score = score(loop)
     return loop
 
@@ -2761,6 +2766,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         lb = long_backtrack(l)
         if lb is not None:
             total -= min(BACKTRACK_LONG_MAX, BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER * (lb[0] - BACKTRACK_LONG_SHARE))
+    if getattr(l, "appendices", None):                    # petite boucle accrochée sans but : 3 points, une seule fois
+        total -= APPENDIX_PENALTY
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
     if detour_score() and getattr(l, "detours", None):    # détours inutiles restants (DETOUR_SCORE, v18)
@@ -3923,6 +3930,15 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             t = trim_spurs(gh, l, level, duration)
             if t is not None:
                 pool.append(t)
+    if appendix_rule():                                      # la même boucle sans sa boucle accrochée (APPENDIX_RULE)
+        for l in sorted([x for x in pool if getattr(x, "appendices", None)], key=lambda x: x.score,
+                        reverse=True)[:APPENDIX_TRIM_TOP]:
+            way = route_waypoints(l.coords, skip=[(s["a"], s["b"]) for s in l.appendices])
+            path = gh.via(way, l.profile, pass_through=True)
+            t = analyse(path, level, l.profile, duration, l.seed, l.heading) if path else None
+            if (t is not None and time_ok(t.time_s, duration) and overlap_ok(t) and t.u_turns <= MAX_UTURNS
+                    and dirt_ok(t) and len(t.appendices) < len(l.appendices)):
+                pool.append(t)
     if detour_fix():                                         # enlever les détours des meilleures candidates
         for l in sorted([x for x in pool if x.detours], key=lambda x: x.score, reverse=True)[:DETOUR_TRIM_TOP]:
             t = trim_detours(gh, l, level, duration)
@@ -4482,7 +4498,7 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
-            [APPENDIX_RULE, APPENDIX_MIN_M, APPENDIX_MAX_M, APPENDIX_MAX_SHARE, APPENDIX_STEM_M, APPENDIX_NEAR_M,
+            [APPENDIX_RULE, APPENDIX_PENALTY, APPENDIX_TRIM_TOP, APPENDIX_MIN_M, APPENDIX_MAX_M, APPENDIX_MAX_SHARE, APPENDIX_STEM_M, APPENDIX_NEAR_M,
              APPENDIX_GREEN, APPENDIX_CLIMB_M],
             [BACKTRACK_MAX_SHARE],
             [SPATIAL_GRAFT, GRAFT_TIME_TOL],
