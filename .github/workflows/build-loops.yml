@@ -427,7 +427,8 @@ jobs:
             case "$DIAG_PART" in m1|m4) RELIEF_IDS="sant-marti"; NATURE_TRACE="sant-marti|3|facile;sant-marti|2|facile" ;; m2|m5) RELIEF_IDS="mataro"; NATURE_TRACE="mataro|5|facile;mataro|4|facile" ;; m3|m6) RELIEF_IDS="gracia"; NATURE_TRACE="gracia|1.5|modere;gracia|1|modere" ;; m7|m9) RELIEF_IDS="l-eixample"; NATURE_TRACE="l-eixample|2|modere;l-eixample|2|facile" ;; m8|m0) RELIEF_IDS="gracia"; NATURE_TRACE="gracia|2|modere;gracia|1.5|modere" ;; esac
             # mesure combinée v19 (14/10/2026) : les 30 départs habituels, Barcelone et sa proche banlieue à part (c3)
             # traçage des boucles perdues avec toutes les règles v19 (15/10/2026)
-            [ "$DIAG_PART" = "c4" ] && RELIEF_IDS="castelldefels;can-massuet-del-far-sud;sant-feliu-de-pallerols" && NATURE_TRACE="castelldefels|1.5|soutenu;castelldefels|1|soutenu;castelldefels|2|soutenu;can-massuet-del-far-sud|6|soutenu;can-massuet-del-far-sud|5|soutenu;sant-feliu-de-pallerols|5|modere;sant-feliu-de-pallerols|4|modere"
+            # 16/10/2026 : plus fortes baisses de la mesure combinée v19 (21 règles), tracées
+            [ "$DIAG_PART" = "c4" ] && RELIEF_IDS="castellgali;sant-feliu-de-pallerols;castelldefels;sants-montjuic" && NATURE_TRACE="castellgali|6|facile;sant-feliu-de-pallerols|2|modere;sant-feliu-de-pallerols|5|modere;castelldefels|1.5|soutenu;sants-montjuic|0.75|soutenu"
             # tranches de durée sans trou (15/10/2026) : les 30 départs habituels, Castelldefels (1 h 30 Sportif perdue) en tête
             # allers-retours à pied (15/10/2026) : el Gornal 3 h Modéré (temple du Tibidabo) tracé, départs autour de
             # Collserola et de Montjuïc, puis les 30 départs habituels
