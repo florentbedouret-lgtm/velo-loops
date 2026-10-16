@@ -429,7 +429,11 @@ jobs:
             # mesure combinée v19 (14/10/2026) : les 30 départs habituels, Barcelone et sa proche banlieue à part (c3)
             # traçage des boucles perdues avec toutes les règles v19 (15/10/2026)
             # 16/10/2026 : plus fortes baisses de la mesure combinée v19 (21 règles), tracées
-            [ "$DIAG_PART" = "c4" ] && RELIEF_IDS="castelldefels" && NATURE_TRACE="castelldefels|1.5|soutenu"
+            [ "$DIAG_PART" = "c4" ] && RELIEF_IDS="sarria-sant-gervasi" && NATURE_TRACE="sarria-sant-gervasi|3|modere"
+            # 17/10/2026 : v19 en production ; c4 reprend les boucles de l'instantané v18 comme boucles publiées (filet)
+            if [ "$DIAG_PART" = "c4" ]; then
+              mkdir -p data/prev && gh release download donnees-v18 --repo "$GITHUB_REPOSITORY" -p donnees-v18.tar.gz -D data/prev                 && tar -xzf data/prev/donnees-v18.tar.gz -C data/prev && PREV_DIR="data/prev/web/data/starts"
+            fi
             # tranches de durée sans trou (15/10/2026) : les 30 départs habituels, Castelldefels (1 h 30 Sportif perdue) en tête
             # allers-retours à pied (15/10/2026) : el Gornal 3 h Modéré (temple du Tibidabo) tracé, départs autour de
             # Collserola et de Montjuïc, puis les 30 départs habituels
@@ -477,7 +481,7 @@ jobs:
             # retours sur ses pas (09/10/2026) : Sants-Montjuïc (demi-tour au château de Montjuïc) ajouté à la partie b1
             [ "$DIAG_PART" = "b1" ] && RELIEF_IDS="sants-montjuic;$RELIEF_IDS"
             RELIEF_LEVELS="facile modere"; case "$DIAG_PART" in d*|t*|o*|w*|b*|v*|k*|x*|g*|p*|n*|s[12]|z*|h*|e[1-9]|y[123]|q[1-4]|u[12]|j[12]|l[123]|i[1-4]|c[1-4]|a[346789]) RELIEF_LEVELS="facile modere soutenu" ;; esac   # terre : 3 allures
-            timeout 290m python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json               --pbf data/region.osm.pbf --workdir data --probe "$RELIEF_IDS" --relief-test --relief-variant "$RELIEF_VARIANT" --trace "${NATURE_TRACE:-}" --v17-rules "${V17_RULES:-corridor,detour,relief,dirt,margin}" --prev-dir "https://florentbedouret-lgtm.github.io/velo-loops/web/data/starts"               --durations "0.75 1 1.5 2 3 4 5 6" --levels "$RELIEF_LEVELS" --workers "$NATURE_WORKERS" $NATURE_RETOUCH --out data/relief.json --out-md data/relief.md || echo "diagnostic interrompu : résultats partiels (data/relief_*.json)"
+            timeout 290m python scripts/nature_check.py --gh http://localhost:8989 --starts data/starts_plan.json               --pbf data/region.osm.pbf --workdir data --probe "$RELIEF_IDS" --relief-test --relief-variant "$RELIEF_VARIANT" --trace "${NATURE_TRACE:-}" --v17-rules "${V17_RULES:-corridor,detour,relief,dirt,margin}" --prev-dir "${PREV_DIR:-https://florentbedouret-lgtm.github.io/velo-loops/web/data/starts}"               --durations "0.75 1 1.5 2 3 4 5 6" --levels "$RELIEF_LEVELS" --workers "$NATURE_WORKERS" $NATURE_RETOUCH --out data/relief.json --out-md data/relief.md || echo "diagnostic interrompu : résultats partiels (data/relief_*.json)"
             [ -f data/relief.md ] && cat data/relief.md >> "$GITHUB_STEP_SUMMARY" || true
           fi
           # boucles publiées retrouvées à l'identique selon le pas des points de passage (14/10/2026)
