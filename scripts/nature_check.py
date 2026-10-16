@@ -674,7 +674,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
                # départs voisins greffés, tronçon par tronçon à plusieurs boucles (Florent, 16/10/2026)
                "cross_spatial": True, "spatial_graft": True, "seg_multi": True,
                "contiguous_bins": True,                 # tranches de durée sans trou (Florent, 16/10/2026)
-               "backtrack_long": True, "spare_relief": True}   # longs allers-retours annoncés ; repli et relief
+               "backtrack_long": True, "spare_relief": True, "foot_backtrack": True}   # longs allers-retours annoncés ; repli et relief
         for k, v in v19.items():
             setattr(g._TL, k, v)
         try:
