@@ -27,29 +27,29 @@ def test_reglages_v17():
     assert g.RETOUCH_ROUND_ROBIN is False
     assert g.RETOUCH_SHORTEN is False
     assert g.DETOUR_SCORE is True                      # v18
-    assert g.CROSS_SPATIAL is False                    # départs voisins, en essai
-    assert g.CROSS_SEGMENTS is False                   # tronçon par tronçon, en essai
+    assert g.CROSS_SPATIAL is True                     # départs voisins, en essai
+    assert g.CROSS_SEGMENTS is True                    # tronçon par tronçon, en essai
     assert g.SCENIC_AREAS is False                     # zones agréables, en essai
-    assert g.TIME_V19 is False                         # modèle de temps v19, en essai
-    assert g.LIGHTS_LATE is False                      # feux en fin de boucle, en essai
-    assert g.SCENIC_RETOUCH is False                   # voies agréables, en essai
-    assert g.WATER_CITY_NEAR is False                  # bord d'eau à 80 m en ville, en essai
-    assert g.FALLBACK_BEST is False                    # repli « mieux notée parmi les quasi-plus-plates », en essai
-    assert g.SEAFRONT_BONUS is False                   # front de mer, en essai
-    assert g.SEG_MULTI is False                        # tronçon par tronçon à plusieurs boucles, en essai
-    assert g.SPATIAL_GRAFT is False                    # départs voisins greffés, en essai
-    assert g.BACKTRACK_LONG is False                   # longs allers-retours annoncés, en essai
+    assert g.TIME_V19 is True                          # modèle de temps v19, en essai
+    assert g.LIGHTS_LATE is True                       # feux en fin de boucle, en essai
+    assert g.SCENIC_RETOUCH is True                    # voies agréables, en essai
+    assert g.WATER_CITY_NEAR is True                   # bord d'eau à 80 m en ville, en essai
+    assert g.FALLBACK_BEST is True                     # repli « mieux notée parmi les quasi-plus-plates », en essai
+    assert g.SEAFRONT_BONUS is True                    # front de mer, en essai
+    assert g.SEG_MULTI is True                         # tronçon par tronçon à plusieurs boucles, en essai
+    assert g.SPATIAL_GRAFT is True                     # départs voisins greffés, en essai
+    assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
-    assert g.APPENDIX_RULE is False                    # petites boucles accrochées, en essai
-    assert g.SPARE_RELIEF is False                     # repli de dernier recours et relief, en essai
-    assert g.FOOT_BACKTRACK is False                   # allers-retours à pied, en essai
-    assert g.CONTIGUOUS_BINS is False                  # tranches de durée sans trou, en essai
-    assert g.FATIGUE_V19 is False                      # fatigue au fil de la sortie, en essai
-    assert g.AXIS_BYPASS is False                      # contourner les grands axes, en essai
-    assert g.PREVIOUS_ANY_DURATION is False            # reclassement des boucles publiées, en essai
-    assert g.PLUS_RELIEF_RULES is False                # « plus de relief » du Modéré, en essai
-    assert g.PREVIOUS_WAYPOINT_M is None               # boucles publiées à 2 km près (v18), essai à 300 m
-    assert g.MOTORWAY_NUISANCE is False                # voies rapides, en essai
+    assert g.APPENDIX_RULE is True                     # petites boucles accrochées, en essai
+    assert g.SPARE_RELIEF is True                      # repli de dernier recours et relief, en essai
+    assert g.FOOT_BACKTRACK is True                    # allers-retours à pied, en essai
+    assert g.CONTIGUOUS_BINS is True                   # tranches de durée sans trou, en essai
+    assert g.FATIGUE_V19 is True                       # fatigue au fil de la sortie, en essai
+    assert g.AXIS_BYPASS is True                       # contourner les grands axes, en essai
+    assert g.PREVIOUS_ANY_DURATION is True             # reclassement des boucles publiées, en essai
+    assert g.PLUS_RELIEF_RULES is True                 # « plus de relief » du Modéré, en essai
+    assert g.PREVIOUS_WAYPOINT_M == 500.0              # boucles publiées à 2 km près (v18), essai à 300 m
+    assert g.MOTORWAY_NUISANCE is True                 # voies rapides, en essai
 
 
 def test_profil_plat_dans_la_configuration():
@@ -424,7 +424,7 @@ def test_params_hash_unchanged_while_v19_off():
     en allumer une change l'empreinte."""
     h0 = g.params_hash()
     old = g.TIME_V19
-    g.TIME_V19 = True
+    g.TIME_V19 = not old
     try:
         assert g.params_hash() != h0
     finally:
@@ -468,7 +468,11 @@ def test_fallback_best_keeps_best_of_flattest():
         l.terrain = {"climbs": [], "max_grade_pct": 0.0}
         return l
     a, b, c = mk(12.0, 70.8), mk(11.9, 48.4), mk(14.0, 90.0)   # aucune sous 10 m/km
-    assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [b]          # v17 : la moins vallonnée
+    g._TL.fallback_best = False
+    try:
+        assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [b]      # v17 : la moins vallonnée
+    finally:
+        del g._TL.fallback_best
     g._TL.fallback_best = True
     try:
         assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [a]      # 12,0 m/km à moins de 1 de 11,9

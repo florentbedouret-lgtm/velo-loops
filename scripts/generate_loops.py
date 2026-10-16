@@ -101,7 +101,7 @@ RELIEF_LIMITS_V18_SOFT = {"facile": {**RELIEF_LIMITS_V17["facile"], "flat_profil
 # aussi (la moins vallonnée, annoncée) ; (B, accord de Florent) une allure ne propose rien quand même sa boucle de repli
 # relief dépasse RELIEF_HARD (Tranquille : montée de catégorie 1 ou HC, ou rampe de 25 % ou plus : on pousse le vélo).
 # False : réserve publiée telle quelle (production v18).
-SPARE_RELIEF = False
+SPARE_RELIEF = True                    # v19
 # 1re mesure (16/10/2026) : 10 durées Tranquille retirées, 18 replis annoncés, Modéré et Sportif inchangés ; des replis
 # restaient très durs (el Coll 1 h : 54 m/km) : plafond de relief moyen à 25 m/km (choix de Florent).
 RELIEF_HARD = {"facile": {"banned_cats": ("1", "HC"), "max_grade": 25.0, "max_dpk": 25.0}}
@@ -150,7 +150,7 @@ ORDER_GAP_S = 180.0              # avec la marge : une durée plus longue d'au m
 # durée courte prenait des boucles plus longues et poussait la suivante (Sant Feliu 1 h Sportif : 54 -> 75 min, note
 # 63 -> 46) : 12 recommandées moins bonnes.
 # False : plages bornées par TIME_TOLERANCE (production v18).
-CONTIGUOUS_BINS = False
+CONTIGUOUS_BINS = True                    # v19
 _TL = threading.local()          # réglage par fil d'exécution (diagnostics qui comparent deux réglages en parallèle)
 # Modèle de temps v19 (14/10/2026), recalé sur les 3 sorties de Florent ensemble (Gràcia 28/09 et 01/10, Eixample 13/10 ;
 # traces gardées hors du dépôt), tranches de 100 m, ajustement commun (aucun réglage par sortie). Constats :
@@ -166,7 +166,7 @@ _TL = threading.local()          # réglage par fil d'exécution (diagnostics qu
 # Plafond de descente : 25 km/h mesuré sur Florent, qui se dit plus prudent que la moyenne ; 28 km/h retenu en Modéré
 # (choix de Florent, 14/10/2026 : ne pas calquer sa prudence, rester prudent). Tranquille et Sportif : estimations, sans
 # sortie pour les confirmer. Effet : Eixample 2 h « plus de relief » 106 min à 25 km/h, 102 à 30. False : modèle v18.
-TIME_V19 = False
+TIME_V19 = True                    # v19
 CLIMB_POWER_BONUS = 0.3          # puissance × 1,3 à CLIMB_POWER_FULL_GRADE et au-delà, soit ~90 % de la FTP (choix de
 #                                 Florent, 15/10/2026) : +50 % au 1er réglage (presque la FTP, intenable sur les longues
 #                                 montées de montagne : boucles estimées trop courtes, qui sortaient de leur durée) ; avec
@@ -182,7 +182,7 @@ SIGNAL_DELAY_V19_S = 15.0
 # et le bonus en montée s'épuise avec le D+ déjà grimpé (exp(-D+ / FATIGUE_CLIMB_M) : moitié vers 1 000 m, un quart vers
 # 2 000 m). Ordres de grandeur de l'endurance des amateurs, à caler sur une sortie longue de Florent ; sur ses 3 sorties
 # de 2 h, écart −0,5 %, −0,6 %, +1,0 %. False : bonus constant et marche à 3 h.
-FATIGUE_V19 = False
+FATIGUE_V19 = True                    # v19
 FATIGUE_FROM_H = 2.0
 FATIGUE_PER_H = 0.02
 FATIGUE_CLIMB_M = 1440.0
@@ -192,7 +192,7 @@ DENSITY = None                   # JunctionDensity, chargé dans main()
 # LIGHTS_LATE_MAX_MEAN) est recalculée dans l'autre sens ; le sens inverse est gardé s'il est valide, note au moins aussi
 # bien à LIGHTS_LATE_TOL points près, et met ses feux plus tard. Le sens change aussi les montées (la Carretera de
 # Vallvidrera montée ou descendue) : la note tranche. False : désactivé.
-LIGHTS_LATE = False
+LIGHTS_LATE = True                    # v19
 LIGHTS_LATE_MIN = 8              # au moins 8 feux sur la boucle
 LIGHTS_LATE_MAX_MEAN = 0.45      # position moyenne des feux (part de la boucle)
 LIGHTS_LATE_TOL = 1.0             # choix de Florent (14/10/2026) ; 0,5 au 1er essai (e1 / e2) : 11 boucles inversées sur 188
@@ -202,7 +202,7 @@ LIGHTS_LATE_TOL = 1.0             # choix de Florent (14/10/2026) ; 0,5 au 1er e
 # SCENIC_SEA_M de la côte ou SCENIC_RIVER_M d'une rivière. Si l'une des meilleures boucles les longe à moins de
 # SCENIC_NEAR_M pendant au moins SCENIC_RUN_M sans les emprunter, on essaie d'y passer (trois points de passage pris sur
 # la voie, au quart, à la moitié et aux trois quarts du tronçon longé) ; la note tranche. False : désactivé.
-SCENIC_RETOUCH = False
+SCENIC_RETOUCH = True                    # v19
 SCENIC_SEA_M = 60.0
 SCENIC_RIVER_M = 100.0
 SCENIC_NEAR_M = 600.0           # 400 m au 1er essai (y1 / y2) : l'Eixample 2 h longe la plage de la Barceloneta à 450 m
@@ -216,7 +216,7 @@ SCENIC_WAYS = None               # STRtree des voies agréables, chargé dans ma
 # avec trois points posés sur la voie et sans sens, la variante note 35,3 (allers-retours, morceaux à contresens).
 # SCENIC_DENSE : un point tous les SCENIC_PICK_M le long du tronçon, avec le sens de circulation de la boucle. False : trois
 # points sans sens (1er essai).
-SCENIC_DENSE = False
+SCENIC_DENSE = True                    # v19
 SCENIC_PICK_M = 500.0
 # Traçage m9 (15/10/2026) : avec les points serrés, la variante par tout le front de mer (6,4 km d'un bloc) note 49,2 contre
 # 55,8 : remplacer un si long tronçon coûte ailleurs ; le tracé de Florent ne changeait que la Barceloneta (54,2 contre 53,6).
@@ -227,7 +227,7 @@ SCENIC_WINDOWS = False
 # n'essayait d'éviter un tronçon de grand axe). AXIS_BYPASS : pour les AXIS_TOP meilleures boucles, chaque tronçon de grand
 # axe (primary, trunk, secondary) d'au moins AXIS_RUN_M en ville est remplacé par un passage décalé de AXIS_OFFSET_M de
 # chaque côté de l'axe (rues voisines) ; la variante est gardée si elle note mieux. False : désactivé.
-AXIS_BYPASS = False
+AXIS_BYPASS = True                    # v19
 AXIS_RUN_M = 500.0
 AXIS_OFFSET_M = 200.0
 AXIS_TOP = 2
@@ -243,14 +243,14 @@ SCENIC_WINDOW_M = 2000.0
 # de bord d'eau, la piste du front de mer 52 %). WATER_CITY_NEAR : en ville dense (bâti de la barre de terrain), un point
 # ne compte comme bord d'eau qu'à moins de WATER_CITY_DEG (~80 m) de l'eau ; hors ville, inchangé (~100 m ; une corniche
 # voit la mer de plus loin). False : désactivé.
-WATER_CITY_NEAR = False
+WATER_CITY_NEAR = True                    # v19
 WATER_CITY_DEG = 0.0008
 # Repli « la mieux notée parmi les quasi-moins vallonnées » (Florent, 14/10/2026 ; diagnostic s1 / s2 : sans boucle
 # conforme en Tranquille, le repli gardait LA moins vallonnée quelle que soit sa note : Sant Esteve de Llémena 4 h,
 # 12,0 m/km note 70,8 remplacée par 11,9 m/km note 48,4 dès qu'une candidate de plus est apparue ; 5 des 7 baisses du
 # test). FALLBACK_BEST : parmi les boucles à FALLBACK_RELIEF_TOL m/km (relief) ou FALLBACK_DIRT_TOL_KM km (terre) de la
 # moins vallonnée (la moins terreuse), la mieux notée. False : la moins vallonnée seule (v17).
-FALLBACK_BEST = False
+FALLBACK_BEST = True                    # v19
 # Option « plus de relief » du Modéré (Florent, 14/10/2026 : la boucle de l'Eixample qu'il a roulée et aimée, 17,5 m/km,
 # perdait 10 points de pénalité de relief, l'option proposée aujourd'hui 16 ; la pénalité au-dessus de 15 m/km, voulue pour
 # garder le Modéré modéré, écartait les boucles vallonnées de l'option faite pour elles). PLUS_RELIEF_RULES : pour CHOISIR
@@ -258,7 +258,7 @@ FALLBACK_BEST = False
 # (choix de Florent : 20), la pénalité habituelle au-delà ; interdits (parcours vraiment trop dur) : montée de catégorie
 # PLUS_RELIEF_BANNED_CATS, rampe de PLUS_RELIEF_MAX_GRADE % ou plus (pente maximale lissée sur 500 m). La recommandée et
 # « moins de relief » gardent la règle du Modéré. False : désactivé.
-PLUS_RELIEF_RULES = False
+PLUS_RELIEF_RULES = True                    # v19
 PLUS_RELIEF_PEN_ABOVE = 20.0
 PLUS_RELIEF_BANNED_CATS = ("1", "HC")
 PLUS_RELIEF_MAX_GRADE = 15.0
@@ -266,19 +266,19 @@ PLUS_RELIEF_MAX_GRADE = 15.0
 # retouchée, n'était pas retrouvée par KEEP_PREVIOUS, recalculée d'un point de passage tous les 2 km : GraphHopper prend
 # un autre chemin entre deux points). PREVIOUS_WAYPOINT_M : points de passage tous les N m (avec le sens de circulation)
 # pour recalculer les boucles publiées. None : ROUTE_WAYPOINT_M (2 km, v18).
-PREVIOUS_WAYPOINT_M = None
+PREVIOUS_WAYPOINT_M = 500.0                # v19
 # Reclassement des boucles publiées (15/10/2026, mesure combinée v19 : 41 durées perdent plus de 10 points, et dans 40 cas
 # la très bonne boucle d'avant n'est plus nulle part : avec le nouveau modèle de temps, elle est estimée plus courte ou plus
 # longue, sort de la plage de sa durée, et n'est jamais proposée à la durée où elle tombe maintenant).
 # PREVIOUS_ANY_DURATION : les boucles publiées de l'allure, toutes durées confondues, sont candidates à chaque durée ; leur
 # durée estimée décide où elles tombent (time_ok). Les requêtes GraphHopper sont les mêmes d'une durée à l'autre (mémoire
 # GH_MEMO). False : seulement celles de la même durée (v18).
-PREVIOUS_ANY_DURATION = False
+PREVIOUS_ANY_DURATION = True                    # v19
 # Front de mer (Florent, 14/10/2026 ; diagnostics cmp6 / y3 : la piste du passeig Marítim de la Barceloneta et le couloir
 # intérieur notent presque pareil, 53,1 contre 52,8 : la note ne voit ni la vue ni l'espace d'une promenade). SEAFRONT_BONUS :
 # SEAFRONT_PER_KM point par km roulé sans voitures (piste, voie verte) à moins de SEAFRONT_DEG (~80 m) de la côte ou d'une
 # plage, SEAFRONT_MAX points au plus. False : désactivé.
-SEAFRONT_BONUS = False
+SEAFRONT_BONUS = True                    # v19
 SEAFRONT_DEG = 0.0008
 SEAFRONT_PER_KM = 0.01
 SEAFRONT_MAX = 0.05
@@ -286,7 +286,7 @@ SEAFRONT_MAX = 0.05
 # désagréable même sur une piste séparée. MOTORWAY_NUISANCE : MOTORWAY_PER_KM point par km roulé à moins de MOTORWAY_DEG
 # (~30 m) d'une autoroute ou voie express à l'air libre (tunnels et sections couvertes exclus), hors trajet SUR la voie
 # elle-même (déjà compté dans les grands axes), MOTORWAY_MAX points au plus. False : désactivé.
-MOTORWAY_NUISANCE = False
+MOTORWAY_NUISANCE = True                    # v19
 MOTORWAY_DEG = 0.00035
 MOTORWAY_PER_KM = 0.01
 MOTORWAY_MAX = 0.05
@@ -1042,13 +1042,13 @@ CROSS_NEIGHBOUR_LOOPS = 2
 # CROSS_SPATIAL : les boucles publiées (même durée, même allure) des CROSS_SPATIAL_STARTS départs les plus proches à moins
 # de CROSS_SPATIAL_KM, adaptées au départ (du départ au point le plus proche de la boucle voisine, la boucle, retour),
 # deviennent des candidates et des parents du croisement. Source : site publié (NEIGHBOUR_SRC). False : désactivé.
-CROSS_SPATIAL = False
+CROSS_SPATIAL = True                    # v19
 # Croisement tronçon par tronçon (Florent, 14/10/2026 : « si A est meilleure sur un tronçon 1 et B sur un tronçon 2,
 # la boucle doit prendre le tronçon 1 de A et le tronçon 2 de B ») : là où deux boucles parents se séparent puis se
 # rejoignent, chaque tronçon est noté (feux, grands axes, pistes, ville, nature, terre, relief selon l'allure) et le
 # meilleur des deux est pris, si la durée prévue reste à CROSS_SEG_TIME près ; CROSS_SEG_MAX essais au plus. La note de la
 # boucle entière tranche ensuite. False : désactivé.
-CROSS_SEGMENTS = False
+CROSS_SEGMENTS = True                    # v19
 # Zones agréables pour GraphHopper (Florent, 14/10/2026 : l'Eixample 2 h passe par le couloir de la B-10 plutôt que par la
 # piste du bord de mer de la Barceloneta, autorisée dans OSM ; GraphHopper ne connaît pas le paysage) : profils
 # « <profil>_scenic » = profil + scripts/scenic_areas.py (bandes le long du littoral et des rivières, grands parcs, bonus
@@ -1063,7 +1063,7 @@ CROSS_SEG_MAX = 8
 # meilleures boucles (de ce départ ou d'un départ voisin), chaque tronçon où elle s'écarte d'une autre boucle est remplacé
 # par le meilleur tronçon parmi toutes les autres (échanges sans chevauchement, gain total maximal), si la durée tient.
 # False : par paires seulement.
-SEG_MULTI = False
+SEG_MULTI = True                    # v19
 SEG_MULTI_BASES = 3
 CROSS_SEG_MARGIN = 0.03          # un tronçon remplace l'autre s'il note au moins 3 points de mieux (sur 100)
 CROSS_SEG_TIME = 0.12
@@ -1079,7 +1079,7 @@ SPATIAL_SHORTER = False
 # point le plus proche de notre départ dans sa première moitié, on la quitte à son point le plus proche dans sa seconde
 # moitié (sa sortie de ville est remplacée par la nôtre) ; boucles voisines de la durée inférieure, de la même et de la
 # supérieure, gardées si la durée estimée est à GRAFT_TIME_TOL près. False : boucle voisine entière seulement.
-SPATIAL_GRAFT = False
+SPATIAL_GRAFT = True                    # v19
 GRAFT_TIME_TOL = 0.25
 NEIGHBOUR_SRC = None             # adresse du site publié (ou dossier contenant web/data/), fixée au lancement
 _NEIGHBOUR_CACHE: dict = {}
@@ -1194,7 +1194,7 @@ BACKTRACK_CLIMB_M = 40.0
 # 2e version (1re mesure du 16/10/2026 : 40 recommandées moins bonnes, 7 meilleures ; le château de Montjuïc, où Florent
 # roule jusqu'à l'esplanade, perdait tout son aller-retour) : les zones piétonnes (places, esplanades) restent roulables,
 # et seule la fin à pied est retirée quand le reste de l'aller-retour est utile (le lieu à moins de 130 m de son bout).
-FOOT_BACKTRACK = False
+FOOT_BACKTRACK = True                    # v19
 # Petites boucles accrochées (Florent, 16/10/2026, Espronceda 3 h Modéré : à Sant Fost, la boucle quitte la B-500, fait
 # 2,7 km dans des rues résidentielles et revient au même carrefour pour repartir par où elle est arrivée ; revue de la
 # v18 : 1 539 boucles). Une petite boucle accrochée revient au même point et repart par la route d'arrivée (empruntée
@@ -1207,7 +1207,7 @@ FOOT_BACKTRACK = False
 # dans la durée, la même boucle gardait la lourde pénalité d'un éperon : Tordera 6 h 69 -> 41 sans rien changer) :
 # pénalité FIXE de APPENDIX_PENALTY (3 points : à note proche, une autre boucle passe devant, choix de Florent) et, pour
 # les APPENDIX_TRIM_TOP meilleures candidates (boucles publiées comprises), la même boucle sans le détour est essayée.
-APPENDIX_RULE = False
+APPENDIX_RULE = True                    # v19
 APPENDIX_PENALTY = 0.03
 APPENDIX_TRIM_TOP = 4
 APPENDIX_MIN_M = 800.0
@@ -1234,7 +1234,7 @@ BACKTRACK_MAX_SHARE_TRIAL = 0.20
 # BACKTRACK_LONG : un aller-retour utile de plus de BACKTRACK_LONG_SHARE du parcours est annoncé dans l'app
 # (long_backtrack) et coûte BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER par part au-delà (au plus BACKTRACK_LONG_MAX) :
 # à qualité proche une vraie boucle passe devant, une boucle bien plus belle reste. False : gratuit et non annoncé.
-BACKTRACK_LONG = False
+BACKTRACK_LONG = True                    # v19
 BACKTRACK_LONG_SHARE = 0.25
 BACKTRACK_LONG_PEN = 0.03
 BACKTRACK_LONG_PEN_PER = 0.20
@@ -4434,7 +4434,14 @@ def load_starts_file(path: Path, bbox=None) -> list[dict]:
     return out
 
 
-GENERATOR_VERSION = "18"  # 18 : détours en pâté de maisons restants comptés dans la note (diagnostic : détours −25 à
+GENERATOR_VERSION = "19"  # 19 : modèle de temps recalé sur les sorties de Florent (+30 % en montée, descente
+#                           28 km/h en Modéré, densité de carrefours, 15 s par feu) ; repli corrigé ; croisement par
+#                           tronçon ; feux en fin de boucle ; voies agréables ; bord d'eau à 80 m en ville ; front
+#                           de mer ; boucles publiées retrouvées (500 m) et reclassées ; voies rapides ; « plus de
+#                           relief » du Modéré ; grands axes contournés ; fatigue ; départs voisins greffés et
+#                           tronçon par tronçon à plusieurs boucles ; tranches de durée sans trou ; longs allers-
+#                           retours annoncés ; repli et relief ; escaliers ; boucles accrochées (docs/v19_proposition.md).
+#                      18 : détours en pâté de maisons restants comptés dans la note (diagnostic : détours −25 à
 #                           −30 % sur les trois allures, aucune durée perdue) ; v17 interrompue au premier run (10/10/2026).
 #                      17 : relief par allure (Tranquille 5-10 m/km et repli annoncé, Modéré pénalisé au-dessus de
 #                           15 m/km), terre plafonnée à 1 km, marge des durées, détours en pâté de maisons, répétition par
