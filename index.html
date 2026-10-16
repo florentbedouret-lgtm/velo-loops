@@ -319,6 +319,9 @@
     .alt-row .ar-n { margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--color-text-2); }
     .alt-row > svg { flex: none; color: var(--color-text-2); }
     .alts + .rows { margin-top: 28px; }
+    .nl-msg { margin: 0; font-size: 16px; line-height: 1.45; }
+    .nl-durs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .nl-durs .btn { min-height: 44px; }
     #where .back { margin-top: 6px; }
     /* dépliants en lignes à chevron */
     .rows { border-top: 1px solid var(--color-border); margin-top: 16px; }
@@ -1001,6 +1004,7 @@
             if (!sheetHead.hasAttribute('tabindex')) sheetHead.tabIndex = -1;
             ((h && h.offsetParent) ? h : sheetHead).focus({ preventScroll: true });
           } else if (d.act === 'dur') goDuration(Number(d.min));
+          else if (d.act === 'lvl') { levelSel.value = d.l; showLevel(); }
           else if (d.act === 'nb') goNeighbour(d.id, Number(d.min));
           else if (d.act === 'train') goTrain(d.id, Number(d.ab));
         }
@@ -1237,10 +1241,7 @@
           .map(o => Math.round(o.duration_target_min)))].sort((a, b) => a - b);
         sheetHead.innerHTML = '<div class="head-row"><span class="opt-label">' + esc(t('no_loop_label')) + '</span></div>';
         sheetFoot.hidden = true;
-        sheetBody.innerHTML = esc(t('no_loop', { d: hm(Number(durSel.value) * 60), lvl: levelSel.options[levelSel.selectedIndex].text })) +
-          (avail.length ? '<br>' + esc(t('other_dur')) + avail.map(m =>
-            '<button type="button" class="btn other-dur" data-min="' + m + '">' +
-            hm(m) + '</button>').join('') : '<br>' + esc(t('try_level')));
+        sheetBody.innerHTML = noLoopHtml(avail);
         sheetBody.querySelectorAll('button[data-min]').forEach(b => {
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
         });
@@ -1255,6 +1256,46 @@
       wantedOption = null;
       const i = w >= 0 ? w : shown.findIndex(o => o.label === 'equilibre');
       select(i >= 0 ? i : 0);
+    }
+
+    // ---------- O-78 (16/10/2026) : une durée absente est expliquée (relief trop fort pour l'allure, ou pas assez de routes
+    // goudronnées et sans grosse côte autour du départ) et l'app propose quoi faire, avec la même forme de ligne que
+    // « Autres façons de rouler » : la même durée à une autre allure, le départ le plus proche qui a cette durée, ou une
+    // autre durée. Revue de la v18 : 2 925 durées vides, 95 % en montagne ; la v19 en retire d'autres en Tranquille.
+    function noLoopHtml(avail) {
+      const dm = Math.round(Number(durSel.value) * 60), lvl = levelSel.value, d = hm(dm);
+      const lvlName = v => [...levelSel.options].find(o => o.value === v).text;
+      const same = startData.options.filter(o => Math.round(o.duration_target_min) === dm && o.level !== lvl);
+      const otherLv = [...new Set(same.map(o => o.level))];
+      const why = lvl === 'facile' && otherLv.length ? t('nl_why_relief', { lvl: lvlName(lvl), d })
+        : t('nl_why_roads', { d });
+      let rows = otherLv.map(v => {
+        const o = same.filter(x => x.level === v).sort((a, b) => (b.score || 0) - (a.score || 0))[0];
+        return altRow('data-act="lvl" data-l="' + v + '"', esc(t('nl_other_lvl', { lvl: lvlName(v) })), '',
+          esc(km(o.distance_km) + ' km · ' + t('dplus_inline', { m: Math.round(o.ascend_m) }) + ' · ≈ ' + hm(o.time_est_min)),
+          '', t('nl_other_lvl', { lvl: lvlName(v) }));
+      }).join('');
+      const cur = indexData && indexData.starts.find(s => s.id === startSel.value);
+      const key = String(dm / 60);
+      if (cur && modelOk) {                                // le départ le plus proche qui a cette durée à cette allure
+        let best = null;
+        for (const s of indexData.starts) {
+          const c = s.compare && s.compare[key] && s.compare[key][lvl];
+          if (s.id === cur.id || !c) continue;
+          // en Tranquille, pas un départ dont la boucle est elle-même vallonnée (au-delà de la cible de 10 m/km)
+          if (lvl === 'facile' && c.dplus != null && c.km && c.dplus / c.km > 10) continue;
+          const min = approachBetween(cur, s);
+          if (min <= 30 && (!best || min < best.min)) best = { s, min: Math.round(min), c };
+        }
+        if (best) rows += altRow('data-act="nb" data-id="' + best.s.id + '" data-min="' + best.min + '"',
+          esc(t('nb_t', { name: startLabel(best.s) })), esc(t('nb_line', { min: best.min })), outingFig(best.c, best.min, false), '',
+          t('nb_aria', { name: startLabel(best.s) }));
+      }
+      const durs = avail.length ? '<p class="alts-why">' + esc(t('other_dur')) + '</p><div class="nl-durs">' + avail.map(m =>
+        '<button type="button" class="btn other-dur" data-min="' + m + '">' + hm(m) + '</button>').join('') + '</div>' : '';
+      return '<p class="nl-msg">' + esc(t('no_loop', { d, lvl: lvlName(lvl) })) + ' ' + esc(why) + '</p>' +
+        (rows || durs ? '<section class="alts" aria-labelledby="altsH"><h3 class="alts-h" id="altsH">' +
+          esc(t('nl_h', { d })) + '</h3>' + rows + durs + '</section>' : '<p class="alts-why">' + esc(t('try_level')) + '</p>');
     }
 
     // ---------- O-14 : départ voisin qui sort plus vite de la ville (même durée, même niveau), quand la boucle reste en
