@@ -1,0 +1,43 @@
+name: Instantané des données publiées
+
+# Lancement manuel seulement (16/10/2026) : dépose les données publiées du site (web/data) dans une release du dépôt,
+# base de comparaison de la revue de cohérence d'une nouvelle version et retour arrière possible. Le jeton propre à
+# GitHub Actions crée la release (droit d'écriture limité à ce workflow).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Nom de la release (ex. donnees-v18)"
+        required: true
+      title:
+        description: "Titre de la release"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer les données publiées
+        run: |
+          set -euo pipefail
+          SITE="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/web/data"
+          mkdir -p snap/web/data/starts
+          curl -sfS --retry 3 -o snap/web/data/index.json "$SITE/index.json"
+          curl -sfS --retry 3 -o snap/web/data/train_links.json "$SITE/train_links.json" || true
+          python3 -c "import json;print('\n'.join(e['id'] for e in json.load(open('snap/web/data/index.json'))['starts']))" > ids.txt
+          xargs -P 8 -I ID curl -sfS --retry 3 -o "snap/web/data/starts/ID.json" "$SITE/starts/ID.json" < ids.txt
+          echo "départs : $(wc -l < ids.txt), fichiers : $(ls snap/web/data/starts | wc -l)"
+          test "$(wc -l < ids.txt)" -eq "$(ls snap/web/data/starts | wc -l)"
+          tar -C snap -czf "${{ inputs.tag }}.tar.gz" web
+      - name: Créer la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+        run: |
+          VER=$(python3 -c "import json;d=json.load(open('snap/web/data/index.json'));print(d.get('generator_version'), d.get('params_hash'), len(d['starts']))")
+          gh release create "$TAG" "$TAG.tar.gz" --repo "$GITHUB_REPOSITORY" --title "$TITLE" \
+            --notes "Instantané des données publiées du site (version, empreinte, départs : $VER), $(date -u +%d/%m/%Y). Base de comparaison de la revue de cohérence et retour arrière possible. Données dérivées d'OpenStreetMap (ODbL) et de l'ICGC (CC BY 4.0)."
