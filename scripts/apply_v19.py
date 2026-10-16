@@ -23,10 +23,11 @@ def patch(rel, pairs):
 
 FLAGS = ["TIME_V19", "FALLBACK_BEST", "CROSS_SEGMENTS", "LIGHTS_LATE", "SCENIC_RETOUCH", "SCENIC_DENSE", "WATER_CITY_NEAR",
          "SEAFRONT_BONUS", "PREVIOUS_ANY_DURATION", "MOTORWAY_NUISANCE", "PLUS_RELIEF_RULES", "AXIS_BYPASS",
-         "FATIGUE_V19", "CROSS_SPATIAL", "SPATIAL_GRAFT", "SEG_MULTI",
-         "CONTIGUOUS_BINS",                         # tranches de durée sans trou (16/10/2026)
-         "BACKTRACK_LONG", "SPARE_RELIEF",
-         "FOOT_BACKTRACK"]                          # allers-retours par des escaliers jamais utiles (16/10/2026)          # longs allers-retours annoncés ; repli et relief (16/10/2026)   # départs voisins greffés (16/10/2026)
+         "FATIGUE_V19",
+         # ajouts du 16/10/2026 : départs voisins greffés, tronçon par tronçon à plusieurs boucles, tranches de durée sans
+         # trou, longs allers-retours annoncés, repli et relief, allers-retours par des escaliers
+         "CROSS_SPATIAL", "SPATIAL_GRAFT", "SEG_MULTI", "CONTIGUOUS_BINS", "BACKTRACK_LONG", "SPARE_RELIEF",
+         "FOOT_BACKTRACK"]
 gen = [("\n%s = False" % f, "\n%s = True                    # v19" % f) for f in FLAGS]
 gen += [("\nPREVIOUS_WAYPOINT_M = None\n", "\nPREVIOUS_WAYPOINT_M = 500.0                # v19\n"),
         ('GENERATOR_VERSION = "18"  # 18 :',
