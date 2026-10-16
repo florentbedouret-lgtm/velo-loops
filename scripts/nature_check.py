@@ -491,7 +491,10 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
             continue
         fits = [f"{x:g}" for x in g.DURATION_SET if g.time_ok(l.time_s, x)]
         prev.append({"score": l.score, "min": round(l.time_s / 60), "km": round(l.distance_m / 1000, 1),
-                     "valide_ici": g.time_ok(l.time_s, d), "plages": fits, "dpk": round(l.dplus_per_km, 1)})
+                     "valide_ici": g.time_ok(l.time_s, d), "plages": fits, "dpk": round(l.dplus_per_km, 1),
+                     # 16/10/2026 : tous les contrôles du filet (previous_candidates), pas seulement la durée
+                     "repetition": round(l.overlap, 3), "repetition_ok": g.overlap_ok(l), "demi_tours": l.u_turns,
+                     "terre_ok": g.dirt_ok(l)})
     return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows,
             "publiees": prev,
             "detail": detail}

@@ -429,7 +429,7 @@ jobs:
             # mesure combinée v19 (14/10/2026) : les 30 départs habituels, Barcelone et sa proche banlieue à part (c3)
             # traçage des boucles perdues avec toutes les règles v19 (15/10/2026)
             # 16/10/2026 : plus fortes baisses de la mesure combinée v19 (21 règles), tracées
-            [ "$DIAG_PART" = "c4" ] && RELIEF_IDS="castellgali;sant-feliu-de-pallerols;castelldefels;sants-montjuic" && NATURE_TRACE="castellgali|6|facile;sant-feliu-de-pallerols|2|modere;sant-feliu-de-pallerols|5|modere;castelldefels|1.5|soutenu;sants-montjuic|0.75|soutenu"
+            [ "$DIAG_PART" = "c4" ] && RELIEF_IDS="castelldefels" && NATURE_TRACE="castelldefels|1.5|soutenu"
             # tranches de durée sans trou (15/10/2026) : les 30 départs habituels, Castelldefels (1 h 30 Sportif perdue) en tête
             # allers-retours à pied (15/10/2026) : el Gornal 3 h Modéré (temple du Tibidabo) tracé, départs autour de
             # Collserola et de Montjuïc, puis les 30 départs habituels
