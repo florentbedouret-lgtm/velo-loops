@@ -27,7 +27,7 @@ FLAGS = ["TIME_V19", "FALLBACK_BEST", "CROSS_SEGMENTS", "LIGHTS_LATE", "SCENIC_R
          # ajouts du 16/10/2026 : départs voisins greffés, tronçon par tronçon à plusieurs boucles, tranches de durée sans
          # trou, longs allers-retours annoncés, repli et relief, allers-retours par des escaliers
          "CROSS_SPATIAL", "SPATIAL_GRAFT", "SEG_MULTI", "CONTIGUOUS_BINS", "BACKTRACK_LONG", "SPARE_RELIEF",
-         "FOOT_BACKTRACK"]
+         "FOOT_BACKTRACK", "APPENDIX_RULE"]
 gen = [("\n%s = False" % f, "\n%s = True                    # v19" % f) for f in FLAGS]
 gen += [("\nPREVIOUS_WAYPOINT_M = None\n", "\nPREVIOUS_WAYPOINT_M = 500.0                # v19\n"),
         ('GENERATOR_VERSION = "18"  # 18 :',
