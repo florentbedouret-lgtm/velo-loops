@@ -40,6 +40,7 @@ def test_reglages_v17():
     assert g.SPATIAL_GRAFT is True                     # départs voisins greffés, en essai
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
+    assert g.FALSE_START is False                      # faux départs, en essai
     assert g.TURN_RULES is False                       # demi-tours au bon endroit, en essai
     assert g.APPENDIX_RULE is True                     # petites boucles accrochées, en essai
     assert g.SPARE_RELIEF is True                      # repli de dernier recours et relief, en essai
@@ -542,4 +543,28 @@ def test_find_appendices_sant_fost_shape():
     eight = [(0, 0), (2000, 2000), (0, 4000), (-2000, 2000), (0, 0), (2000, -2000), (0, -4000), (-2000, -2000), (0, 0)]
     c8 = path(eight)
     assert g.find_appendices(c8, cum(c8)) == []
+
+
+def test_false_start_eixample_shape():
+    """Faux départ (FALSE_START) : 2 km vers la mer, retour par une rue parallèle à 120 m, repassage au départ, puis la
+    vraie boucle à l'opposé ; une boucle ordinaire n'en a pas."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.39))
+    def path(pts, step=20.0):
+        out = []
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            n = max(1, int(math.hypot(x1 - x0, y1 - y0) // step))
+            out += [(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n) for k in range(n)]
+        out.append(pts[-1])
+        return [[2.16 + x / kx, 41.39 + y / 110540.0] for x, y in out]
+    def cum(c):
+        r = [0.0]
+        for a, b in zip(c, c[1:]):
+            r.append(r[-1] + g.haversine(a[0], a[1], b[0], b[1]))
+        return r
+    bad = path([(0, 0), (1500, -1500), (1580, -1420), (80, 80), (-3000, 3000), (-6000, 3000), (-6000, 0), (0, 0)])
+    found = g.false_starts(bad, cum(bad))
+    assert found and found[0][0] == 0
+    good = path([(0, 0), (-3000, 3000), (-6000, 3000), (-6000, 0), (0, 0)])
+    assert g.false_starts(good, cum(good)) == []
 

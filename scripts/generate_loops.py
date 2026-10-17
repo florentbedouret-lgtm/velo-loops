@@ -688,14 +688,42 @@ def find_appendices(coords, cum) -> list:
     return out
 
 
-def appendix_spurs(loop, coords, cum, level) -> list:
-    """Petites boucles accrochées sans but de la boucle, au format des éperons injustifiés (retirées par trim_spurs)."""
+def false_start() -> bool:
+    """Faux départs et faux retours (FALSE_START), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "false_start", FALSE_START))
+
+
+def false_starts(coords, cum) -> list:
+    """Faux départ / faux retour (voir FALSE_START) : [(a, b)] indices du tronçon (début ou fin de boucle) qui s'éloigne
+    du départ puis y repasse avant de partir ailleurs."""
+    if len(coords) < 10 or cum[-1] < 3000.0:
+        return []
+    s0, total = coords[0], cum[-1]
+    d0 = [haversine(s0[0], s0[1], c[0], c[1]) for c in coords]
+    out = []
+    head = [j for j in range(len(coords)) if 800.0 <= cum[j] <= FALSE_START_SHARE * total and d0[j] <= FALSE_START_NEAR_M]
+    if head:
+        j = head[-1]
+        if max(d0[:j + 1]) >= FALSE_START_AWAY_M:
+            out.append((0, j))
+    tail = [i for i in range(len(coords)) if 800.0 <= total - cum[i] <= FALSE_START_SHARE * total
+            and d0[i] <= FALSE_START_NEAR_M]
+    if tail:
+        i = tail[0]
+        if max(d0[i:]) >= FALSE_START_AWAY_M and (not out or i > out[0][1]):
+            out.append((i, len(coords) - 1))
+    return out
+
+
+def appendix_spurs(loop, coords, cum, level, windows=None) -> list:
+    """Petites boucles accrochées sans but de la boucle (ou les tronçons « windows » donnés : faux départs), au format
+    des éperons injustifiés (retirées par trim_spurs)."""
     out = []
     lc = ""
     if loop.scenery and (loop.scenery.get("landcover") or {}).get("cls") is not None:
         lc = landcover_seq(loop.scenery["landcover"]["cls"])
     road = loop.road_seq or ""
-    for a, b in find_appendices(coords, cum):
+    for a, b in (find_appendices(coords, cum) if windows is None else windows):
         m0, m1 = cum[a], cum[b]
         if any(r.get("km") is not None and m0 / 1000.0 - 0.1 <= r["km"] <= m1 / 1000.0 + 0.1 for r in loop.remarkable or []):
             continue                                     # passe par un lieu remarquable
@@ -1249,6 +1277,16 @@ APPENDIX_RULE = True                    # v19
 # jusqu'au lieu (gardé si la durée tient ; la note tranche). False : comme la v19. Hors de l'empreinte (V19_PARAMS) tant
 # qu'elle est éteinte : la v19 en cours de calcul ne doit pas voir son empreinte changer ; l'y ajouter à l'activation.
 TURN_RULES = False
+# Faux départs (Florent, 17/10/2026, l'Eixample 5 h Sportif « plus de relief » : la boucle part vers la mer, revient par
+# une rue parallèle (sens uniques), repasse par le départ et part à l'opposé pour tout le reste ; « le plus bizarre est de
+# partir dans un sens pour finalement repasser par le point de départ »). FALSE_START : dans le premier (ou le dernier)
+# FALSE_START_SHARE du parcours, un tronçon qui s'éloigne d'au moins FALSE_START_AWAY_M du départ puis y repasse à moins de
+# FALSE_START_NEAR_M est traité comme une boucle accrochée (but nommable sinon 3 points, et la même boucle sans lui essayée).
+# Le retour par une rue parallèle compte (aucune exigence de même rue). Hors de l'empreinte tant qu'elle est éteinte.
+FALSE_START = False
+FALSE_START_SHARE = 0.33
+FALSE_START_AWAY_M = 600.0
+FALSE_START_NEAR_M = 250.0
 TURN_EXTEND_M = 1500.0
 TURN_EXTEND_TOP = 4
 APPENDIX_PENALTY = 0.03
@@ -2763,6 +2801,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.seafront_km, loop.motorway_km = (side_km(coords, cum, car, rc_e) if (seafront_bonus() or motorway_nuisance())
                                           else (0.0, 0.0))
     loop.appendices = appendix_spurs(loop, coords, cum, level) if appendix_rule() else []   # boucles accrochées sans but
+    if false_start():                                        # faux départs et faux retours (FALSE_START)
+        loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
     loop.score = score(loop)
     return loop
 
