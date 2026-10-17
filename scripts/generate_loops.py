@@ -601,6 +601,32 @@ def turn_rules() -> bool:
     return bool(getattr(_TL, "turn_rules", TURN_RULES))
 
 
+def destination_tip(p) -> bool:
+    """Demi-tour à une destination (TURN_RULES, volet 5) : lieu remarquable, belvédère, sommet ou col, bord de mer ou de
+    lac (pas le long d'une rivière). Sans données chargées : pas de jugement (vrai)."""
+    import shapely
+    if not POIS and LANDSCAPE is None:
+        return True
+    pt = shapely.Point(p[0], p[1])
+    if POIS:
+        if "lieu" in POIS and len(POIS["lieu"][0].query(pt, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)):
+            return True
+        for k in ("peak", "pass"):
+            if k in POIS and len(POIS[k][0].query(pt, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)):
+                return True
+    if LANDSCAPE is not None:
+        tv = LANDSCAPE.trees.get("view")
+        if tv is not None and len(tv.query(pt, predicate="dwithin", distance=VIEW_NEAR_DEG)):
+            return True
+        near = lambda k, d: (LANDSCAPE.trees.get(k) is not None  # noqa: E731
+                             and len(LANDSCAPE.trees[k].query(pt, predicate="dwithin", distance=d)) > 0)
+        if near("sea", 0.0006):
+            return True                                  # bord de mer
+        if near("water", 0.0006) and not near("river", 0.0015):
+            return True                                  # lac, réservoir (pas une rivière : la couche « eau » les mêle)
+    return False
+
+
 def extend_to_place(gh, l, level, duration_h) -> list:
     """La même boucle, ses allers-retours prolongés jusqu'au lieu remarquable tout proche qu'ils n'atteignent pas
     (TURN_RULES, cas de Montserrat)."""
@@ -1367,6 +1393,12 @@ TURN_EXTEND_TOP = 4
 # sommet, un col ou au bord de l'eau (natural_tip ; Florent, 17/10/2026, l'Eixample 1 h 30 Sportif : demi-tour à 192 m
 # en pleine montée vers Sant Pere Màrtir ; Montserrat : demi-tour 830 m avant le monastère).
 TURN_CLIMB_M = 20.0
+# (5) un aller-retour « nature » ou « piste » sans destination (demi-tour ni à un lieu remarquable, ni à un belvédère, ni
+# à un sommet ou un col, ni au bord de la mer ou d'un lac) reste permis mais coûte TURN_AIMLESS_PEN (au plus
+# TURN_AIMLESS_MAX) : à note proche, une boucle ou un demi-tour plus naturel passe devant (Florent, 17/10/2026 : « pas les
+# interdire, plutôt les pénaliser peu » ; le Besòs depuis l'Eixample 2 h Tranquille).
+TURN_AIMLESS_PEN = 0.02
+TURN_AIMLESS_MAX = 0.04
 APPENDIX_PENALTY = 0.03
 APPENDIX_TRIM_TOP = 4
 APPENDIX_MIN_M = 800.0
@@ -2884,6 +2916,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                         "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
                         "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2)}
                        for a_, b_, t, w in useful]
+    loop.aimless_bt = (sum(1 for b_ in loop.backtracks if b_["why"] in ("nature", "piste")
+                           and not destination_tip([b_["lon"], b_["lat"]])) if turn_rules() else 0)
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) is None]
@@ -2960,6 +2994,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
             total -= min(AXES_OVER_MAX, AXES_OVER_PER * over)
     if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
         total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
+    if getattr(l, "aimless_bt", 0):                       # aller-retour sans destination : un peu pénalisé (TURN_RULES)
+        total -= min(TURN_AIMLESS_MAX, TURN_AIMLESS_PEN * l.aimless_bt)
     if backtrack_long():                                  # long aller-retour annoncé, plus gratuit (BACKTRACK_LONG)
         lb = long_backtrack(l)
         if lb is not None:
