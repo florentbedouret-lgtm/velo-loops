@@ -1363,6 +1363,10 @@ FALSE_START_AWAY_M = 600.0
 FALSE_START_NEAR_M = 250.0
 TURN_EXTEND_M = 1500.0
 TURN_EXTEND_TOP = 4
+# (4) un aller-retour « nature » ou « piste » qui monte d'au moins TURN_CLIMB_M n'est utile que s'il fait demi-tour à un
+# sommet, un col ou au bord de l'eau (natural_tip ; Florent, 17/10/2026, l'Eixample 1 h 30 Sportif : demi-tour à 192 m
+# en pleine montée vers Sant Pere Màrtir ; Montserrat : demi-tour 830 m avant le monastère).
+TURN_CLIMB_M = 20.0
 APPENDIX_PENALTY = 0.03
 APPENDIX_TRIM_TOP = 4
 APPENDIX_MIN_M = 800.0
@@ -3878,6 +3882,9 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     long_ = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
     if long_ < BACKTRACK_PLEASANT_MIN_M:                     # trop court pour « prolonger une route agréable »
         return None
+    if (turn_rules() and len(seg[0]) > 2 and coords[t][2] - seg[0][2] >= TURN_CLIMB_M
+            and not natural_tip(coords[t])):
+        return None                                          # monte puis fait demi-tour en pleine montée (TURN_RULES)
     green = None
     if LANDSCAPE is not None:
         hit = np.zeros(len(pts), dtype=bool)
