@@ -596,6 +596,39 @@ def backtrack_max_share():
     return getattr(_TL, "backtrack_max_share", BACKTRACK_MAX_SHARE)
 
 
+def turn_rules() -> bool:
+    """Demi-tours au bon endroit (TURN_RULES), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "turn_rules", TURN_RULES))
+
+
+def extend_to_place(gh, l, level, duration_h) -> list:
+    """La même boucle, ses allers-retours prolongés jusqu'au lieu remarquable tout proche qu'ils n'atteignent pas
+    (TURN_RULES, cas de Montserrat)."""
+    if not (POIS and "lieu" in POIS) or not getattr(l, "backtracks", None):
+        return []
+    import shapely
+    tree, items = POIS["lieu"]
+    seen = {r["n"] for r in (l.remarkable or [])}
+    out = []
+    for bt in l.backtracks:
+        tip = shapely.Point(bt["lon"], bt["lat"])
+        for k in tree.query(tip, predicate="dwithin", distance=TURN_EXTEND_M / 111000.0):
+            name = items[k][1]
+            if name in seen:
+                continue
+            g_ = tree.geometries[k]
+            way = route_waypoints(l.coords)
+            j = min(range(len(way)), key=lambda i: haversine(way[i][0], way[i][1], bt["lon"], bt["lat"]))
+            way = way[:j + 1] + [[g_.x, g_.y]] + way[j:]    # du demi-tour au lieu, puis retour au même point
+            path = gh.via(way, l.profile)
+            t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+            if (t is not None and time_ok(t.time_s, duration_h) and overlap_ok(t) and t.u_turns <= MAX_UTURNS
+                    and dirt_ok(t) and name in {r["n"] for r in (t.remarkable or [])}):
+                out.append(t)
+            break                                        # un lieu par aller-retour
+    return out
+
+
 def appendix_rule() -> bool:
     """Petites boucles accrochées sans but (APPENDIX_RULE), réglable par fil d'exécution."""
     return bool(getattr(_TL, "appendix_rule", APPENDIX_RULE))
@@ -1208,6 +1241,15 @@ FOOT_BACKTRACK = True                    # v19
 # pénalité FIXE de APPENDIX_PENALTY (3 points : à note proche, une autre boucle passe devant, choix de Florent) et, pour
 # les APPENDIX_TRIM_TOP meilleures candidates (boucles publiées comprises), la même boucle sans le détour est essayée.
 APPENDIX_RULE = True                    # v19
+# Demi-tours au bon endroit (Florent, 17/10/2026 : l'Eixample 3 h Modéré monte la Carretera del Tibidabo et fait demi-tour
+# au milieu de la route, « excusé » par un point de vue sans nom croisé à 245 m ; l'Eixample 6 h Sportif monte vers le
+# monastère de Montserrat et fait demi-tour 830 m avant, aller-retour « nature »). TURN_RULES : (1) un aller-retour
+# « belvédère » n'est utile que si son demi-tour est au point de vue ; (2) pour les TURN_EXTEND_TOP meilleures candidates,
+# un aller-retour qui fait demi-tour à moins de TURN_EXTEND_M d'un lieu remarquable sans l'atteindre est prolongé
+# jusqu'au lieu (gardé si la durée tient ; la note tranche). False : comme la v19.
+TURN_RULES = False
+TURN_EXTEND_M = 1500.0
+TURN_EXTEND_TOP = 4
 APPENDIX_PENALTY = 0.03
 APPENDIX_TRIM_TOP = 4
 APPENDIX_MIN_M = 800.0
@@ -3679,10 +3721,16 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         if dirt > BACKTRACK_DIRT_MAX_M:
             return None
     tv = LANDSCAPE.trees.get("view") if LANDSCAPE is not None else None
-    if tv is not None and len(tv.query(pts, predicate="dwithin", distance=VIEW_NEAR_DEG)[0]):
-        return "belvédère"
     if t is None:                                            # demi-tour : le point le plus éloigné de l'entrée
         t = max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1], coords[i][0], coords[i][1]))
+    if tv is not None:
+        if turn_rules():                                     # le demi-tour doit être au point de vue (TURN_RULES)
+            seen_view = len(tv.query(shapely.points(np.array([[coords[t][0], coords[t][1]]])), predicate="dwithin",
+                                     distance=VIEW_NEAR_DEG)[0])
+        else:
+            seen_view = len(tv.query(pts, predicate="dwithin", distance=VIEW_NEAR_DEG)[0])
+        if seen_view:
+            return "belvédère"
     if (level in BACKTRACK_RELIEF_LEVELS and len(seg[0]) > 2
             and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(coords[t])):
         return "relief"                                      # monte, et fait demi-tour à un sommet, un col ou au bord de l'eau
@@ -3941,6 +3989,10 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             t = trim_spurs(gh, l, level, duration)
             if t is not None:
                 pool.append(t)
+    if turn_rules():                                         # allers-retours prolongés jusqu'au lieu tout proche
+        for l in sorted([x for x in pool if getattr(x, "backtracks", None)], key=lambda x: x.score,
+                        reverse=True)[:TURN_EXTEND_TOP]:
+            pool.extend(extend_to_place(gh, l, level, duration))
     if appendix_rule():                                      # la même boucle sans sa boucle accrochée (APPENDIX_RULE)
         for l in sorted([x for x in pool if getattr(x, "appendices", None)], key=lambda x: x.score,
                         reverse=True)[:APPENDIX_TRIM_TOP]:
@@ -4512,10 +4564,11 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
              CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
-             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE],
+             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE, TURN_RULES],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
+            [TURN_RULES, TURN_EXTEND_M, TURN_EXTEND_TOP],
             [APPENDIX_RULE, APPENDIX_PENALTY, APPENDIX_TRIM_TOP, APPENDIX_MIN_M, APPENDIX_MAX_M, APPENDIX_MAX_SHARE, APPENDIX_STEM_M, APPENDIX_NEAR_M,
              APPENDIX_GREEN, APPENDIX_CLIMB_M],
             [BACKTRACK_MAX_SHARE],

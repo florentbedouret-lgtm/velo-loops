@@ -40,6 +40,7 @@ def test_reglages_v17():
     assert g.SPATIAL_GRAFT is True                     # départs voisins greffés, en essai
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
+    assert g.TURN_RULES is False                       # demi-tours au bon endroit, en essai
     assert g.APPENDIX_RULE is True                     # petites boucles accrochées, en essai
     assert g.SPARE_RELIEF is True                      # repli de dernier recours et relief, en essai
     assert g.FOOT_BACKTRACK is True                    # allers-retours à pied, en essai

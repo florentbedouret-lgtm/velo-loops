@@ -721,6 +721,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant == "turn":                                # demi-tours au bon endroit (essai) seuls
+        g._TL.turn_rules = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.turn_rules
     elif variant == "apx":                                 # petites boucles accrochées sans but (essai) seules
         g._TL.appendix_rule = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
