@@ -721,6 +721,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant == "axpen":                               # grands axes au-delà d'un seuil (essai) seuls
+        g._TL.axes_over = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.axes_over
     elif variant == "cspur":                               # allers-retours dans un couloir (essai) seuls
         g._TL.corridor_spurs = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

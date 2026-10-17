@@ -688,6 +688,11 @@ def find_appendices(coords, cum) -> list:
     return out
 
 
+def axes_over() -> bool:
+    """Grands axes au-delà d'un seuil (AXES_OVER), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "axes_over", AXES_OVER))
+
+
 def corridor_spurs_on() -> bool:
     """Allers-retours dans un couloir (CORRIDOR_SPURS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "corridor_spurs", CORRIDOR_SPURS))
@@ -1342,6 +1347,15 @@ FALSE_START = False
 # CORRIDOR_MIN_M à l'aller, suit la règle des allers-retours (utile : gardé ; sinon éperon injustifié, pénalisé et
 # retiré). Hors de l'empreinte tant qu'elle est éteinte.
 CORRIDOR_SPURS = False
+# Grands axes au-delà d'un seuil (Florent, 17/10/2026, Sarrià 3 h Modéré : la boucle choisie passe 45 % sur de grands axes
+# et note 60,5 contre 59,9 pour la boucle v18 à 2 % ; la note pesait trop peu les grands axes face à un peu de relief).
+# AXES_OVER : au-delà de AXES_OVER_SHARE du parcours sur de grandes routes, AXES_OVER_PER point par point de part en plus
+# (au plus AXES_OVER_MAX) : 30 % -> 5 points, 45 % -> 12,5. En dessous, rien ne change. Hors de l'empreinte tant
+# qu'elle est éteinte.
+AXES_OVER = False
+AXES_OVER_SHARE = 0.20
+AXES_OVER_PER = 0.5
+AXES_OVER_MAX = 0.15
 CORRIDOR_NEAR_M = 150.0
 CORRIDOR_MIN_M = 400.0
 FALSE_START_SHARE = 0.33
@@ -2936,6 +2950,10 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     total += min(VIEW_MAX_BONUS, VIEW_BONUS * l.views_passed)                 # tout belvédère devant lequel on passe
     if seafront_bonus():                                  # front de mer sans voitures (SEAFRONT_BONUS)
         total += min(SEAFRONT_MAX, SEAFRONT_PER_KM * getattr(l, "seafront_km", 0.0))
+    if axes_over():                                       # grands axes au-delà du seuil (AXES_OVER)
+        over = l.shares.get("main_roads", 0.0) - AXES_OVER_SHARE
+        if over > 0:
+            total -= min(AXES_OVER_MAX, AXES_OVER_PER * over)
     if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
         total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
     if backtrack_long():                                  # long aller-retour annoncé, plus gratuit (BACKTRACK_LONG)

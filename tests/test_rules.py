@@ -40,6 +40,7 @@ def test_reglages_v17():
     assert g.SPATIAL_GRAFT is True                     # départs voisins greffés, en essai
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
+    assert g.AXES_OVER is False                        # grands axes au-delà d'un seuil, en essai
     assert g.CORRIDOR_SPURS is False                   # allers-retours dans un couloir, en essai
     assert g.FALSE_START is False                      # faux départs, en essai
     assert g.TURN_RULES is False                       # demi-tours au bon endroit, en essai
