@@ -743,24 +743,67 @@ def defect_windows(l) -> list:
     return out
 
 
+def loop_targets(l) -> list:
+    """Allers-retours à transformer en boucle avant de les retirer (CLEAN_PICKS) : éperons injustifiés et allers-retours
+    dans un couloir d'au moins LOOPIFY_MIN_M à l'aller. [(a, b)]."""
+    out = [(s["a"], s["b"]) for s in (getattr(l, "spurs", None) or []) if (s.get("m") or 0) >= LOOPIFY_MIN_M]
+    out += [(s["a"], s["b"]) for s in (getattr(l, "appendices", None) or []) if s.get("corridor")]
+    return sorted(out)
+
+
+def loopify_way(coords, win, targets) -> list:
+    """Points de passage de la boucle sans les tronçons win, où chaque aller-retour de targets devient une petite boucle
+    (Florent, 17/10/2026, le Moll d'Espanya : descendre le quai par un côté, remonter par l'autre) : depuis l'entrée, un
+    point à LOOPIFY_OFFSET_M d'un côté du milieu de l'aller, le demi-tour, puis le point symétrique de l'autre côté."""
+    way = route_waypoints(coords, skip=win)
+    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
+    for w0, w1 in win:
+        extra = []
+        for a, b in targets:
+            if not (w0 <= a and b <= w1):
+                continue
+            t = max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1], coords[i][0], coords[i][1]))
+            half, acc, m = haversine(coords[a][0], coords[a][1], coords[t][0], coords[t][1]) / 2.0, 0.0, a
+            while m < t and acc < half:
+                acc += haversine(coords[m][0], coords[m][1], coords[m + 1][0], coords[m + 1][1])
+                m += 1
+            h = math.radians(bearing(coords[a][0], coords[a][1], coords[t][0], coords[t][1]))
+            dx, dy = math.cos(h) * LOOPIFY_OFFSET_M, -math.sin(h) * LOOPIFY_OFFSET_M   # perpendiculaire (est, nord)
+            side = lambda s: [coords[m][0] + s * dx / kx, coords[m][1] + s * dy / 110540.0]  # noqa: E731
+            extra += [side(1), [coords[t][0], coords[t][1]], side(-1)]
+        if not extra:
+            continue
+        k = next((i for i, p in enumerate(way) if p[0] == coords[w0][0] and p[1] == coords[w0][1]), None)
+        if k is not None:
+            way[k + 1:k + 1] = extra
+    return way
+
+
 def clean_loop(gh, l, level, duration_h, bounds=None):
-    """La même boucle sans ses détours, éperons et boucles accrochées (CLEAN_PICKS), ou None."""
+    """La même boucle sans ses détours, éperons et boucles accrochées (CLEAN_PICKS), ou None. Les allers-retours sont
+    d'abord transformés en petite boucle (loopify_way), puis retirés : la meilleure version valide est gardée."""
     win = defect_windows(l)
     if not win:
         return None
-    way = route_waypoints(l.coords, skip=win)
-    path = gh.via(way, l.profile, pass_through=True)
-    t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
-    if (t is None or not time_ok(t.time_s, duration_h) or not overlap_ok(t) or t.u_turns > MAX_UTURNS
-            or not dirt_ok(t) or not relief_ok(t) or len(defect_windows(t)) >= len(win)
-            or t.score < l.score - 100 * CLEAN_PICKS_SLACK):
-        return None
-    if bounds is not None and not bounds[0] <= t.time_s <= bounds[1]:
-        return None                                          # garde l'ordre des durées (keep_order)
-    for attr in ("relief_fallback", "unpaved_fallback"):
-        if getattr(l, attr, False):
-            setattr(t, attr, True)
-    return t
+    targets = loop_targets(l)
+    ways = ([loopify_way(l.coords, win, targets)] if targets else []) + [route_waypoints(l.coords, skip=win)]
+    best = None
+    for way in ways:
+        path = gh.via(way, l.profile, pass_through=True)
+        t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+        if (t is None or not time_ok(t.time_s, duration_h) or not overlap_ok(t) or t.u_turns > MAX_UTURNS
+                or not dirt_ok(t) or not relief_ok(t) or len(defect_windows(t)) >= len(win)
+                or t.score < l.score - 100 * CLEAN_PICKS_SLACK):
+            continue
+        if bounds is not None and not bounds[0] <= t.time_s <= bounds[1]:
+            continue                                         # garde l'ordre des durées (keep_order)
+        if best is None or t.score > best.score:
+            best = t
+    if best is not None:
+        for attr in ("relief_fallback", "unpaved_fallback"):
+            if getattr(l, attr, False):
+                setattr(best, attr, True)
+    return best
 
 
 def axes_over() -> bool:
@@ -1448,6 +1491,12 @@ AXES_OVER_MAX = 0.15
 CLEAN_PICKS = False
 CLEAN_PICKS_ROUNDS = 2
 CLEAN_PICKS_SLACK = 0.03
+# 2e essai (Florent, 17/10/2026, tracé à l'appui : « pour le moll il faudrait simplement faire ce trajet ») : un
+# aller-retour sans intérêt est d'abord transformé en petite boucle (aller par un côté, retour par l'autre, points à
+# LOOPIFY_OFFSET_M de part et d'autre du milieu de l'aller), puis retiré si aucune boucle propre n'existe ; la mieux
+# notée des deux versions valides est gardée.
+LOOPIFY_MIN_M = 300.0
+LOOPIFY_OFFSET_M = 120.0
 CITY_BACKTRACK = False
 CITY_BACKTRACK_SHARE = 0.6
 NESTED_BACKTRACK = False

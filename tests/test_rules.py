@@ -610,3 +610,24 @@ def test_defect_windows_merged():
     assert g.defect_windows(L()) == [(10, 30), (50, 60), (70, 80)]
     assert g.defect_windows(C()) == []
 
+
+def test_loopify_way_pier():
+    """Aller-retour transformé en petite boucle (CLEAN_PICKS, le Moll d'Espanya) : entrée, un point à 120 m d'un côté du
+    milieu de l'aller, le demi-tour, le point symétrique de l'autre côté."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.38))
+    pts = [(0, -2000), (0, 0), (0, 1000), (0, 0), (2000, 0), (2000, -2000), (0, -2000)]
+    coords = []
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        n = max(1, int(math.hypot(x1 - x0, y1 - y0) // 20))
+        coords += [[2.18 + (x0 + (x1 - x0) * k / n) / kx, 41.38 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
+    coords.append([2.18, 41.38 - 2000 / 110540.0])
+    a = next(i for i, c in enumerate(coords) if abs(c[1] - 41.38) < 1e-9)
+    t = max(range(len(coords) // 2), key=lambda i: coords[i][1])
+    b = next(i for i in range(t + 1, len(coords)) if abs(coords[i][1] - 41.38) < 1e-9 and abs(coords[i][0] - 2.18) < 1e-9)
+    way = g.loopify_way(coords, [(a, b)], [(a, b)])
+    k = next(i for i, p in enumerate(way) if p[0] == coords[a][0] and p[1] == coords[a][1])
+    left, tip, right = way[k + 1], way[k + 2], way[k + 3]
+    assert abs(tip[1] - coords[t][1]) < 1e-9
+    assert abs((left[0] - 2.18) * kx - 120.0) < 5 and abs((right[0] - 2.18) * kx + 120.0) < 5
+
