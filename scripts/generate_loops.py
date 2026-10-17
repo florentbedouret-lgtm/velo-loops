@@ -1324,7 +1324,8 @@ APPENDIX_RULE = True                    # v19
 # monastère de Montserrat et fait demi-tour 830 m avant, aller-retour « nature »). TURN_RULES : (1) un aller-retour
 # « belvédère » n'est utile que si son demi-tour est au point de vue ; (2) pour les TURN_EXTEND_TOP meilleures candidates,
 # un aller-retour qui fait demi-tour à moins de TURN_EXTEND_M d'un lieu remarquable sans l'atteindre est prolongé
-# jusqu'au lieu (gardé si la durée tient ; la note tranche). False : comme la v19. Hors de l'empreinte (V19_PARAMS) tant
+# jusqu'au lieu (gardé si la durée tient ; la note tranche) ; (3) deux allers-retours vers le même endroit (demi-tours à
+# moins de 300 m) : seul le premier est utile, le second est un crochet inutile. False : comme la v19. Hors de l'empreinte (V19_PARAMS) tant
 # qu'elle est éteinte : la v19 en cours de calcul ne doit pas voir son empreinte changer ; l'y ajouter à l'activation.
 TURN_RULES = False
 # Faux départs (Florent, 17/10/2026, l'Eixample 5 h Sportif « plus de relief » : la boucle part vers la mer, revient par
@@ -2741,6 +2742,15 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     unp_e = unpaved_edges(det, len(cum) - 1) if backtrack_rules() else None
     foot_e = foot_edges(det, len(cum) - 1) if foot_backtrack() else None
     useful = useful_windows(coords, level, rc_rep, unp_e, foot_e) if backtrack_rules() else []
+    dup_windows = []
+    if turn_rules() and len(useful) > 1:                 # même destination deux fois : seul le 1er aller-retour compte
+        keep = []                                        # (Florent, 17/10/2026 : l'Eixample 4 h Sportif monte deux fois
+        for w in useful:                                 # au même point de vue du Turó de Valldaura)
+            if any(haversine(coords[w[2]][0], coords[w[2]][1], coords[k[2]][0], coords[k[2]][1]) < 300.0 for k in keep):
+                dup_windows.append(w)
+            else:
+                keep.append(w)
+        useful = keep
     for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
@@ -2839,6 +2849,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
     loop.spurs = unjustified_spurs(coords, level, rc_rep, unp_e, foot_e) if SPUR_FIX else []
+    for a_, b_, t_, _ in dup_windows:                    # aller-retour vers une destination déjà vue : crochet inutile
+        loop.spurs = [s_ for s_ in loop.spurs if s_["b"] < a_ or s_["a"] > b_]
+        loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_, "b": b_,
+                           "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5), "same_place": True})
     if SPUR_FIX and corridor_spurs_on() and backtrack_rules():   # allers-retours dans un couloir (CORRIDOR_SPURS)
         taken = [(s["a"], s["b"]) for s in loop.spurs] + [(a_, b_) for a_, b_, _, _ in useful]
         for a_, b_, t_ in corridor_spurs(coords, cum):
