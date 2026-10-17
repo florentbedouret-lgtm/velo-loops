@@ -721,6 +721,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant == "cspur":                               # allers-retours dans un couloir (essai) seuls
+        g._TL.corridor_spurs = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.corridor_spurs
     elif variant == "fstart":                              # faux départs et faux retours (essai) seuls
         g._TL.false_start = True
         b = relief_generate(gh, st_, sid, durations, levels, None)

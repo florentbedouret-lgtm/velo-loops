@@ -688,6 +688,56 @@ def find_appendices(coords, cum) -> list:
     return out
 
 
+def corridor_spurs_on() -> bool:
+    """Allers-retours dans un couloir (CORRIDOR_SPURS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "corridor_spurs", CORRIDOR_SPURS))
+
+
+def corridor_spurs(coords, cum) -> list:
+    """Allers-retours dans un couloir (voir CORRIDOR_SPURS) : [(a, b, t)] indices de l'entrée, de la sortie et du
+    demi-tour. Le retour longe l'aller « en miroir » : plus on avance à l'aller, plus le point de retour le plus tardif
+    à moins de CORRIDOR_NEAR_M est proche du demi-tour."""
+    total = cum[-1]
+    if len(coords) < 10 or total < 3000.0:
+        return []
+    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
+    samp, last = [], -1e9
+    for i, m in enumerate(cum):
+        if m - last >= 25.0:
+            samp.append(i)
+            last = m
+    xy = [(coords[i][0] * kx, coords[i][1] * 110540.0) for i in samp]
+    near = CORRIDOR_NEAR_M
+    grid: dict = {}
+    for p, (x, y) in enumerate(xy):
+        grid.setdefault((int(x // near), int(y // near)), []).append(p)
+    match = [None] * len(samp)
+    for p, (x, y) in enumerate(xy):                       # retour le plus tardif à moins de near (dans les 10 km)
+        best = None
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for q in grid.get((int(x // near) + dx, int(y // near) + dy), []):
+                    gap = cum[samp[q]] - cum[samp[p]]
+                    if 60.0 <= gap <= 10000.0 and math.hypot(xy[q][0] - x, xy[q][1] - y) <= near:
+                        if best is None or q > best:
+                            best = q
+        match[p] = best
+    out, p = [], 0
+    while p < len(samp):
+        if match[p] is None or match[p] <= p + 1:
+            p += 1
+            continue
+        p0, q0 = p, match[p]
+        while p + 1 < len(samp) and match[p + 1] is not None and p + 1 < match[p + 1] <= match[p]:
+            p += 1                                           # l'aller avance, le retour recule : miroir
+        a, b, t = samp[p0], samp[q0], samp[p]
+        if (cum[t] - cum[a] >= CORRIDOR_MIN_M and cum[a] >= 300.0 and total - cum[b] >= 300.0
+                and (cum[b] - cum[a]) <= 0.5 * total):
+            out.append((a, b, t))
+        p = max(p + 1, p0 + 1)
+    return out
+
+
 def false_start() -> bool:
     """Faux départs et faux retours (FALSE_START), réglable par fil d'exécution."""
     return bool(getattr(_TL, "false_start", FALSE_START))
@@ -1284,6 +1334,15 @@ TURN_RULES = False
 # FALSE_START_NEAR_M est traité comme une boucle accrochée (but nommable sinon 3 points, et la même boucle sans lui essayée).
 # Le retour par une rue parallèle compte (aucune exigence de même rue). Hors de l'empreinte tant qu'elle est éteinte.
 FALSE_START = False
+# Allers-retours dans un couloir (Florent, 17/10/2026 : à Mataró, l'Eixample 5 h Sportif file 1 km sur une avenue à deux
+# chaussées, fait demi-tour et revient par l'autre chaussée ; dans l'Eixample, les sens uniques font revenir par une rue
+# parallèle). Les allers-retours n'étaient reconnus que sur les mêmes points. CORRIDOR_SPURS : un tronçon qui s'éloigne
+# puis revient le long de son aller, à CORRIDOR_NEAR_M au plus (autre chaussée, rue parallèle), sur au moins
+# CORRIDOR_MIN_M à l'aller, suit la règle des allers-retours (utile : gardé ; sinon éperon injustifié, pénalisé et
+# retiré). Hors de l'empreinte tant qu'elle est éteinte.
+CORRIDOR_SPURS = False
+CORRIDOR_NEAR_M = 150.0
+CORRIDOR_MIN_M = 400.0
 FALSE_START_SHARE = 0.33
 FALSE_START_AWAY_M = 600.0
 FALSE_START_NEAR_M = 250.0
@@ -2780,6 +2839,15 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
     loop.spurs = unjustified_spurs(coords, level, rc_rep, unp_e, foot_e) if SPUR_FIX else []
+    if SPUR_FIX and corridor_spurs_on() and backtrack_rules():   # allers-retours dans un couloir (CORRIDOR_SPURS)
+        taken = [(s["a"], s["b"]) for s in loop.spurs] + [(a_, b_) for a_, b_, _, _ in useful]
+        for a_, b_, t_ in corridor_spurs(coords, cum):
+            if any(not (b_ < x or a_ > y) for x, y in taken):
+                continue                                     # déjà vu comme aller-retour ordinaire
+            if backtrack_useful(coords, a_, b_, level, rc_rep, unp_e, t_, foot_e) is None:
+                loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_, "b": b_,
+                                   "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5), "corridor": True})
+                taken.append((a_, b_))
     loop.backtracks = [{"why": w, "m": round(cum[min(b_, len(cum) - 1)] - cum[a_]), "lat": round(coords[t][1], 5),
                         "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
                         "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2)}
