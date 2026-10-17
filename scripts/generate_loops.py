@@ -1382,7 +1382,7 @@ AXES_OVER = False
 AXES_OVER_SHARE = 0.20
 AXES_OVER_PER = 0.5
 AXES_OVER_MAX = 0.15
-CORRIDOR_NEAR_M = 150.0
+CORRIDOR_NEAR_M = 100.0         # 1re mesure (17/10/2026) à 150 m : 12 meilleures, 38 moins bonnes (couloir trop large)
 CORRIDOR_MIN_M = 400.0
 FALSE_START_SHARE = 0.33
 FALSE_START_AWAY_M = 600.0
@@ -2903,14 +2903,17 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.spurs = [s_ for s_ in loop.spurs if s_["b"] < a_ or s_["a"] > b_]
         loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_, "b": b_,
                            "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5), "same_place": True})
+    corridor_windows = []
     if SPUR_FIX and corridor_spurs_on() and backtrack_rules():   # allers-retours dans un couloir (CORRIDOR_SPURS)
         taken = [(s["a"], s["b"]) for s in loop.spurs] + [(a_, b_) for a_, b_, _, _ in useful]
         for a_, b_, t_ in corridor_spurs(coords, cum):
             if any(not (b_ < x or a_ > y) for x, y in taken):
                 continue                                     # déjà vu comme aller-retour ordinaire
             if backtrack_useful(coords, a_, b_, level, rc_rep, unp_e, t_, foot_e) is None:
-                loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_, "b": b_,
-                                   "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5), "corridor": True})
+                # 2e version : comme une boucle accrochée (3 points, la boucle sans lui essayée), pas comme un éperon
+                corridor_windows.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_,
+                                         "b": b_, "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5),
+                                         "corridor": True})
                 taken.append((a_, b_))
     loop.backtracks = [{"why": w, "m": round(cum[min(b_, len(cum) - 1)] - cum[a_]), "lat": round(coords[t][1], 5),
                         "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
@@ -2935,6 +2938,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.seafront_km, loop.motorway_km = (side_km(coords, cum, car, rc_e) if (seafront_bonus() or motorway_nuisance())
                                           else (0.0, 0.0))
     loop.appendices = appendix_spurs(loop, coords, cum, level) if appendix_rule() else []   # boucles accrochées sans but
+    loop.appendices = loop.appendices + corridor_windows     # allers-retours dans un couloir (CORRIDOR_SPURS)
     if false_start():                                        # faux départs et faux retours (FALSE_START)
         loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
     loop.score = score(loop)
