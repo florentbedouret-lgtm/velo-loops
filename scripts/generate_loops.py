@@ -1358,27 +1358,27 @@ APPENDIX_RULE = True                    # v19
 # jusqu'au lieu (gardé si la durée tient ; la note tranche) ; (3) deux allers-retours vers le même endroit (demi-tours à
 # moins de 300 m) : seul le premier est utile, le second est un crochet inutile. False : comme la v19. Hors de l'empreinte (V19_PARAMS) tant
 # qu'elle est éteinte : la v19 en cours de calcul ne doit pas voir son empreinte changer ; l'y ajouter à l'activation.
-TURN_RULES = False
+TURN_RULES = True                    # v19 (17/10/2026, mesures s3 à s0 puis c5 à c7)
 # Faux départs (Florent, 17/10/2026, l'Eixample 5 h Sportif « plus de relief » : la boucle part vers la mer, revient par
 # une rue parallèle (sens uniques), repasse par le départ et part à l'opposé pour tout le reste ; « le plus bizarre est de
 # partir dans un sens pour finalement repasser par le point de départ »). FALSE_START : dans le premier (ou le dernier)
 # FALSE_START_SHARE du parcours, un tronçon qui s'éloigne d'au moins FALSE_START_AWAY_M du départ puis y repasse à moins de
 # FALSE_START_NEAR_M est traité comme une boucle accrochée (but nommable sinon 3 points, et la même boucle sans lui essayée).
 # Le retour par une rue parallèle compte (aucune exigence de même rue). Hors de l'empreinte tant qu'elle est éteinte.
-FALSE_START = False
+FALSE_START = True                    # v19 (17/10/2026, mesures s3 à s0 puis c5 à c7)
 # Allers-retours dans un couloir (Florent, 17/10/2026 : à Mataró, l'Eixample 5 h Sportif file 1 km sur une avenue à deux
 # chaussées, fait demi-tour et revient par l'autre chaussée ; dans l'Eixample, les sens uniques font revenir par une rue
 # parallèle). Les allers-retours n'étaient reconnus que sur les mêmes points. CORRIDOR_SPURS : un tronçon qui s'éloigne
 # puis revient le long de son aller, à CORRIDOR_NEAR_M au plus (autre chaussée, rue parallèle), sur au moins
 # CORRIDOR_MIN_M à l'aller, suit la règle des allers-retours (utile : gardé ; sinon éperon injustifié, pénalisé et
 # retiré). Hors de l'empreinte tant qu'elle est éteinte.
-CORRIDOR_SPURS = False
+CORRIDOR_SPURS = True                    # v19 (17/10/2026, mesures s3 à s0 puis c5 à c7)
 # Grands axes au-delà d'un seuil (Florent, 17/10/2026, Sarrià 3 h Modéré : la boucle choisie passe 45 % sur de grands axes
 # et note 60,5 contre 59,9 pour la boucle v18 à 2 % ; la note pesait trop peu les grands axes face à un peu de relief).
 # AXES_OVER : au-delà de AXES_OVER_SHARE du parcours sur de grandes routes, AXES_OVER_PER point par point de part en plus
 # (au plus AXES_OVER_MAX) : 30 % -> 5 points, 45 % -> 12,5. En dessous, rien ne change. Hors de l'empreinte tant
 # qu'elle est éteinte.
-AXES_OVER = False
+AXES_OVER = True                    # v19 (17/10/2026, mesures s3 à s0 puis c5 à c7)
 AXES_OVER_SHARE = 0.20
 AXES_OVER_PER = 0.5
 AXES_OVER_MAX = 0.15
@@ -4758,8 +4758,14 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
              CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
-             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE],
+             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE, TURN_RULES, FALSE_START, CORRIDOR_SPURS, AXES_OVER],
             [PREVIOUS_WAYPOINT_M],
+            # 17/10/2026 : ajoutées en cours de calcul v19 (demi-tours, faux départs, couloirs, grands axes) : calcul relancé
+            [TURN_RULES, TURN_EXTEND_M, TURN_EXTEND_TOP, TURN_CLIMB_M, TURN_CLIMB_PEN, TURN_CLIMB_MAX, TURN_AIMLESS_PEN,
+             TURN_AIMLESS_MAX],
+            [FALSE_START, FALSE_START_SHARE, FALSE_START_AWAY_M, FALSE_START_NEAR_M],
+            [CORRIDOR_SPURS, CORRIDOR_NEAR_M, CORRIDOR_MIN_M],
+            [AXES_OVER, AXES_OVER_SHARE, AXES_OVER_PER, AXES_OVER_MAX],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
             [APPENDIX_RULE, APPENDIX_PENALTY, APPENDIX_TRIM_TOP, APPENDIX_MIN_M, APPENDIX_MAX_M, APPENDIX_MAX_SHARE, APPENDIX_STEM_M, APPENDIX_NEAR_M,
