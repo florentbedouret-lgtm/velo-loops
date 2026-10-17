@@ -722,6 +722,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant == "new4":                               # les quatre règles en essai ensemble (17/10/2026)
+        g._TL.turn_rules = g._TL.false_start = g._TL.corridor_spurs = g._TL.axes_over = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.turn_rules, g._TL.false_start, g._TL.corridor_spurs, g._TL.axes_over
     elif variant == "axpen":                               # grands axes au-delà d'un seuil (essai) seuls
         g._TL.axes_over = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
