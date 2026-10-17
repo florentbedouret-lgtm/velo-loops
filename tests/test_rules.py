@@ -40,6 +40,9 @@ def test_reglages_v17():
     assert g.SPATIAL_GRAFT is True                     # départs voisins greffés, en essai
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
+    assert g.CLEAN_PICKS is False                      # nettoyage des boucles publiées, en essai
+    assert g.CITY_BACKTRACK is False                   # allers-retours en ville dense, en essai
+    assert g.NESTED_BACKTRACK is False                 # allers-retours emboîtés, en essai
     assert g.AXES_OVER is True                         # grands axes au-delà d'un seuil (v19)
     assert g.CORRIDOR_SPURS is True                    # allers-retours dans un couloir (v19)
     assert g.FALSE_START is True                       # faux départs (v19)
@@ -593,4 +596,17 @@ def test_corridor_spur_dual_carriageway():
     assert len(found) == 1
     plain = path([(0, 0), (3000, 0), (3000, 3000), (0, 3000), (0, 0)])
     assert g.corridor_spurs(plain, cum(plain)) == []
+
+
+def test_defect_windows_merged():
+    """Nettoyage (CLEAN_PICKS) : détours, éperons et boucles accrochées fusionnés quand ils se chevauchent."""
+    class L:
+        detours = [{"a": 10, "b": 20}]
+        spurs = [{"a": 15, "b": 30}, {"a": 50, "b": 60}]
+        appendices = [{"a": 70, "b": 80}]
+
+    class C:
+        detours, spurs, appendices = [], [], []
+    assert g.defect_windows(L()) == [(10, 30), (50, 60), (70, 80)]
+    assert g.defect_windows(C()) == []
 

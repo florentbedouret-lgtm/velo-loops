@@ -599,7 +599,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
             tkey = f"{sid}|{d:g}|{level}"
             tr = trace_pool(gh, st_, sid, level, d, options, logf) if tkey in TRACE else None
             pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, logf, options)
-            picks = g.choose_options(gh, st_, level, d, pool, prior, logf)
+            picks = g.choose_options(gh, st_, level, d, pool, prior, logf,
+                                     g.order_bounds(options, level, d) if g.bin_margin() else None)
             if tr is not None:                              # traçage : ce qui est finalement choisi
                 tr["choisies"] = [{"label": lab, "score": l.score, "key": g.route_key(g.simplify(l.coords, 10.0))[:6],
                                    "origine": origin(l.seed), "seed": l.seed,
@@ -722,6 +723,10 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant == "clean3":                             # nettoyage, ville, emboîtés (essai) ensemble (17/10/2026)
+        g._TL.clean_picks = g._TL.city_backtrack = g._TL.nested_backtrack = True
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        del g._TL.clean_picks, g._TL.city_backtrack, g._TL.nested_backtrack
     elif variant == "new4":                               # les quatre règles en essai ensemble (17/10/2026)
         g._TL.turn_rules = g._TL.false_start = g._TL.corridor_spurs = g._TL.axes_over = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
@@ -981,7 +986,8 @@ def margin_generate(gh, st_, sid, durations, levels, margin):
         prior = []
         for level in sorted(levels, key=list(g.LEVELS).index):
             pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, lambda *_: None, options)
-            picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None)
+            picks = g.choose_options(gh, st_, level, d, pool, prior, lambda *_: None,
+                                     g.order_bounds(options, level, d) if g.bin_margin() else None)
             prior += [l for _, l in picks]
             opts = [g.to_json(l, lab, sid, i) for i, (lab, l) in enumerate(picks, start=1)]
             options += opts

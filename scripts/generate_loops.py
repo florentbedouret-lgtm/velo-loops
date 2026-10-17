@@ -714,6 +714,55 @@ def find_appendices(coords, cum) -> list:
     return out
 
 
+def clean_picks() -> bool:
+    """Nettoyage des boucles publiées (CLEAN_PICKS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "clean_picks", CLEAN_PICKS))
+
+
+def city_backtrack() -> bool:
+    """Allers-retours en ville dense (CITY_BACKTRACK), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "city_backtrack", CITY_BACKTRACK))
+
+
+def nested_backtrack() -> bool:
+    """Allers-retours emboîtés (NESTED_BACKTRACK), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "nested_backtrack", NESTED_BACKTRACK))
+
+
+def defect_windows(l) -> list:
+    """Tronçons à retirer d'une boucle (CLEAN_PICKS) : détours, éperons injustifiés et boucles accrochées, fusionnés."""
+    win = sorted([(d["a"], d["b"]) for d in (getattr(l, "detours", None) or [])]
+                 + [(s["a"], s["b"]) for s in (getattr(l, "spurs", None) or [])]
+                 + [(s["a"], s["b"]) for s in (getattr(l, "appendices", None) or [])])
+    out: list = []
+    for a, b in win:
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def clean_loop(gh, l, level, duration_h, bounds=None):
+    """La même boucle sans ses détours, éperons et boucles accrochées (CLEAN_PICKS), ou None."""
+    win = defect_windows(l)
+    if not win:
+        return None
+    way = route_waypoints(l.coords, skip=win)
+    path = gh.via(way, l.profile, pass_through=True)
+    t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+    if (t is None or not time_ok(t.time_s, duration_h) or not overlap_ok(t) or t.u_turns > MAX_UTURNS
+            or not dirt_ok(t) or not relief_ok(t) or len(defect_windows(t)) >= len(win)
+            or t.score < l.score - 100 * CLEAN_PICKS_SLACK):
+        return None
+    if bounds is not None and not bounds[0] <= t.time_s <= bounds[1]:
+        return None                                          # garde l'ordre des durées (keep_order)
+    for attr in ("relief_fallback", "unpaved_fallback"):
+        if getattr(l, attr, False):
+            setattr(t, attr, True)
+    return t
+
+
 def axes_over() -> bool:
     """Grands axes au-delà d'un seuil (AXES_OVER), réglable par fil d'exécution."""
     return bool(getattr(_TL, "axes_over", AXES_OVER))
@@ -1382,6 +1431,26 @@ AXES_OVER = True                    # v19 (17/10/2026, mesures s3 à s0 puis c5 
 AXES_OVER_SHARE = 0.20
 AXES_OVER_PER = 0.5
 AXES_OVER_MAX = 0.15
+# Relecture de l'Eixample par Florent (17/10/2026, 10 captures : « beaucoup de boucles problématiques »). Trois causes :
+# (1) CLEAN_PICKS : les détours en pâté de maisons, les éperons et les boucles accrochées étaient bien repérés (22 boucles
+# de l'Eixample sur 51 gardaient un détour) mais réparés seulement sur les 3 meilleures candidates de chaque tirage ; les
+# options publiées (« moins de relief », « plus de relief ») venaient souvent d'ailleurs et n'étaient que pénalisées
+# (Diagonal - Villarroel, Diagonal Mar, Vila Olímpica, carrer Transversal, place d'Espagne, Sant Cugat). Chaque boucle
+# CHOISIE qui en garde est recalculée sans eux (points de passage de part et d'autre), puis le choix est refait
+# (CLEAN_PICKS_ROUNDS fois au plus) ; la version propre doit rester valide (durée, ordre des durées, répétition, terre,
+# relief) et noter au moins la boucle d'origine moins CLEAN_PICKS_SLACK.
+# (2) CITY_BACKTRACK : en ville dense (au moins CITY_BACKTRACK_SHARE de l'aller-retour en densité « ville »), un
+# aller-retour n'est utile que vers un lieu remarquable, un belvédère ou un sommet ; « nature », « piste » ou « montée »
+# (eau du port, parc) ne suffisent plus (le Moll d'Espanya, aller-retour « nature » sur le quai). Sinon : éperon injustifié.
+# (3) NESTED_BACKTRACK : un aller-retour utile qui en contient un autre (on remonte la même rue pour aller plus loin)
+# n'est plus utile, seul le plus court reste (l'Eixample 2 h Sportif, deux fois la Carretera de la Gran Vista).
+# False : comme avant. Hors de l'empreinte tant qu'elles sont éteintes.
+CLEAN_PICKS = False
+CLEAN_PICKS_ROUNDS = 2
+CLEAN_PICKS_SLACK = 0.03
+CITY_BACKTRACK = False
+CITY_BACKTRACK_SHARE = 0.6
+NESTED_BACKTRACK = False
 CORRIDOR_NEAR_M = 100.0         # 1re mesure (17/10/2026) à 150 m : 12 meilleures, 38 moins bonnes (couloir trop large)
 CORRIDOR_MIN_M = 400.0
 FALSE_START_SHARE = 0.33
@@ -2805,6 +2874,24 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             else:
                 keep.append(w)
         useful = keep
+    demoted = []                                         # utiles d'après les règles d'avant, plus maintenant
+    if city_backtrack() and useful:                      # en ville dense : seulement vers une vraie destination
+        ud_ = per_edge(det.get("urban_density"), len(cum) - 1)
+        keep = []
+        for w in useful:
+            span = [(cum[i + 1] - cum[i], str(ud_[i]).lower() == "city") for i in range(w[0], min(w[1], len(ud_)))]
+            tot = sum(m for m, _ in span)
+            if (w[3] in ("nature", "piste", "montée") and tot > 0
+                    and sum(m for m, c in span if c) >= CITY_BACKTRACK_SHARE * tot):
+                demoted.append((w, "city"))
+            else:
+                keep.append(w)
+        useful = keep
+    if nested_backtrack() and len(useful) > 1:          # aller-retour qui en contient un autre : la même rue remontée
+        keep = [w for w in useful if not any(k is not w and w[0] <= k[0] and k[1] <= w[1] and k[1] - k[0] < w[1] - w[0]
+                                             for k in useful)]
+        demoted += [(w, "nested") for w in useful if w not in keep]
+        useful = keep
     for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
@@ -2907,6 +2994,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.spurs = [s_ for s_ in loop.spurs if s_["b"] < a_ or s_["a"] > b_]
         loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_, "b": b_,
                            "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5), "same_place": True})
+    for (a_, b_, t_, _), why_ in demoted:                # en ville sans destination, ou emboîté : éperon injustifié
+        loop.spurs = [s_ for s_ in loop.spurs if s_["b"] < a_ or s_["a"] > b_]
+        loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[t_] - cum[a_]), "a": a_, "b": b_,
+                           "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5), why_: True})
     corridor_windows = []
     if SPUR_FIX and corridor_spurs_on() and backtrack_rules():   # allers-retours dans un couloir (CORRIDOR_SPURS)
         taken = [(s["a"], s["b"]) for s in loop.spurs] + [(a_, b_) for a_, b_, _, _ in useful]
@@ -4431,11 +4522,24 @@ def lights_late_swap(gh, level: str, duration_h: float, picks: list, log) -> lis
     return out
 
 
-def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prior: list, log) -> list:
+def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prior: list, log, bounds=None) -> list:
     """Options d'un niveau (O-18) : pick_options sans doublon d'allure. Si une option secondaire n'a AUCUNE boucle
     différente de l'allure inférieure, on garde quand même la boucle qu'elle aurait eue, marquée « même parcours qu'à
     l'allure inférieure » (same_as : allure et km en plus), plutôt que de retirer l'option (choix de Florent, 26/09/2026 :
     une prolongation dans la durée ne gagne que 3 à 5 km, c'est la même boucle). gh, st : inutilisés (signature stable)."""
+    if clean_picks() and pool:                               # boucles choisies sans détours ni éperons (CLEAN_PICKS)
+        pool, tried = list(pool), set()
+        for _ in range(CLEAN_PICKS_ROUNDS):
+            dirty = [l for _, l in pick_options(pool, prior) if defect_windows(l) and id(l) not in tried]
+            if not dirty:
+                break
+            for l in dirty:
+                tried.add(id(l))
+                t = clean_loop(gh, l, level, duration_h, bounds)
+                log(f"    nettoyage : {len(defect_windows(l))} défaut(s), note {l.score:.1f} -> "
+                    + ("pas de version propre valide" if t is None else f"{t.score:.1f} ({len(defect_windows(t))} restant)"))
+                if t is not None:
+                    pool = [t if x is l else x for x in pool]
     picks = pick_options(pool, prior)
     if lights_late() and picks:                              # feux en fin de boucle (LIGHTS_LATE)
         picks = lights_late_swap(gh, level, duration_h, picks, log)
@@ -4994,7 +5098,8 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         prior: list = []                                  # options des allures inférieures (O-18 A)
         for level in sorted(levels, key=list(LEVELS).index):
             pool = ordered_pool(gh, st, level, duration, candidates, log, options)
-            picks = choose_options(gh, st, level, duration, pool, prior, log)
+            picks = choose_options(gh, st, level, duration, pool, prior, log,
+                                   order_bounds(options, level, duration) if bin_margin() else None)
             prior += [l for _, l in picks]
             for i, (label, loop) in enumerate(picks, start=1):
                 options.append(enrich_option(to_json(loop, label, sid, i), POIS))
