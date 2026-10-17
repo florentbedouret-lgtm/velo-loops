@@ -1246,7 +1246,8 @@ APPENDIX_RULE = True                    # v19
 # monastère de Montserrat et fait demi-tour 830 m avant, aller-retour « nature »). TURN_RULES : (1) un aller-retour
 # « belvédère » n'est utile que si son demi-tour est au point de vue ; (2) pour les TURN_EXTEND_TOP meilleures candidates,
 # un aller-retour qui fait demi-tour à moins de TURN_EXTEND_M d'un lieu remarquable sans l'atteindre est prolongé
-# jusqu'au lieu (gardé si la durée tient ; la note tranche). False : comme la v19.
+# jusqu'au lieu (gardé si la durée tient ; la note tranche). False : comme la v19. Hors de l'empreinte (V19_PARAMS) tant
+# qu'elle est éteinte : la v19 en cours de calcul ne doit pas voir son empreinte changer ; l'y ajouter à l'activation.
 TURN_RULES = False
 TURN_EXTEND_M = 1500.0
 TURN_EXTEND_TOP = 4
@@ -4564,11 +4565,10 @@ def V19_PARAMS() -> list:  # noqa: N802 : liste de constantes, comme les autres 
     return [[TIME_V19, FALLBACK_BEST, LIGHTS_LATE, SCENIC_RETOUCH, CROSS_SEGMENTS, SEAFRONT_BONUS, MOTORWAY_NUISANCE,
              WATER_CITY_NEAR, PREVIOUS_WAYPOINT_M is not None, PLUS_RELIEF_RULES, PREVIOUS_ANY_DURATION, FATIGUE_V19,
              CONTIGUOUS_BINS, FOOT_BACKTRACK, SPARE_RELIEF, BACKTRACK_MAX_SHARE is not None, SPATIAL_GRAFT,
-             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE, TURN_RULES],
+             SEG_MULTI, BACKTRACK_LONG, CROSS_SPATIAL, APPENDIX_RULE],
             [PREVIOUS_WAYPOINT_M],
             [FOOT_BACKTRACK, FOOT_BACKTRACK_MAX_M],
             [SPARE_RELIEF, RELIEF_HARD],
-            [TURN_RULES, TURN_EXTEND_M, TURN_EXTEND_TOP],
             [APPENDIX_RULE, APPENDIX_PENALTY, APPENDIX_TRIM_TOP, APPENDIX_MIN_M, APPENDIX_MAX_M, APPENDIX_MAX_SHARE, APPENDIX_STEM_M, APPENDIX_NEAR_M,
              APPENDIX_GREEN, APPENDIX_CLIMB_M],
             [BACKTRACK_MAX_SHARE],
