@@ -1393,6 +1393,10 @@ TURN_EXTEND_TOP = 4
 # sommet, un col ou au bord de l'eau (natural_tip ; Florent, 17/10/2026, l'Eixample 1 h 30 Sportif : demi-tour à 192 m
 # en pleine montée vers Sant Pere Màrtir ; Montserrat : demi-tour 830 m avant le monastère).
 TURN_CLIMB_M = 20.0
+# 2e version (mesure du 17/10/2026 : rendu « inutile », l'aller-retour faisait dépasser la limite de répétition et la boucle
+# était éliminée : Esparreguera 6 h Tranquille 64 -> 29) : il reste utile (« montée ») mais coûte TURN_CLIMB_PEN.
+TURN_CLIMB_PEN = 0.04
+TURN_CLIMB_MAX = 0.08
 # (5) un aller-retour « nature » ou « piste » sans destination (demi-tour ni à un lieu remarquable, ni à un belvédère, ni
 # à un sommet ou un col, ni au bord de la mer ou d'un lac) reste permis mais coûte TURN_AIMLESS_PEN (au plus
 # TURN_AIMLESS_MAX) : à note proche, une boucle ou un demi-tour plus naturel passe devant (Florent, 17/10/2026 : « pas les
@@ -2921,6 +2925,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                        for a_, b_, t, w in useful]
     loop.aimless_bt = (sum(1 for b_ in loop.backtracks if b_["why"] in ("nature", "piste")
                            and not destination_tip([b_["lon"], b_["lat"]])) if turn_rules() else 0)
+    loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) is None]
@@ -2998,6 +3003,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
             total -= min(AXES_OVER_MAX, AXES_OVER_PER * over)
     if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
         total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
+    if getattr(l, "climb_mid_bt", 0):                     # demi-tour en pleine montée : pénalisé (TURN_RULES, 2e version)
+        total -= min(TURN_CLIMB_MAX, TURN_CLIMB_PEN * l.climb_mid_bt)
     if getattr(l, "aimless_bt", 0):                       # aller-retour sans destination : un peu pénalisé (TURN_RULES)
         total -= min(TURN_AIMLESS_MAX, TURN_AIMLESS_PEN * l.aimless_bt)
     if backtrack_long():                                  # long aller-retour annoncé, plus gratuit (BACKTRACK_LONG)
@@ -3922,9 +3929,8 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     long_ = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
     if long_ < BACKTRACK_PLEASANT_MIN_M:                     # trop court pour « prolonger une route agréable »
         return None
-    if (turn_rules() and len(seg[0]) > 2 and coords[t][2] - seg[0][2] >= TURN_CLIMB_M
-            and not natural_tip(coords[t])):
-        return None                                          # monte puis fait demi-tour en pleine montée (TURN_RULES)
+    climb_mid = (turn_rules() and len(seg[0]) > 2 and coords[t][2] - seg[0][2] >= TURN_CLIMB_M
+                 and not natural_tip(coords[t]))           # monte puis fait demi-tour en pleine montée (TURN_RULES)
     green = None
     if LANDSCAPE is not None:
         hit = np.zeros(len(pts), dtype=bool)
@@ -3934,13 +3940,13 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                 hit[np.unique(tr.query(pts, predicate="dwithin", distance=0.0006)[0])] = True
         green = float(hit.mean())
         if green >= BACKTRACK_SHARE:
-            return "nature"
+            return "montée" if climb_mid else "nature"
     if cyc is not None and (green is None or green >= BACKTRACK_PISTE_GREEN):
         m = [(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1]), cyc[i] == "c")
              for i in range(a, min(b, len(cyc)))]
         tot = sum(x for x, _ in m)
         if tot > 0 and sum(x for x, c in m if c) / tot >= BACKTRACK_SHARE:
-            return "piste"
+            return "montée" if climb_mid else "piste"
     return None
 
 
