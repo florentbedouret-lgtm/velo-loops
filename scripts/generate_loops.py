@@ -786,18 +786,36 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
     if not win:
         return None
     targets = loop_targets(l)
-    ways = ([loopify_way(l.coords, win, targets)] if targets else []) + [route_waypoints(l.coords, skip=win)]
+    c = l.coords
+    cum = [0.0]
+    for p, q in zip(c, c[1:]):
+        cum.append(cum[-1] + haversine(p[0], p[1], q[0], q[1]))
+    wide: list = []                                          # défauts élargis de CLEAN_MARGIN_M (3e essai)
+    for a, b in win:
+        a2, b2 = a, b
+        while a2 > 1 and cum[a] - cum[a2 - 1] <= CLEAN_MARGIN_M:
+            a2 -= 1
+        while b2 < len(c) - 2 and cum[b2 + 1] - cum[b] <= CLEAN_MARGIN_M:
+            b2 += 1
+        if wide and a2 <= wide[-1][1]:
+            wide[-1] = (wide[-1][0], max(wide[-1][1], b2))
+        else:
+            wide.append((a2, b2))
+    ways = ([("boucle", loopify_way(c, win, targets))] if targets else []) + [("retrait", route_waypoints(c, skip=wide))]
+    stats = getattr(_TL, "clean_stats", None)
     best = None
-    for way in ways:
+    for kind, way in ways:
         path = gh.via(way, l.profile, pass_through=True)
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
-        if (t is None or not time_ok(t.time_s, duration_h) or not overlap_ok(t) or t.u_turns > MAX_UTURNS
-                or not dirt_ok(t) or not relief_ok(t) or len(defect_windows(t)) >= len(win)
-                or t.score < l.score - 100 * CLEAN_PICKS_SLACK):
-            continue
-        if bounds is not None and not bounds[0] <= t.time_s <= bounds[1]:
-            continue                                         # garde l'ordre des durées (keep_order)
-        if best is None or t.score > best.score:
+        why = ("sans itinéraire" if t is None else "durée" if not time_ok(t.time_s, duration_h)
+               else "répétition" if not overlap_ok(t) else "demi-tours" if t.u_turns > MAX_UTURNS
+               else "terre" if not dirt_ok(t) else "relief" if not relief_ok(t)
+               else "défauts" if len(defect_windows(t)) >= len(win)
+               else "note" if t.score < l.score - 100 * CLEAN_PICKS_SLACK
+               else "ordre" if bounds is not None and not bounds[0] <= t.time_s <= bounds[1] else "ok")
+        if stats is not None:
+            stats[f"{kind} {why}"] = stats.get(f"{kind} {why}", 0) + 1
+        if why == "ok" and (best is None or t.score > best.score):
             best = t
     if best is not None:
         for attr in ("relief_fallback", "unpaved_fallback"):
@@ -1497,6 +1515,10 @@ CLEAN_PICKS_SLACK = 0.03
 # notée des deux versions valides est gardée.
 LOOPIFY_MIN_M = 300.0
 LOOPIFY_OFFSET_M = 120.0
+# 3e essai (mesure du 17/10/2026 : 274 boucles à détour sur 673, encore 268 après) : les points gardés de part et d'autre
+# d'un détour sont à moins de 120 m l'un de l'autre, souvent sur une chaussée ou un sens unique qui y oblige ; le chemin
+# est donc repris CLEAN_MARGIN_M avant et après chaque défaut.
+CLEAN_MARGIN_M = 250.0
 CITY_BACKTRACK = False
 CITY_BACKTRACK_SHARE = 0.6
 NESTED_BACKTRACK = False

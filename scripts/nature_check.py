@@ -725,8 +725,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         del g._TL.keep_previous
     elif variant == "clean3":                             # nettoyage, ville, emboîtés (essai) ensemble (17/10/2026)
         g._TL.clean_picks = g._TL.city_backtrack = g._TL.nested_backtrack = True
+        g._TL.clean_stats = {}
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.clean_picks, g._TL.city_backtrack, g._TL.nested_backtrack
+        clean_stats = g._TL.clean_stats
+        del g._TL.clean_stats
     elif variant == "new4":                               # les quatre règles en essai ensemble (17/10/2026)
         g._TL.turn_rules = g._TL.false_start = g._TL.corridor_spurs = g._TL.axes_over = True
         b = relief_generate(gh, st_, sid, durations, levels, None)
@@ -869,7 +872,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         del g._TL.previous_step
     res = {"id": sid, "zone": entry.get("zone"), "v16": a, "relief": b, "s": [round(t1 - t0), round(time.time() - t1)],
            "heading_retries": gh.heading_retries, "heading_error": gh.heading_error,
-           "empty_logs": locals().get("empty_logs", {}),
+           "empty_logs": locals().get("empty_logs", {}), "clean": locals().get("clean_stats", {}),
            "trace": {ph: TRACE_OUT.get((sid, ph), {}) for ph in ("production", "variante")}}
     Path(f"data/relief_{sid}.json").write_text(json.dumps(res, ensure_ascii=False), encoding="utf-8")
     print(f"{sid} : {res['s']} s", flush=True)
