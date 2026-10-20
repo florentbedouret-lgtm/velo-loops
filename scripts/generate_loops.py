@@ -724,6 +724,16 @@ def city_backtrack() -> bool:
     return bool(getattr(_TL, "city_backtrack", CITY_BACKTRACK))
 
 
+def backtrack_dest() -> bool:
+    """Allers-retours vers une destination (BACKTRACK_DEST), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "backtrack_dest", BACKTRACK_DEST))
+
+
+def repeat_plain() -> bool:
+    """Répétition sur routes ordinaires (REPEAT_PLAIN), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "repeat_plain", REPEAT_PLAIN))
+
+
 def nested_backtrack() -> bool:
     """Allers-retours emboîtés (NESTED_BACKTRACK), réglable par fil d'exécution."""
     return bool(getattr(_TL, "nested_backtrack", NESTED_BACKTRACK))
@@ -825,28 +835,33 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
     boucle ; les allers-retours sont d'abord transformés en petite boucle (loop_extras), puis retirés. La meilleure
     version valide est gardée."""
     win = defect_windows(l)
+    aw = list(getattr(l, "aimless_windows", None) or [])    # allers-retours « nature » sans destination (BACKTRACK_DEST)
     det0 = getattr(l, "gh_details", None)
-    if not win or det0 is None:
+    if not (win or aw) or det0 is None:
         return None
-    targets = loop_targets(l)
+    targets = sorted(loop_targets(l) + aw)
     c = l.coords
     cum = [0.0]
     for p, q in zip(c, c[1:]):
         cum.append(cum[-1] + haversine(p[0], p[1], q[0], q[1]))
-    wide: list = []                                          # défauts élargis de CLEAN_MARGIN_M
-    for a, b in win:
-        a2, b2 = a, b
-        while a2 > 1 and cum[a] - cum[a2 - 1] <= CLEAN_MARGIN_M:
-            a2 -= 1
-        while b2 < len(c) - 2 and cum[b2 + 1] - cum[b] <= CLEAN_MARGIN_M:
-            b2 += 1
-        if wide and a2 <= wide[-1][1]:
-            wide[-1] = (wide[-1][0], max(wide[-1][1], b2))
-        else:
-            wide.append((a2, b2))
+
+    def widen(ws):                                           # tronçons élargis de CLEAN_MARGIN_M, fusionnés
+        out: list = []
+        for a, b in sorted(ws):
+            a2, b2 = a, b
+            while a2 > 1 and cum[a] - cum[a2 - 1] <= CLEAN_MARGIN_M:
+                a2 -= 1
+            while b2 < len(c) - 2 and cum[b2 + 1] - cum[b] <= CLEAN_MARGIN_M:
+                b2 += 1
+            if out and a2 <= out[-1][1]:
+                out[-1] = (out[-1][0], max(out[-1][1], b2))
+            else:
+                out.append((a2, b2))
+        return out
     stats = getattr(_TL, "clean_stats", None)
     best = None
-    for kind, loopify in ([("boucle", True)] if targets else []) + [("retrait", False)]:
+    variants = ([("boucle", True, widen(win + aw))] if targets else []) + ([("retrait", False, widen(win))] if win else [])
+    for kind, loopify, wide in variants:
         path = {"points": {"coordinates": c}, "details": det0, "ascend": l.ascend_gh_m}
         for a2, b2 in reversed(wide):                        # de la fin vers le début : les indices restent justes
             pts = [[c[a2][0], c[a2][1]]]
@@ -862,8 +877,9 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
         why = ("sans itinéraire" if t is None else "durée" if not time_ok(t.time_s, duration_h)
                else "répétition" if not overlap_ok(t) else "demi-tours" if t.u_turns > MAX_UTURNS
                else "terre" if not dirt_ok(t) else "relief" if not relief_ok(t)
-               else "défauts" if len(defect_windows(t)) >= len(win)
-               else "note" if t.score < l.score - 100 * CLEAN_PICKS_SLACK
+               else "défauts" if (len(defect_windows(t)) >= len(win) if win else len(defect_windows(t)) > 0)
+               else "note" if (t.score < l.score - 100 * CLEAN_PICKS_SLACK if win else t.score <= l.score)
+               else "grands axes" if t.shares["main_roads"] > l.shares["main_roads"] + 0.03
                else "ordre" if bounds is not None and not bounds[0] <= t.time_s <= bounds[1] else "ok")
         if stats is not None:
             stats[f"{kind} {why}"] = stats.get(f"{kind} {why}", 0) + 1
@@ -1577,6 +1593,25 @@ CLEAN_MARGIN_M = 250.0
 CITY_BACKTRACK = False
 CITY_BACKTRACK_SHARE = 0.6
 NESTED_BACKTRACK = False
+# Revue à l'aveugle de Florent (21/10/2026, 23 boucles v19 : 6 « je la ferais », 12 « bof », 5 « non » ; la note
+# d'Oyan ne prédit pas son jugement). Les allers-retours sont le 1er reproche (10 boucles) : « pourquoi là ? ».
+# BACKTRACK_DEST (remplace D80, accord de Florent) : un aller-retour « piste » ou « montée » n'est utile que s'il fait
+# demi-tour à une destination (destination_tip) ; sinon éperon injustifié, retiré ou bouclé par le nettoyage. Un
+# aller-retour « nature » sans destination reste permis (le long de la mer ou d'une rivière, mieux qu'un retour par une
+# route sans intérêt, Florent) mais coûte BACKTRACK_DEST_NATURE_PEN (au plus BACKTRACK_DEST_NATURE_MAX), et le
+# nettoyage essaie d'en faire une boucle, gardée seulement si elle note mieux sans ajouter de grands axes.
+# REPEAT_PLAIN : les 6 boucles qu'il ferait repassent sur moins de 5 % du parcours, aucune au-delà n'est « je la
+# ferais ». Seule la répétition sur des routes ordinaires compte (pas au bord de l'eau, en forêt, ni sur piste cyclable
+# hors de la ville : « je préfère revenir le long de la mer plutôt que par une route différente mais pas agréable ») :
+# au-delà de REPEAT_PLAIN_FREE, REPEAT_PLAIN_PER par point de part en plus (au plus REPEAT_PLAIN_MAX).
+# False : comme avant. Hors de l'empreinte tant qu'elles sont éteintes.
+BACKTRACK_DEST = False
+BACKTRACK_DEST_NATURE_PEN = 0.05
+BACKTRACK_DEST_NATURE_MAX = 0.10
+REPEAT_PLAIN = False
+REPEAT_PLAIN_FREE = 0.05
+REPEAT_PLAIN_PER = 0.6
+REPEAT_PLAIN_MAX = 0.15
 CORRIDOR_NEAR_M = 100.0         # 1re mesure (17/10/2026) à 150 m : 12 meilleures, 38 moins bonnes (couloir trop large)
 CORRIDOR_MIN_M = 400.0
 FALSE_START_SHARE = 0.33
@@ -3018,6 +3053,14 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                                              for k in useful)]
         demoted += [(w, "nested") for w in useful if w not in keep]
         useful = keep
+    if backtrack_dest() and useful:                      # « piste » ou « montée » : seulement vers une destination
+        keep = []
+        for w in useful:
+            if w[3] in ("piste", "montée") and not destination_tip(coords[w[2]]):
+                demoted.append((w, "aimless"))
+            else:
+                keep.append(w)
+        useful = keep
     for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
@@ -3143,6 +3186,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.aimless_bt = (sum(1 for b_ in loop.backtracks if b_["why"] in ("nature", "piste")
                            and not destination_tip([b_["lon"], b_["lat"]])) if turn_rules() else 0)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
+    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])]
+                            if backtrack_dest() else [])     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) is None]
@@ -3164,6 +3209,22 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     if false_start():                                        # faux départs et faux retours (FALSE_START)
         loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
     loop.gh_details = det                                    # détails GraphHopper, pour recoudre un morceau (CLEAN_PICKS)
+    loop.rep_plain = 0.0                                     # répétition sur routes ordinaires (REPEAT_PLAIN)
+    if repeat_plain():
+        lc_ = ""
+        if loop.scenery and (loop.scenery.get("landcover") or {}).get("cls") is not None:
+            lc_ = landcover_seq(loop.scenery["landcover"]["cls"])
+        road_ = loop.road_seq or ""
+        plain = 0.0
+        for i, m in enumerate(rep_m):
+            if m <= 0:
+                continue
+            k = int(cum[i] // 100)
+            nice = ((k < len(lc_) and lc_[k] in "ef")
+                    or (k < len(road_) and road_[k] == "c" and (k >= len(lc_) or lc_[k] != "v")))
+            if not nice:
+                plain += m
+        loop.rep_plain = plain / total
     loop.score = score(loop)
     return loop
 
@@ -3224,7 +3285,12 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     if getattr(l, "climb_mid_bt", 0):                     # demi-tour en pleine montée : pénalisé (TURN_RULES, 2e version)
         total -= min(TURN_CLIMB_MAX, TURN_CLIMB_PEN * l.climb_mid_bt)
     if getattr(l, "aimless_bt", 0):                       # aller-retour sans destination : un peu pénalisé (TURN_RULES)
-        total -= min(TURN_AIMLESS_MAX, TURN_AIMLESS_PEN * l.aimless_bt)
+        if backtrack_dest():                              # remplace D80 : davantage (BACKTRACK_DEST)
+            total -= min(BACKTRACK_DEST_NATURE_MAX, BACKTRACK_DEST_NATURE_PEN * l.aimless_bt)
+        else:
+            total -= min(TURN_AIMLESS_MAX, TURN_AIMLESS_PEN * l.aimless_bt)
+    if repeat_plain() and getattr(l, "rep_plain", 0.0) > REPEAT_PLAIN_FREE:   # répétition sur routes ordinaires
+        total -= min(REPEAT_PLAIN_MAX, REPEAT_PLAIN_PER * (l.rep_plain - REPEAT_PLAIN_FREE))
     if backtrack_long():                                  # long aller-retour annoncé, plus gratuit (BACKTRACK_LONG)
         lb = long_backtrack(l)
         if lb is not None:
@@ -4657,13 +4723,15 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
     if clean_picks() and pool:                               # boucles choisies sans détours ni éperons (CLEAN_PICKS)
         pool, tried = list(pool), set()
         for _ in range(CLEAN_PICKS_ROUNDS):
-            dirty = [l for _, l in pick_options(pool, prior) if defect_windows(l) and id(l) not in tried]
+            dirty = [l for _, l in pick_options(pool, prior)
+                     if (defect_windows(l) or getattr(l, "aimless_windows", None)) and id(l) not in tried]
             if not dirty:
                 break
             for l in dirty:
                 tried.add(id(l))
                 t = clean_loop(gh, l, level, duration_h, bounds)
-                log(f"    nettoyage : {len(defect_windows(l))} défaut(s), note {l.score:.1f} -> "
+                log(f"    nettoyage : {len(defect_windows(l))} défaut(s), "
+                    f"{len(getattr(l, 'aimless_windows', None) or [])} aller(s)-retour(s) sans but, note {l.score:.1f} -> "
                     + ("pas de version propre valide" if t is None else f"{t.score:.1f} ({len(defect_windows(t))} restant)"))
                 if t is not None:
                     pool = [t if x is l else x for x in pool]

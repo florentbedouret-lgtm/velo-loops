@@ -40,6 +40,8 @@ def test_reglages_v17():
     assert g.SPATIAL_GRAFT is True                     # départs voisins greffés, en essai
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
+    assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
+    assert g.REPEAT_PLAIN is False                     # répétition sur routes ordinaires, en essai
     assert g.CLEAN_PICKS is False                      # nettoyage des boucles publiées, en essai
     assert g.CITY_BACKTRACK is False                   # allers-retours en ville dense, en essai
     assert g.NESTED_BACKTRACK is False                 # allers-retours emboîtés, en essai
