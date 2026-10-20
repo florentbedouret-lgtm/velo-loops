@@ -4981,6 +4981,7 @@ def st_key(st: dict) -> str:
 PARAMS_HASH = ""
 REUSE = None                    # {"src", "index", "by_key", "max_age_days"} si --reuse-from est fourni
 BUDGET_END = None               # instant (time.time()) au-delà duquel on ne démarre plus de nouveau départ
+BUDGET_GRACE_S = 1200.0         # au-delà de BUDGET_END + 20 min, un départ en cours s'interrompt entre deux durées
 CARRY = None                    # {"src", "by_key"} si --carry-over-from est fourni (départs publiés, toutes versions)
 
 
@@ -5221,6 +5222,13 @@ def process_start(st: dict, sid: str, gh_url: str, durations, levels, candidates
         log(f"- {st['name']}")
     dur_seconds: dict[str, float] = {}
     for duration in missing_durations:
+        if BUDGET_END is not None and time.time() > BUDGET_END + BUDGET_GRACE_S:
+            # 20/10/2026 : un départ commencé juste avant la fin du budget a duré 49 min de plus ; le run a dépassé la
+            # limite de 350 min, coupé avant la publication (chaîne v19 arrêtée). Il s'arrête désormais entre deux durées.
+            kept = carry_over(st, sid, out, log)
+            log(f"- {st['name']} : budget de temps dépassé de plus de {BUDGET_GRACE_S / 60:g} min, départ interrompu"
+                + (", version publiée gardée (à recalculer)" if kept is not None else ""))
+            return kept, buf, time.time() - t0
         t_dur = time.time()
         prior: list = []                                  # options des allures inférieures (O-18 A)
         for level in sorted(levels, key=list(LEVELS).index):
