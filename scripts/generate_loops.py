@@ -751,26 +751,28 @@ def loop_targets(l) -> list:
     return sorted(out)
 
 
+def loop_extras(coords, a, b) -> list:
+    """Points qui font d'un aller-retour coords[a..b] une petite boucle (Florent, 17/10/2026, le Moll d'Espanya :
+    descendre le quai par un côté, remonter par l'autre) : un point à LOOPIFY_OFFSET_M d'un côté du milieu de l'aller,
+    le demi-tour, puis le point symétrique de l'autre côté."""
+    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
+    t = max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1], coords[i][0], coords[i][1]))
+    half, acc, m = haversine(coords[a][0], coords[a][1], coords[t][0], coords[t][1]) / 2.0, 0.0, a
+    while m < t and acc < half:
+        acc += haversine(coords[m][0], coords[m][1], coords[m + 1][0], coords[m + 1][1])
+        m += 1
+    h = math.radians(bearing(coords[a][0], coords[a][1], coords[t][0], coords[t][1]))
+    dx, dy = math.cos(h) * LOOPIFY_OFFSET_M, -math.sin(h) * LOOPIFY_OFFSET_M     # perpendiculaire (est, nord)
+    side = lambda s: [coords[m][0] + s * dx / kx, coords[m][1] + s * dy / 110540.0]  # noqa: E731
+    return [side(1), [coords[t][0], coords[t][1]], side(-1)]
+
+
 def loopify_way(coords, win, targets) -> list:
     """Points de passage de la boucle sans les tronçons win, où chaque aller-retour de targets devient une petite boucle
-    (Florent, 17/10/2026, le Moll d'Espanya : descendre le quai par un côté, remonter par l'autre) : depuis l'entrée, un
-    point à LOOPIFY_OFFSET_M d'un côté du milieu de l'aller, le demi-tour, puis le point symétrique de l'autre côté."""
+    (loop_extras), insérée après l'entrée du tronçon qui le contient."""
     way = route_waypoints(coords, skip=win)
-    kx = 111320.0 * math.cos(math.radians(coords[0][1]))
     for w0, w1 in win:
-        extra = []
-        for a, b in targets:
-            if not (w0 <= a and b <= w1):
-                continue
-            t = max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1], coords[i][0], coords[i][1]))
-            half, acc, m = haversine(coords[a][0], coords[a][1], coords[t][0], coords[t][1]) / 2.0, 0.0, a
-            while m < t and acc < half:
-                acc += haversine(coords[m][0], coords[m][1], coords[m + 1][0], coords[m + 1][1])
-                m += 1
-            h = math.radians(bearing(coords[a][0], coords[a][1], coords[t][0], coords[t][1]))
-            dx, dy = math.cos(h) * LOOPIFY_OFFSET_M, -math.sin(h) * LOOPIFY_OFFSET_M   # perpendiculaire (est, nord)
-            side = lambda s: [coords[m][0] + s * dx / kx, coords[m][1] + s * dy / 110540.0]  # noqa: E731
-            extra += [side(1), [coords[t][0], coords[t][1]], side(-1)]
+        extra = [p for a, b in targets if w0 <= a and b <= w1 for p in loop_extras(coords, a, b)]
         if not extra:
             continue
         k = next((i for i, p in enumerate(way) if p[0] == coords[w0][0] and p[1] == coords[w0][1]), None)
@@ -779,18 +781,59 @@ def loopify_way(coords, win, targets) -> list:
     return way
 
 
+def _edges_raw(det, n) -> list:
+    """Valeur brute d'un détail GraphHopper pour chacun des n tronçons (None si absente)."""
+    arr = [None] * n
+    for a, b, val in det or []:
+        for i in range(max(0, a), min(b, n)):
+            arr[i] = val
+    return arr
+
+
+def _intervals(arr) -> list:
+    """Inverse de _edges_raw : [[début, fin, valeur]] (les tronçons sans valeur sont omis)."""
+    out, i = [], 0
+    while i < len(arr):
+        j = i
+        while j + 1 < len(arr) and arr[j + 1] == arr[i]:
+            j += 1
+        if arr[i] is not None:
+            out.append([i, j + 1, arr[i]])
+        i = j + 1
+    return out
+
+
+def splice_path(path: dict, a: int, b: int, sub: dict) -> dict:
+    """Itinéraire path où les points a..b sont remplacés par l'itinéraire sub (CLEAN_PICKS, 4e essai), détails compris :
+    le reste de la boucle est gardé tel quel (aucun nouveau point de passage, donc aucun nouveau détour ailleurs)."""
+    pts, sp = path["points"]["coordinates"], sub["points"]["coordinates"]
+    n_old, n_sub = len(pts) - 1, len(sp) - 1
+    det, sd = path.get("details") or {}, sub.get("details") or {}
+    new_det = {}
+    for k in set(det) | set(sd):
+        old = _edges_raw(det.get(k), n_old)                  # pts[a-1] -> sp[0] : tronçon a-1 ; sp[-1] -> pts[b+1] : b
+        new_det[k] = _intervals(old[:a] + _edges_raw(sd.get(k), n_sub) + old[b:])
+    up = sum(max(0.0, pts[i + 1][2] - pts[i][2]) for i in range(a, b)) if len(pts[0]) > 2 else 0.0
+    return {"points": {"coordinates": pts[:a] + sp + pts[b + 1:]}, "details": new_det,
+            "ascend": max(0.0, float(path.get("ascend", 0.0)) - up + float(sub.get("ascend", 0.0)))}
+
+
 def clean_loop(gh, l, level, duration_h, bounds=None):
-    """La même boucle sans ses détours, éperons et boucles accrochées (CLEAN_PICKS), ou None. Les allers-retours sont
-    d'abord transformés en petite boucle (loopify_way), puis retirés : la meilleure version valide est gardée."""
+    """La même boucle sans ses détours, éperons et boucles accrochées (CLEAN_PICKS), ou None. 4e essai (mesure du
+    18/10/2026 : recalculer toute la boucle par des points tous les 2 km rajoutait des détours ailleurs, 315 essais
+    sur 363) : seul le morceau autour de chaque défaut (CLEAN_MARGIN_M avant et après) est recalculé et recousu dans la
+    boucle ; les allers-retours sont d'abord transformés en petite boucle (loop_extras), puis retirés. La meilleure
+    version valide est gardée."""
     win = defect_windows(l)
-    if not win:
+    det0 = getattr(l, "gh_details", None)
+    if not win or det0 is None:
         return None
     targets = loop_targets(l)
     c = l.coords
     cum = [0.0]
     for p, q in zip(c, c[1:]):
         cum.append(cum[-1] + haversine(p[0], p[1], q[0], q[1]))
-    wide: list = []                                          # défauts élargis de CLEAN_MARGIN_M (3e essai)
+    wide: list = []                                          # défauts élargis de CLEAN_MARGIN_M
     for a, b in win:
         a2, b2 = a, b
         while a2 > 1 and cum[a] - cum[a2 - 1] <= CLEAN_MARGIN_M:
@@ -801,11 +844,20 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
             wide[-1] = (wide[-1][0], max(wide[-1][1], b2))
         else:
             wide.append((a2, b2))
-    ways = ([("boucle", loopify_way(c, win, targets))] if targets else []) + [("retrait", route_waypoints(c, skip=wide))]
     stats = getattr(_TL, "clean_stats", None)
     best = None
-    for kind, way in ways:
-        path = gh.via(way, l.profile, pass_through=True)
+    for kind, loopify in ([("boucle", True)] if targets else []) + [("retrait", False)]:
+        path = {"points": {"coordinates": c}, "details": det0, "ascend": l.ascend_gh_m}
+        for a2, b2 in reversed(wide):                        # de la fin vers le début : les indices restent justes
+            pts = [[c[a2][0], c[a2][1]]]
+            if loopify:
+                pts += [p for a, b in targets if a2 <= a and b <= b2 for p in loop_extras(c, a, b)]
+            pts.append([c[b2][0], c[b2][1]])
+            sub = gh.via(pts, l.profile, pass_through=len(pts) > 2)
+            if sub is None or len(sub["points"]["coordinates"]) < 2:
+                path = None
+                break
+            path = splice_path(path, a2, b2, sub)
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
         why = ("sans itinéraire" if t is None else "durée" if not time_ok(t.time_s, duration_h)
                else "répétition" if not overlap_ok(t) else "demi-tours" if t.u_turns > MAX_UTURNS
@@ -1518,6 +1570,9 @@ LOOPIFY_OFFSET_M = 120.0
 # 3e essai (mesure du 17/10/2026 : 274 boucles à détour sur 673, encore 268 après) : les points gardés de part et d'autre
 # d'un détour sont à moins de 120 m l'un de l'autre, souvent sur une chaussée ou un sens unique qui y oblige ; le chemin
 # est donc repris CLEAN_MARGIN_M avant et après chaque défaut.
+# 4e essai (mesure du 18/10/2026 : encore 390 boucles à détour sur 1 083 ; 315 essais de retrait sur 363 ajoutaient
+# autant de défauts ailleurs, car toute la boucle était recalculée par des points tous les 2 km, chacun pouvant tomber du
+# mauvais côté d'une avenue) : seul le morceau autour du défaut est recalculé et recousu (splice_path).
 CLEAN_MARGIN_M = 250.0
 CITY_BACKTRACK = False
 CITY_BACKTRACK_SHARE = 0.6
@@ -3108,6 +3163,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.appendices = loop.appendices + corridor_windows     # allers-retours dans un couloir (CORRIDOR_SPURS)
     if false_start():                                        # faux départs et faux retours (FALSE_START)
         loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
+    loop.gh_details = det                                    # détails GraphHopper, pour recoudre un morceau (CLEAN_PICKS)
     loop.score = score(loop)
     return loop
 

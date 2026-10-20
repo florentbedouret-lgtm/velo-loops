@@ -631,3 +631,19 @@ def test_loopify_way_pier():
     assert abs(tip[1] - coords[t][1]) < 1e-9
     assert abs((left[0] - 2.18) * kx - 120.0) < 5 and abs((right[0] - 2.18) * kx + 120.0) < 5
 
+
+def test_splice_path_details():
+    """Nettoyage recousu (CLEAN_PICKS, 4e essai) : les points a..b remplacés, les détails décalés, le reste intact."""
+    pts = [[0.0, float(i), 10.0 + i] for i in range(10)]
+    path = {"points": {"coordinates": pts}, "ascend": 9.0,
+            "details": {"road_class": [[0, 3, "primary"], [3, 9, "residential"]], "surface": [[0, 9, "asphalt"]]}}
+    sub = {"points": {"coordinates": [[0.0, 3.0, 13.0], [0.5, 4.0, 13.0], [0.0, 6.0, 16.0]]}, "ascend": 3.0,
+           "details": {"road_class": [[0, 2, "cycleway"]], "surface": [[0, 2, "asphalt"]]}}
+    new = g.splice_path(path, 3, 6, sub)
+    c = new["points"]["coordinates"]
+    assert len(c) == 10 - 4 + 3 and c[:3] == pts[:3] and c[-3:] == pts[7:]
+    rc = g._edges_raw(new["details"]["road_class"], len(c) - 1)
+    assert rc == ["primary"] * 3 + ["cycleway"] * 2 + ["residential"] * 3
+    assert new["details"]["surface"] == [[0, 8, "asphalt"]]
+    assert abs(new["ascend"] - (9.0 - 3.0 + 3.0)) < 1e-9
+
