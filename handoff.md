@@ -106,6 +106,17 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
 ### État au 04/10/2026
 Générateur **v15** en cours de calcul complet (série `full` lancée le 03/10 vers 22 h, fin estimée lundi 05/10 après-midi ; 387 départs sur 863 en v15 le 04/10 à 15 h, les autres en v13 / v14). Interface **UX v3** en ligne avec les retours de Florent. Claude suit et lance lui-même les runs avec GitHub CLI (`gh`) : diagnostics librement, runs qui publient sur accord de Florent (D40).
 
+### État au 21/10/2026
+**Critère de qualité fixé par Florent (D81)** : la boucle proposée est celle que ferait un cycliste omniscient, qui
+connaît toutes les routes de la région, de ce niveau, partant de ce point pour cette durée. **v19 en calcul** avec 25
+règles (21 + demi-tours au bon endroit, faux départs, allers-retours dans un couloir, grands axes au-delà de 20 %,
+relancée le 17/10) ; chaîne coupée le 20/10 par un départ trop long, corrigée et relancée (O-84). **Revue à l'aveugle**
+de 23 boucles v19 (O-85) : 6 « je la ferais », 12 « bof », 5 « non » ; la note d'Oyan ne prédit pas son jugement.
+**En mesure** (éteintes, hors empreinte) : nettoyage des boucles publiées recousu (O-82), allers-retours vers une
+destination et répétition sur routes ordinaires (O-86, D82), demi-tours par un rond-point (O-87). Prochaine étape :
+décider avec Florent de relancer la v19 avec elles ; puis note de « naturel » étalonnée sur ses verdicts et boucles
+construites autour d'un but (v20, O-88).
+
 ### État au 16/10/2026
 **v18 terminée** (815 départs, aucun `stale`) ; revue complète (O-70) : v16 -> v18, Tranquille trop vallonnés sans repli
 6 811 -> 117, terre > 1 km sans repli 6 098 -> 0, demi-tours en Modéré / Sportif 28 % / 35 % -> 6 % / 5 % ; restent
@@ -294,6 +305,37 @@ répétition par couloir (O-47). Soirée du 08/10 : retours de Florent sur des b
 - [ ] **O-77 — Petites boucles accrochées** (Florent, 16/10, Espronceda 3 h Modéré « plus de relief » : à Sant Fost, 2,7 km de rues résidentielles et retour au même carrefour ; traçage à neuf : le calcul actuel ne la produit plus, elle venait d'une ancienne version reprise par le filet). Revue : 1 539 boucles en v18 (2 391 en v16). Définition (Florent) : au plus **10 % du parcours** et 5 km (au-delà, un « 8 » ou une raquette) ; gardée seulement avec un lieu, un belvédère, une piste ou voie verte **hors de la ville** ou le bord de l'eau, ou en Sportif 60 m de montée. 1re version (retirée comme un éperon) : 6 meilleures, 16 moins bonnes (la boucle qu'on ne peut pas raccourcir gardait une lourde pénalité, Tordera 6 h 69 -> 41). 2e version (`APPENDIX_RULE`, éteint) : **pénalité fixe de 3 points** (à note proche, une autre boucle passe devant, Florent) et la même boucle sans le détour essayée ; mesure e8 / e9 en cours. Limite : l'exception « plus de relief » n'est pas applicable (l'option est choisie après).
 - [ ] **O-78 — Expliquer les durées absentes dans l'app** (revue v18 : 2 925 durées vides, 95 % en montagne ; la v19 en retire d'autres en Tranquille) : une ligne qui dit pourquoi et propose une autre allure ou le départ voisin le plus proche qui a cette durée. Suivant.
 - [x] **O-79 — Revue de cohérence complétée** (16/10) : petites boucles accrochées (point de retour donné, hors lieu remarquable, 10 % du parcours) et escaliers (publiés depuis la v19) ; v18 complète revue (815 départs, 25 273 boucles).
+- [x] **O-80 — Demi-tours, faux départs, couloirs, grands axes** (Florent, 17/10, relecture de l'Eixample, Sarrià,
+  Mataró, Cerdanyola) : `TURN_RULES` (belvédère au demi-tour, aller-retour prolongé jusqu'au lieu tout proche, même
+  destination deux fois, demi-tour en pleine montée 4 points, aller-retour sans destination 2 points D80),
+  `FALSE_START`, `CORRIDOR_SPURS` (100 m), `AXES_OVER` (au-delà de 20 % du parcours). Mesure combinée : aucune boucle
+  perdue, boucles à plus de 30 % de grands axes 74 -> 47 ; ajoutées à l'empreinte v19 et calcul relancé le 17/10.
+- [x] **O-81 — Instantané v18 et départs sans option** : workflow `snapshot-data.yml` (release `donnees-v18`, base de
+  l'audit et retour arrière) ; départs sans aucune option mémorisés dans l'index (`no_option`) et sautés à paramètres
+  égaux (la chaîne v18 tournait sans fin).
+- [ ] **O-82 — Nettoyage des boucles publiées** (`CLEAN_PICKS`, éteint ; Florent, 17/10, 10 captures de l'Eixample) :
+  22 boucles de l'Eixample sur 51 gardaient un détour en pâté de maisons ; la réparation ne visait que les 3 meilleures
+  candidates. Chaque boucle choisie est nettoyée (détours, éperons, boucles accrochées), les allers-retours d'abord
+  transformés en petite boucle (tracé de Florent sur le Moll d'Espanya), puis retirés. 3e mesure : 315 essais sur 363
+  échouaient (recalculer toute la boucle rajoutait des détours ailleurs) ; 4e essai : seul le morceau autour du défaut
+  est recalculé et recousu (`splice_path`). Avec `CITY_BACKTRACK` (en ville dense, aller-retour seulement vers une
+  destination) et `NESTED_BACKTRACK` (aller-retour emboîté dans un autre). Mesures c8 / c9 / c0.
+- [ ] **O-83 — « Nature » le long d'une voie rapide** (revue O-85, Esplugues : B-23 / B-20) : la nature longée compte
+  comme agréable ; la nuisance des voies rapides (1 point par km, 35 m) est trop faible. À mesurer.
+- [x] **O-84 — Budget de temps des calculs complets** : un départ commencé juste avant la fin du budget a duré 49 min
+  de trop, run coupé à 350 min avant la publication (chaîne v19 arrêtée le 20/10). Un départ en cours s'interrompt
+  désormais entre deux durées 20 min après la fin du budget (garde sa version publiée).
+- [x] **O-85 — Revue à l'aveugle** (21/10) : page de revue (Artifact privé, verdicts enregistrés) ; 23 boucles v19
+  tirées au hasard. Reproches : allers-retours sans but (10), répétition (les 6 « je la ferais » repassent sur moins de
+  5 %), détours et crochets compliqués (5), agrément réel des routes (voies rapides, grosses routes, côte pas assez
+  suivie : 5). Note d'Oyan sans lien avec son jugement (Ripoll 83,5 « bof », 90 % répétés).
+- [ ] **O-86 — Allers-retours vers une destination et répétition** (`BACKTRACK_DEST`, `REPEAT_PLAIN`, éteints ; D82).
+- [ ] **O-87 — Demi-tours par un rond-point** (`SPUR_TURN_WINDOW`, éteint) : un demi-tour en plusieurs points (rond-point,
+  petite boucle au bout, jusqu'à 150 m) n'était pas vu (Olot vers la C-152, Collbató carrer Ramon Casas) ; sur les 23
+  boucles revues, trouve exactement ces cas, Les Corts (2,2 km) et Sarrià (El Mas Masnou), rien sur les « je la ferais ».
+- [ ] **O-88 — Boucles naturelles (v20)** : note de « naturel » étalonnée sur les verdicts de Florent (répétition,
+  allers-retours, détours, virages, routes suivies longtemps) ; boucles construites autour d'un but à la bonne distance
+  (col, belvédère, côte, village) avec aller et retour par des routes différentes, le tirage au hasard en complément.
 - **Proposition de contenu v19 : `docs/v19_proposition.md`** (effet mesuré, avis, étapes d'activation ; empreinte `V19_PARAMS` comptée seulement si une règle v19 est allumée) — à trancher par Florent après la v18.
 - **Outils de diagnostic corrigés le 09/10** : les tests avant / après tournaient sans la retouche (relief, terre, couloir, marge : à garder en tête) ; comparaisons de référence avec le sens du trajet (moins de demi-tours parasites) ; rapport des lieux : lieux écartés signalés ; tests automatiques avec les mêmes dépendances que le calcul (30 tests). Filet de la marge (`ordered_pool`) : une durée vidée est recalculée en plages strictes ; test v4 en cours (retouche comprise).
 - **Proposition de contenu v17 : `docs/v17_proposition.md`** (effet mesuré, avis, étapes d'activation) — à trancher par Florent.
@@ -360,3 +402,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | 14-15/10/2026 | Dev pipeline, UX, qualité | Filet des boucles publiées à 500 m (cause des boucles perdues, O-63) ; audit de l'app et corrections (O-65) ; retours par Web3Forms (O-64) ; voies agréables orientées, départs voisins, voies rapides v3 (O-58, O-59) ; « plus de relief » du Modéré (O-66) ; mesure combinée v19 et reclassement des boucles publiées (O-67) ; textes de l'app pour la v19 | Traçages a3 / a4, q3 / q4, cmp7 ; fin de la v18 ; dernière mesure combinée ; lancement de la v19 |
 | 15/10/2026 (après-midi et soir) | Analyste qualité, dev pipeline, UX | Revue de cohérence complète et comparaison v16 (O-70) ; causes racines codées éteintes et en mesure : tranches sans trou (O-71), allers-retours à pied (O-72), repli et relief (O-73) ; mise à jour automatique de l'app et coches (O-74) ; chaîne v18 relancée | Résultats des mesures O-71 à O-73 ; O-75 ; fin de la v18 puis activation de la v19 |
 | 16/10/2026 | Analyste qualité, dev pipeline, UX | v18 terminée et revue complète ; mesures et choix de Florent : départs voisins greffés et tronçon par tronçon à plusieurs boucles, tranches sans trou, longs allers-retours annoncés, repli et relief (25 m/km), allers-retours par des escaliers (D74 à D78, 20 règles v19, apply_v19 testé) ; bloc « Autres façons de rouler » refait et en ligne (O-76) ; boucles accrochées (O-77) | Mesure combinée v19, boucles accrochées 2e version, durées absentes (O-78), activation de la v19 |
+| 17-21/10/2026 | Analyste qualité, dev pipeline, UX | v19 relancée avec 4 règles de plus (O-80) ; relecture de l'Eixample : nettoyage des boucles publiées en 4 essais (O-82) ; chaîne coupée et corrigée (O-84) ; critère du cycliste omniscient (D81) ; revue à l'aveugle de 23 boucles (O-85), D80 remplacée (D82), demi-tours par un rond-point (O-87) | Bilan des mesures c8 / c9 / c0 ; décision de relancer la v19 avec elles ; note de « naturel » (O-88) |
