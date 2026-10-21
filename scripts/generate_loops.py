@@ -765,6 +765,27 @@ def find_appendices(coords, cum) -> list:
 # comptent plus, ni comme défaut ni dans la note. False : comme avant.
 FORCED_DETOURS = False
 FORCED_SPOTS: set = set()
+# Comparaison à l'aveugle de Florent (22/10/2026, 20 cas) : nettoyage 4 mieux / 2 pareil / 1 moins bien, allers-retours
+# 4 / 3 / 3. Restaient : (1) DETOUR_DEST : un détour en pâté de maisons était excusé s'il passait par une piste, de l'eau
+# ou de la nature (Granollers 6 h, vers Caldes de Montbui : vus, jamais comptés) ; seuls un lieu remarquable, un
+# belvédère ou un sommet l'excusent désormais, comme pour les allers-retours (D82). (2) DEFECT_STRICT : les défauts
+# restants, faute de version propre valide (Sant Martí carrer del Rosari, Horta carrer de Ramon Rocafull : « ce genre de
+# bug décrédibiliserait l'application »), coûtent DEFECT_STRICT_PEN chacun (au plus DEFECT_STRICT_MAX) en plus : une
+# boucle sans défaut de note proche passe devant. False : comme avant.
+DETOUR_DEST = False
+DEFECT_STRICT = False
+DEFECT_STRICT_PEN = 0.08
+DEFECT_STRICT_MAX = 0.20
+
+
+def detour_dest() -> bool:
+    """Détours excusés seulement par une destination (DETOUR_DEST), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "detour_dest", DETOUR_DEST))
+
+
+def defect_strict() -> bool:
+    """Défauts presque éliminatoires (DEFECT_STRICT), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "defect_strict", DEFECT_STRICT))
 
 
 def forced_detours() -> bool:
@@ -3290,7 +3311,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                             if backtrack_dest() else [])     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
-        loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) is None]
+        loop.detours = [d for d in loop.detours
+                        if (backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) or "")
+                        not in (("lieu", "belvédère", "relief") if detour_dest() else
+                                ("lieu", "belvédère", "relief", "nature", "piste", "montée"))]
     if loop.detours and forced_detours() and FORCED_SPOTS:   # lacet ou passage obligé déjà reconnu (FORCED_DETOURS)
         loop.detours = [d for d in loop.detours if spot_key(coords[d["a"]]) not in FORCED_SPOTS]
     loop.surface_seq = surface_seq(edges, cum)
@@ -3406,6 +3430,10 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         total -= APPENDIX_PENALTY
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
+    if defect_strict():                                    # défauts restants presque éliminatoires (DEFECT_STRICT)
+        nd = len(defect_windows(l))
+        if nd:
+            total -= min(DEFECT_STRICT_MAX, DEFECT_STRICT_PEN * nd)
     if detour_score() and getattr(l, "detours", None):    # détours inutiles restants (DETOUR_SCORE, v18)
         total -= min(DETOUR_MAX_PENALTY, sum(DETOUR_PENALTY + DETOUR_PENALTY_PER_100M * (d["m"] - d["gap"]) / 100.0
                                              for d in l.detours))
