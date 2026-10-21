@@ -1432,6 +1432,84 @@ VARIANT_MIN_SCORE_RATIO = 0.7
 # les plus proches (mer, grande rivière, grand espace vert), seuls (triangle) ou enchaînés (rivière puis mer, etc.).
 TARGET_MIN_KM = 1.0              # lieu déjà au départ : rien à viser
 TARGET_MAX_SHARE = 0.4           # lieu au plus à 40 % de la longueur de la boucle
+# v20, 1er essai (docs/v20_proposition.md, accord de Florent le 22/10/2026) : GOAL_RETURN. Pour chaque but à la bonne
+# distance (lieu remarquable, col ou sommet, mer, rivière, forêt : attraction_points), l'aller est calculé seul, puis le
+# retour en demandant à GraphHopper d'éviter le couloir de l'aller (zone de GOAL_AVOID_DEG autour de l'aller, hors des
+# GOAL_FREE_M autour du départ et du but, priorité multipliée par GOAL_AVOID_PRIORITY : pénalisée, pas interdite ; si
+# le seul retour agréable est le même chemin, il est repris, comme le veut Florent). False : comme avant.
+GOAL_RETURN = False
+GOAL_AVOID_DEG = 0.0009
+GOAL_FREE_M = 300.0
+GOAL_AVOID_PRIORITY = 0.15
+GOAL_MIN_SHARE, GOAL_MAX_SHARE = 0.2, 0.45     # but à 20-45 % de la longueur de la boucle, à vol d'oiseau
+
+
+def goal_return() -> bool:
+    """Aller vers un but, retour qui évite l'aller (GOAL_RETURN), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "goal_return", GOAL_RETURN))
+
+
+def concat_paths(p1: dict, p2: dict) -> dict:
+    """Itinéraire p1 puis p2 (p2 part du point d'arrivée de p1), détails compris."""
+    a, b = p1["points"]["coordinates"], p2["points"]["coordinates"]
+    det = {}
+    for k in set(p1.get("details") or {}) | set(p2.get("details") or {}):
+        e1 = _edges_raw((p1.get("details") or {}).get(k), len(a) - 1)
+        e2 = _edges_raw((p2.get("details") or {}).get(k), len(b) - 1)
+        det[k] = _intervals(e1 + e2)
+    return {"points": {"coordinates": a + b[1:]}, "details": det,
+            "ascend": float(p1.get("ascend", 0.0)) + float(p2.get("ascend", 0.0))}
+
+
+def goal_candidates(gh, st, level, profile, duration_h, log) -> list:
+    """Boucles « aller vers un but, retour par un autre chemin » (GOAL_RETURN)."""
+    import shapely
+    from shapely.geometry import LineString, mapping
+    lon, lat = st["lon"], st["lat"]
+    flat_ms = speed_from_power(level_watts(level, duration_h), 0.0) * REAL_WORLD_FACTOR
+    loop_km = 0.8 * flat_ms * duration_h * 3600.0 / 1000.0
+    goals = [(cat, x, y) for cat, (x, y, km) in attraction_points(lon, lat, GOAL_MAX_SHARE * loop_km).items()
+             if km >= GOAL_MIN_SHARE * loop_km]
+    if POIS:                                                 # cols et sommets nommés à la bonne distance
+        pt = shapely.Point(lon, lat)
+        for k in ("pass", "peak"):
+            if k not in POIS:
+                continue
+            tree, items = POIS[k]
+            near = [(items[int(i)][0], haversine(lon, lat, items[int(i)][0].x, items[int(i)][0].y) / 1000.0)
+                    for i in tree.query(pt.buffer(GOAL_MAX_SHARE * loop_km / 90.0))]
+            near = [(q, km) for q, km in near if GOAL_MIN_SHARE * loop_km <= km <= GOAL_MAX_SHARE * loop_km]
+            if near:
+                q = min(near, key=lambda z: z[1])[0]
+                goals.append((k, q.x, q.y))
+    kx = 111320.0 * math.cos(math.radians(lat))
+    found, tried = [], 0
+    for cat, gx, gy in goals:
+        tried += 1
+        out = gh.via([[lon, lat], [gx, gy]], profile)
+        if out is None or len(out["points"]["coordinates"]) < 3:
+            continue
+        line = LineString([(c[0], c[1]) for c in out["points"]["coordinates"]]).simplify(0.0002)
+        zone = line.buffer(GOAL_AVOID_DEG)
+        free = GOAL_FREE_M / kx
+        zone = zone.difference(shapely.Point(lon, lat).buffer(free)).difference(shapely.Point(gx, gy).buffer(free))
+        if zone.is_empty:
+            continue
+        cm = {"priority": [{"if": "in_aller", "multiply_by": str(GOAL_AVOID_PRIORITY)}],
+              "areas": {"type": "FeatureCollection",
+                        "features": [{"type": "Feature", "id": "aller", "properties": {},
+                                      "geometry": mapping(zone.simplify(0.0002))}]}}
+        back = gh.via([[gx, gy], [lon, lat]], profile, custom_model=cm)
+        if back is None or len(back["points"]["coordinates"]) < 3:
+            continue
+        loop = analyse(concat_paths(out, back), level, profile, duration_h, 6000 + tried, None)
+        if (loop is None or not time_ok(loop.time_s, duration_h) or not overlap_ok(loop)
+                or loop.u_turns > MAX_UTURNS or not dirt_ok(loop)):
+            continue
+        loop.goal = cat
+        found.append(loop)
+    log(f"    buts : {len(found)} boucle(s) valide(s) sur {tried} but(s)")
+    return found
 TARGET_GREEN_MIN_DEG2 = 5e-5     # grand espace vert (~0,5 km²), comme le diagnostic O-12
 TARGET_OFFSET_DEG = 45.0
 # Retouche des meilleures boucles (Florent, 02/10/2026 : la Plata 2 h, rejoindre la piste du Besòs dès l'aller ; 74 contre
@@ -2898,13 +2976,14 @@ class GraphHopper:
         d = r.json()
         return d["coordinates"][0], d["coordinates"][1], d.get("distance", 0.0)
 
-    def via(self, points, profile, pass_through=False):
+    def via(self, points, profile, pass_through=False, custom_model=None):
         """Itinéraire passant par des points imposés (tirages ciblés), mêmes détails que round_trip. pass_through : pas de
         demi-tour aux points de passage (retouche : points pris sur une boucle, parfois du mauvais côté d'une avenue)."""
         heads = [p[2] if len(p) > 2 else None for p in points]   # sens de circulation (DETOUR_FIX), en degrés
         body = {"points": [[p[0], p[1]] for p in points], "profile": profile, "ch.disable": True,
                 "points_encoded": False, "elevation": True, "instructions": False, "details": DETAILS,
-                **({"pass_through": True} if pass_through else {})}
+                **({"pass_through": True} if pass_through else {}),
+                **({"custom_model": custom_model} if custom_model else {})}
         if detour_fix() and any(h is not None for h in heads):
             # point sans sens imposé : "NaN" en texte (09/10/2026 : la valeur NaN brute, hors JSON, était refusée par
             # GraphHopper, 1 971 fois sur le diagnostic des détours ; le texte "NaN" est lu comme un nombre)
@@ -4631,6 +4710,8 @@ def level_pool(gh, st, level: str, duration: float, candidates, log, gate="defau
             pool.extend(ar_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
         if LIEU_TOUR:
             pool.extend(lieu_tour_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
+    if goal_return():                                        # v20 : aller vers un but, retour par un autre chemin
+        pool.extend(goal_candidates(gh, st, level, LEVELS[level]["profiles"][0], duration, log))
     if gate is None and KEEP_PREVIOUS and st.get("previous") and getattr(_TL, "keep_previous", True):
         pool.extend(previous_candidates(gh, st, level, duration))
     if RETOUCH:

@@ -41,6 +41,7 @@ def test_reglages_v17():
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
+    assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
     assert g.SMALL_ROADS is False                      # petites routes goudronnées, en essai
     assert g.DETOUR_DEST is False                      # détours excusés seulement par une destination, en essai
@@ -675,4 +676,16 @@ def test_spur_turn_window_roundabout():
     finally:
         g.SPUR_TURN_WINDOW = old
     assert before == [] and len(after) == 1
+
+
+def test_concat_paths():
+    """v20 (GOAL_RETURN) : l'aller puis le retour, détails décalés, point de jonction gardé une fois."""
+    p1 = {"points": {"coordinates": [[0, 0], [0, 1], [0, 2]]}, "ascend": 5.0,
+          "details": {"road_class": [[0, 2, "tertiary"]]}}
+    p2 = {"points": {"coordinates": [[0, 2], [1, 2], [1, 0], [0, 0]]}, "ascend": 1.0,
+          "details": {"road_class": [[0, 1, "primary"], [1, 3, "unclassified"]]}}
+    p = g.concat_paths(p1, p2)
+    assert p["points"]["coordinates"] == [[0, 0], [0, 1], [0, 2], [1, 2], [1, 0], [0, 0]]
+    assert p["details"]["road_class"] == [[0, 2, "tertiary"], [2, 3, "primary"], [3, 5, "unclassified"]]
+    assert p["ascend"] == 6.0
 

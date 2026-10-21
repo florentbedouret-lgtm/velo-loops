@@ -726,8 +726,8 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
-    elif variant in ("g_clean", "g_ar", "g_rep", "g_mw", "g_final", "g_flow", "g_small"):  # mesures séparées par famille (22/10/2026)
-        flags = {"g_flow": ("flow_v2",), "g_small": ("small_roads",), "g_final": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
+    elif variant in ("g_clean", "g_ar", "g_rep", "g_mw", "g_final", "g_flow", "g_small", "g_goal"):  # mesures séparées par famille (22/10/2026)
+        flags = {"g_goal": ("goal_return",), "g_flow": ("flow_v2",), "g_small": ("small_roads",), "g_final": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
                              "spur_turn_window", "detour_dest", "defect_strict"),
                  "g_clean": ("clean_picks", "forced_detours"),
                  "g_ar": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
