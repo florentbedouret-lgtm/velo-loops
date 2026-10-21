@@ -462,7 +462,7 @@ jobs:
             # nettoyage des boucles publiées, ville, emboîtés (17/10/2026) : Barcelone (Moll d'Espanya et Gran Vista tracés),
             # proche banlieue, campagne et montagne
             [ "$DIAG_PART" = "c8" ] && RELIEF_IDS="l-eixample;gracia;sarria-sant-gervasi;sant-marti;sants-montjuic;les-corts;horta-guinardo;sant-andreu;ciutat-vella" && NATURE_TRACE="l-eixample|1|modere;l-eixample|2|soutenu"
-            [ "$DIAG_PART" = "c9" ] && RELIEF_IDS="badalona;l-hospitalet-de-llobregat;sant-adria-de-besos;esplugues-de-llobregat;cornella-de-llobregat;sant-cugat-del-valles;mataro;castelldefels"
+            [ "$DIAG_PART" = "c9" ] && RELIEF_IDS="esplugues-de-llobregat;badalona;l-hospitalet-de-llobregat;sant-adria-de-besos;cornella-de-llobregat;sant-cugat-del-valles;mataro;castelldefels" && NATURE_TRACE="esplugues-de-llobregat|1|modere"
             [ "$DIAG_PART" = "c0" ] && RELIEF_IDS="folgueroles;olesa-de-montserrat;monistrol-de-montserrat;solsona;vic;sant-celoni;collbato;callus"
             [ "$DIAG_PART" = "c5" ] && RELIEF_IDS="l-eixample;gracia;sarria-sant-gervasi;sant-marti;sants-montjuic;les-corts;horta-guinardo;sant-andreu;badalona" && NATURE_TRACE="l-eixample|4|soutenu"
             [ "$DIAG_PART" = "c6" ] && RELIEF_IDS="olesa-de-montserrat;monistrol-de-montserrat;collbato;martorell;esparreguera;el-bruc;sant-just-desvern;esplugues-de-llobregat" && NATURE_TRACE="olesa-de-montserrat|6|facile"

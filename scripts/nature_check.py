@@ -725,11 +725,11 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         del g._TL.keep_previous
     elif variant == "clean5":                             # nettoyage, ville, emboîtés, destination, répétition (21/10)
         g._TL.clean_picks = g._TL.city_backtrack = g._TL.nested_backtrack = True
-        g._TL.backtrack_dest = g._TL.repeat_plain = g._TL.spur_turn_window = True
+        g._TL.backtrack_dest = g._TL.repeat_plain = g._TL.spur_turn_window = g._TL.motorway_v2 = True
         g._TL.clean_stats = {}
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.clean_picks, g._TL.city_backtrack, g._TL.nested_backtrack, g._TL.backtrack_dest, g._TL.repeat_plain
-        del g._TL.spur_turn_window
+        del g._TL.spur_turn_window, g._TL.motorway_v2
         clean_stats = g._TL.clean_stats
         del g._TL.clean_stats
     elif variant == "clean3":                             # nettoyage, ville, emboîtés (essai) ensemble (17/10/2026)

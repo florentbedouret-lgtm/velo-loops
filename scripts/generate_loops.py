@@ -295,6 +295,35 @@ MOTORWAY_TRUNK = False           # v3 (i1 / i2 v2 : 73 % des boucles touchées ;
 MOTORWAY_RUN_M = 300.0           # v2 (i1 / i2 du 14/10 : 95 % des boucles touchées, chaque passage dessus ou dessous
 #                                 comptait) : seulement les tronçons LONGÉS sur au moins 300 m d'affilée
 MOTORWAYS = None                 # STRtree des autoroutes et voies express à l'air libre, chargé dans main()
+# 2e version (revue à l'aveugle de Florent, 21/10/2026, Esplugues 1 h Modéré : « la partie censée être agréable, dans
+# la nature, longe la B-23 puis la B-20 : beaucoup de trafic, des voitures qui vont vite, de la pollution »). La forêt,
+# le parc ou l'eau comptaient comme agréables à côté d'une voie rapide, et la nuisance ne coûtait qu'un point par km à
+# moins de 30 m. MOTORWAY_V2 : (1) les voies express rapides comptent aussi (trunk avec motorroad=yes ou limitées à
+# MOTORWAY_V2_TRUNK_KMH et plus : la Ronda de Dalt, pas la Gran Via ni la Meridiana à 50) ; (2) bande de bruit de
+# MOTORWAY_V2_DEG (~100 m) ; (3) dans cette bande, ni forêt, ni parc, ni eau ne comptent comme agréables (note de
+# paysage, aller-retour « nature », répétition sur route agréable) ; (4) MOTORWAY_V2_PER_KM par km longé, au plus
+# MOTORWAY_V2_MAX. False : comme la v19. Hors de l'empreinte tant qu'elle est éteinte.
+MOTORWAY_V2 = False
+MOTORWAY_V2_DEG = 0.0012
+MOTORWAY_V2_PER_KM = 0.02
+MOTORWAY_V2_MAX = 0.10
+MOTORWAY_V2_TRUNK_KMH = 80
+MOTORWAYS_FAST = None            # autoroutes et voies express rapides à l'air libre (MOTORWAY_V2), chargé avec MOTORWAYS
+
+
+def motorway_v2() -> bool:
+    """« Nature » le long des voies rapides (MOTORWAY_V2), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "motorway_v2", MOTORWAY_V2)) and MOTORWAYS_FAST is not None
+
+
+def noisy_mask(pts):
+    """Par point : à moins de MOTORWAY_V2_DEG d'une autoroute ou voie express rapide (MOTORWAY_V2) ; None si éteint."""
+    if not motorway_v2():
+        return None
+    import numpy as np
+    m = np.zeros(len(pts), dtype=bool)
+    m[np.unique(MOTORWAYS_FAST.query(pts, predicate="dwithin", distance=MOTORWAY_V2_DEG)[0])] = True
+    return m
 FALLBACK_RELIEF_TOL = 1.0
 FALLBACK_DIRT_TOL_KM = 0.5
 
@@ -484,7 +513,8 @@ def side_km(coords, cum, car_e, rc_e) -> tuple[float, float]:
         sea_km = 0.1 * float(sum(1 for k in range(len(pos)) if near[k] and not car_e[idx[k]]))
     if motorway_nuisance():
         near = np.zeros(len(pos), dtype=bool)
-        near[np.unique(MOTORWAYS.query(pts, predicate="dwithin", distance=MOTORWAY_DEG)[0])] = True
+        tree_, deg_ = (MOTORWAYS_FAST, MOTORWAY_V2_DEG) if motorway_v2() else (MOTORWAYS, MOTORWAY_DEG)
+        near[np.unique(tree_.query(pts, predicate="dwithin", distance=deg_)[0])] = True
         hit = [bool(near[k]) and rc_e[idx[k]] not in ("motorway", "trunk") for k in range(len(pos))]
         run, n_run = 0, max(1, int(round(MOTORWAY_RUN_M / 100.0)))
         for h in hit + [False]:                              # tronçons longés seulement (MOTORWAY_RUN_M d'affilée)
@@ -507,7 +537,7 @@ def load_motorways(pbf: Path, workdir: Path):
         return None
     filt, out = workdir / "motorways.osm.pbf", workdir / "motorways.geojson"
     try:
-        subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway=motorway,trunk" if MOTORWAY_TRUNK else "w/highway=motorway",
+        subprocess.run(["osmium", "tags-filter", str(pbf), "w/highway=motorway,trunk",
                         "-o", str(filt), "--overwrite"],
                        check=True, capture_output=True)
         subprocess.run(["osmium", "export", str(filt), "-f", "geojson", "-o", str(out), "--overwrite"],
@@ -515,13 +545,23 @@ def load_motorways(pbf: Path, workdir: Path):
     except subprocess.CalledProcessError as e:
         print(f"! voies rapides : extraction échouée ({e.stderr.decode()[:200]})", file=sys.stderr)
         return None
-    lines = []
+    global MOTORWAYS_FAST
+    lines, fast = [], []
     for f in json.loads(out.read_text(encoding="utf-8")).get("features", []):
         p, g = f.get("properties", {}), f.get("geometry", {})
         if g.get("type") != "LineString" or p.get("tunnel") in ("yes", "building_passage") or p.get("covered") == "yes":
             continue
-        lines.append(shape(g))
-    print(f"voies rapides à l'air libre : {len(lines)} tronçons")
+        try:
+            kmh = int(str(p.get("maxspeed", "")).split()[0])
+        except (ValueError, IndexError):
+            kmh = 0
+        quick = p.get("highway") == "motorway" or p.get("motorroad") == "yes" or kmh >= MOTORWAY_V2_TRUNK_KMH
+        if quick:
+            fast.append(shape(g))                        # autoroutes et voies express rapides (MOTORWAY_V2)
+        if p.get("highway") == "motorway" or MOTORWAY_TRUNK:
+            lines.append(shape(g))
+    MOTORWAYS_FAST = STRtree(fast) if fast else None
+    print(f"voies rapides à l'air libre : {len(lines)} tronçons ; avec les voies express rapides : {len(fast)}")
     return STRtree(lines) if lines else None
 
 
@@ -2065,13 +2105,15 @@ class LandscapeIndex:
         import shapely
         xy = sample_points(coords, cum, 100.0)
         pts = shapely.points(np.array(xy))
+        noisy = noisy_mask(pts)                          # bande de bruit des voies rapides (MOTORWAY_V2)
+        quiet = set(range(len(xy))) if noisy is None else {k for k in range(len(xy)) if not noisy[k]}
 
         def share(key, dist):
             tree = self.trees[key]
             if tree is None:
                 return 0.0
             hit = tree.query(pts, predicate="dwithin", distance=dist)[0]
-            return len(set(hit.tolist())) / len(xy)
+            return len(set(hit.tolist()) & quiet) / len(xy)
 
         views = 0
         if self.trees["view"] is not None:
@@ -2085,13 +2127,14 @@ class LandscapeIndex:
             close[np.unique(self.trees["water"].query(pts, predicate="dwithin", distance=WATER_CITY_DEG)[0])] = True
             hit_b = self.trees["buildings"].query(pts, predicate="dwithin", distance=LANDCOVER_BLD_DEG)[0]
             dense = np.bincount(hit_b, minlength=len(xy)) >= LANDCOVER_BLD_MIN
-            water = float((hit_w & (~dense | close)).mean())
+            water = float((hit_w & (~dense | close) & (True if noisy is None else ~noisy)).mean())
         protected = share("protected", SCENERY_PROTECTED_DEG)
         ind_mask = industrial_mask(self.trees, pts)       # par point (tous les 100 m) : surlignage dans l'appli
         industrial = float(ind_mask.mean()) if len(xy) else 0.0
         index = min(1.0, 0.8 * forest + 1.5 * water + 0.6 * protected)   # belvédères : bonus à part (VIEW_BONUS)
         return {"forest": forest, "water": water, "protected": protected, "viewpoints": views,
                 "industrial": industrial, "industrial_mask": ind_mask.tolist(), "score": round(100 * index),
+                **({"noisy": noisy.tolist()} if noisy is not None else {}),
                 "landcover": self.landcover(pts)}
 
     def landcover(self, pts) -> dict | None:
@@ -3231,8 +3274,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             if m <= 0:
                 continue
             k = int(cum[i] // 100)
-            nice = ((k < len(lc_) and lc_[k] in "ef")
-                    or (k < len(road_) and road_[k] == "c" and (k >= len(lc_) or lc_[k] != "v")))
+            nz_ = (loop.scenery or {}).get("noisy")
+            nice = (((k < len(lc_) and lc_[k] in "ef")
+                     or (k < len(road_) and road_[k] == "c" and (k >= len(lc_) or lc_[k] != "v")))
+                    and not (nz_ and k < len(nz_) and nz_[k]))
             if not nice:
                 plain += m
         loop.rep_plain = plain / total
@@ -3292,7 +3337,10 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         if over > 0:
             total -= min(AXES_OVER_MAX, AXES_OVER_PER * over)
     if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
-        total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
+        if motorway_v2():                                 # 2e version (MOTORWAY_V2)
+            total -= min(MOTORWAY_V2_MAX, MOTORWAY_V2_PER_KM * getattr(l, "motorway_km", 0.0))
+        else:
+            total -= min(MOTORWAY_MAX, MOTORWAY_PER_KM * getattr(l, "motorway_km", 0.0))
     if getattr(l, "climb_mid_bt", 0):                     # demi-tour en pleine montée : pénalisé (TURN_RULES, 2e version)
         total -= min(TURN_CLIMB_MAX, TURN_CLIMB_PEN * l.climb_mid_bt)
     if getattr(l, "aimless_bt", 0):                       # aller-retour sans destination : un peu pénalisé (TURN_RULES)
@@ -4247,6 +4295,9 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
             tr = LANDSCAPE.trees.get(key)
             if tr is not None:
                 hit[np.unique(tr.query(pts, predicate="dwithin", distance=0.0006)[0])] = True
+        nz = noisy_mask(pts)                                 # pas de nature le long d'une voie rapide (MOTORWAY_V2)
+        if nz is not None:
+            hit &= ~nz
         green = float(hit.mean())
         if green >= BACKTRACK_SHARE:
             return "montée" if climb_mid else "nature"
