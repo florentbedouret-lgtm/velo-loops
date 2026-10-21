@@ -41,6 +41,8 @@ def test_reglages_v17():
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
+    assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
+    assert g.SMALL_ROADS is False                      # petites routes goudronnées, en essai
     assert g.DETOUR_DEST is False                      # détours excusés seulement par une destination, en essai
     assert g.DEFECT_STRICT is False                    # défauts presque éliminatoires, en essai
     assert g.FORCED_DETOURS is False                   # lacets et passages obligés, en essai

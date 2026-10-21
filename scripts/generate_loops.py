@@ -776,6 +776,26 @@ DETOUR_DEST = False
 DEFECT_STRICT = False
 DEFECT_STRICT_PEN = 0.08
 DEFECT_STRICT_MAX = 0.20
+# Les 43 jugements de Florent (revue et comparaison à l'aveugle, 21-22/10/2026). (1) Entre deux versions d'une même sortie,
+# il choisit 11 fois sur 12 celle qui repasse le moins ; la note n'en tenait presque pas compte (25 % répétés : 4,5
+# points). FLOW_V2 : répétition pesée FLOW_V2_FACTOR fois au lieu de FLOW_OVERLAP_FACTOR. (2) Florent : « l'attractivité
+# des petites routes de campagne / forêt tant qu'elles sont goudronnées ». SMALL_ROADS : bonus SMALL_ROADS_W par part
+# du parcours sur de petites routes goudronnées (classes SMALL_ROADS_CLASSES) hors de la ville. False : comme avant.
+FLOW_V2 = False
+FLOW_V2_FACTOR = 3.0
+SMALL_ROADS = False
+SMALL_ROADS_W = 0.10
+SMALL_ROADS_CLASSES = ("unclassified", "tertiary", "track", "living_street")
+
+
+def flow_v2() -> bool:
+    """Répétition pesée davantage (FLOW_V2), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "flow_v2", FLOW_V2))
+
+
+def small_roads() -> bool:
+    """Bonus des petites routes goudronnées hors de la ville (SMALL_ROADS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "small_roads", SMALL_ROADS))
 
 
 def detour_dest() -> bool:
@@ -3226,6 +3246,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     # le ralentissement sur toute la ville (freinages, piétons, croisements aussi sur les pistes cyclables).
     n_e = len(cum) - 1
     rc_e, ba_e, ud_e = (per_edge(det.get(k), n_e) for k in ("road_class", "bike_road_access", "urban_density"))
+    sf_e = per_edge(det.get("surface"), n_e)                 # petites routes goudronnées hors de la ville (SMALL_ROADS)
+    small_m = sum(cum[i + 1] - cum[i] for i in range(n_e) if rc_e[i] in SMALL_ROADS_CLASSES
+                  and sf_e[i] not in UNPAVED and str(ud_e[i]).lower() != "city"
+                  and (rc_e[i] != "track" or sf_e[i] in ("asphalt", "paved", "concrete")))
     steps_m = sum(cum[i + 1] - cum[i] for i in range(n_e) if rc_e[i] == "steps")   # publié pour la revue (16/10/2026)
     car = [not (rc_e[i] == "cycleway" or (rc_e[i] in ("footway", "path", "pedestrian") and ba_e[i] in ("yes", "designated")))
            for i in range(n_e)]
@@ -3334,6 +3358,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.appendices = loop.appendices + corridor_windows     # allers-retours dans un couloir (CORRIDOR_SPURS)
     if false_start():                                        # faux départs et faux retours (FALSE_START)
         loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
+    loop.small_roads = small_m / total                       # part sur petites routes goudronnées (SMALL_ROADS)
     loop.gh_details = det                                    # détails GraphHopper, pour recoudre un morceau (CLEAN_PICKS)
     loop.rep_plain = 0.0                                     # répétition sur routes ordinaires (REPEAT_PLAIN)
     if repeat_plain():
@@ -3364,7 +3389,7 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         "calm": 1.0 - (s.get("urban_car", s["urban"])["city"] + 0.4 * s.get("urban_car", s["urban"])["residential"]),
         "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
         "infra": min(1.0, 2.0 * s["dedicated_cycleway"]),
-        "flow": 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap + 0.15 * l.u_turns),
+        "flow": 1.0 - min(1.0, (FLOW_V2_FACTOR if flow_v2() else FLOW_OVERLAP_FACTOR) * l.overlap + 0.15 * l.u_turns),
     }
     weights = dict(WEIGHTS)
     if l.signals is not None:
@@ -3430,6 +3455,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         total -= APPENDIX_PENALTY
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
+    if small_roads():                                     # petites routes goudronnées hors de la ville (SMALL_ROADS)
+        total += SMALL_ROADS_W * getattr(l, "small_roads", 0.0)
     if defect_strict():                                    # défauts restants presque éliminatoires (DEFECT_STRICT)
         nd = len(defect_windows(l))
         if nd:
