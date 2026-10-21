@@ -1758,6 +1758,7 @@ def main() -> int:
     g.DENSITY = g.load_density(pbf, wd)                  # modèle de temps v19 (essai), utilisé seulement s'il est allumé
     g.STOPS = g.load_points(pbf, wd, ["n/highway=stop"], "stops")
     g.LANDSCAPE = g.load_landscape(pbf, wd)
+    g.VILLAGES = g.load_points(pbf, wd, ["n/place=village"], "villages")   # buts « village » (v20, essai)
     g.POIS = g.load_pois(pbf, wd)                       # lieux remarquables (tirages ciblés, bonus) comme la production
     g.SCENIC_WAYS = g.load_scenic_ways(pbf, wd, g.LANDSCAPE)   # voies agréables (essai), utilisées seulement si allumé
     g.MOTORWAYS = g.load_motorways(pbf, wd)              # voies rapides (essai), utilisées seulement si allumé

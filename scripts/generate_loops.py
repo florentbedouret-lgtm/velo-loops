@@ -1442,6 +1442,9 @@ GOAL_AVOID_DEG = 0.0009
 GOAL_FREE_M = 300.0
 GOAL_AVOID_PRIORITY = 0.15
 GOAL_MIN_SHARE, GOAL_MAX_SHARE = 0.2, 0.45     # but à 20-45 % de la longueur de la boucle, à vol d'oiseau
+GOAL_VILLAGES = 2                # villages visés au plus (les plus proches de 1/3 de la boucle, dans des directions
+#                                 différentes ; liste des buts de Florent, 22/10/2026)
+VILLAGES = None                  # villages OSM (place=village), chargés dans main() si GOAL_RETURN
 
 
 def goal_return() -> bool:
@@ -1482,6 +1485,18 @@ def goal_candidates(gh, st, level, profile, duration_h, log) -> list:
             if near:
                 q = min(near, key=lambda z: z[1])[0]
                 goals.append((k, q.x, q.y))
+    if VILLAGES is not None and VILLAGES.points:            # villages à la bonne distance, directions différentes
+        ideal = loop_km / 3.0
+        cand = sorted(((abs(haversine(lon, lat, x, y) / 1000.0 - ideal), x, y) for x, y in VILLAGES.points
+                       if GOAL_MIN_SHARE * loop_km <= haversine(lon, lat, x, y) / 1000.0 <= GOAL_MAX_SHARE * loop_km))
+        picked = []
+        for _, x, y in cand:
+            b = bearing(lon, lat, x, y)
+            if all(abs((b - b2 + 180) % 360 - 180) >= 60 for b2 in picked):
+                goals.append(("village", x, y))
+                picked.append(b)
+            if len(picked) >= GOAL_VILLAGES:
+                break
     kx = 111320.0 * math.cos(math.radians(lat))
     found, tried = [], 0
     for cat, gx, gy in goals:
@@ -5799,7 +5814,7 @@ def main() -> int:
     res = machine_resources()
     print(f"Machine : {res['cpu_count']} CPU, {res['ram_gb']} Go de RAM ; {args.workers} départ(s) en parallèle", flush=True)
 
-    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY, SCENIC_WAYS, MOTORWAYS
+    global SIGNALS, STOPS, LANDSCAPE, POIS, DENSITY, SCENIC_WAYS, MOTORWAYS, VILLAGES
     places_path = Path(args.places)
     pbf_path = Path(args.pbf) if args.pbf else places_path.parent / "region.osm.pbf"
     SIGNALS = load_signals(pbf_path, places_path.parent)
@@ -5817,6 +5832,8 @@ def main() -> int:
                                      else "non disponible"), flush=True)
     if MOTORWAY_NUISANCE:                                    # voies rapides à l'air libre
         MOTORWAYS = load_motorways(pbf_path, places_path.parent)
+    if GOAL_RETURN:                                          # villages visés (v20)
+        VILLAGES = load_points(pbf_path, places_path.parent, ["n/place=village"], "villages")
     if SCENIC_RETOUCH:                                       # voies agréables (retouche)
         SCENIC_WAYS = load_scenic_ways(pbf_path, places_path.parent, LANDSCAPE)
     try:
