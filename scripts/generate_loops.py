@@ -969,12 +969,14 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
                     FORCED_SPOTS.add(spot_key(c[d["a"]]))
         if why == "ok" and (best is None or t.score > best.score):
             best = t
+            best.cleaned_kind = kind                         # pour les mesures : quelle version propre (22/10/2026)
     if forced_detours() and getattr(l, "detours", None):   # lacets et passages obligés : plus comptés (FORCED_DETOURS)
         kept = [d for d in l.detours if spot_key(c[d["a"]]) not in FORCED_SPOTS]
         if len(kept) < len(l.detours):
             l.detours = kept
             l.score = score(l)
     if best is not None:
+        best.cleaned_from = getattr(l, "cleaned_from", None) or route_key(simplify(l.coords, 10.0))[:6]
         for attr in ("relief_fallback", "unpaved_fallback"):
             if getattr(l, attr, False):
                 setattr(best, attr, True)

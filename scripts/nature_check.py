@@ -635,8 +635,11 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "motorway_km": round(getattr(l, "motorway_km", 0.0), 1),
                              "useful": o.get("backtracks", []), "retouched": bool(o.get("retouched")),
                              "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed")),
-                             # tracé gardé pour relire les allers-retours jugés utiles (09/10/2026)
-                             **({"coords": [[c[0], c[1]] for c in o["coords"]]} if o.get("backtracks") else {})})
+                             # nettoyée (CLEAN_PICKS) : clé de la boucle d'origine et essai retenu (22/10/2026)
+                             **({"cleaned_from": l.cleaned_from, "cleaned_kind": l.cleaned_kind}
+                                if getattr(l, "cleaned_from", None) else {}),
+                             # tracé gardé : relire les allers-retours utiles (09/10), comparer avant / après (22/10)
+                             "coords": [[c[0], c[1]] for c in o["coords"]]})
             out[f"{d:g}|{level}"] = rows
     for attr in ("relief_limits", "dirt_rules"):
         if hasattr(g._TL, attr):
