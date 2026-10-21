@@ -304,10 +304,14 @@ MOTORWAYS = None                 # STRtree des autoroutes et voies express à l'
 # paysage, aller-retour « nature », répétition sur route agréable) ; (4) MOTORWAY_V2_PER_KM par km longé, au plus
 # MOTORWAY_V2_MAX. False : comme la v19. Hors de l'empreinte tant qu'elle est éteinte.
 MOTORWAY_V2 = False
-MOTORWAY_V2_DEG = 0.0012
-MOTORWAY_V2_PER_KM = 0.02
-MOTORWAY_V2_MAX = 0.10
-MOTORWAY_V2_TRUNK_KMH = 80
+# 2e essai (mesure combinée du 21/10 : km longés 973 -> 5 170 sur 1 093 boucles ; les voies à 80 km/h comprenaient les
+# routes principales ordinaires, presque toutes les boucles autour de Barcelone étaient pénalisées) : autoroutes et voies
+# express (motorroad=yes) seulement, bande de ~60 m, pénalité inchangée (1 point par km) ; l'essentiel est le retrait de
+# la « nature » dans la bande.
+MOTORWAY_V2_DEG = 0.0007
+MOTORWAY_V2_PER_KM = 0.01
+MOTORWAY_V2_MAX = 0.05
+MOTORWAY_V2_TRUNK_KMH = 999
 MOTORWAYS_FAST = None            # autoroutes et voies express rapides à l'air libre (MOTORWAY_V2), chargé avec MOTORWAYS
 
 
@@ -754,6 +758,25 @@ def find_appendices(coords, cum) -> list:
     return out
 
 
+# FORCED_DETOURS (mesure combinée du 21/10, vérifié sur la carte : le « détour » repéré 17 fois près de Pedralbes est un
+# lacet de la Carretera de Vallvidrera, BV-1462 ; l'altitude lissée ne montre pas la montée) : quand le nettoyage refait
+# le morceau par le chemin le plus direct (profil « sport ») et retrouve le détour au même endroit, c'est la route
+# elle-même (lacet, échangeur, passage sous une voie) : l'endroit est retenu (FORCED_SPOTS, ~50 m) et ses détours ne
+# comptent plus, ni comme défaut ni dans la note. False : comme avant.
+FORCED_DETOURS = False
+FORCED_SPOTS: set = set()
+
+
+def forced_detours() -> bool:
+    """Lacets et passages obligés (FORCED_DETOURS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "forced_detours", FORCED_DETOURS))
+
+
+def spot_key(p) -> tuple:
+    """Case d'environ 50 m d'un point (FORCED_SPOTS)."""
+    return (round(p[1] * 2000), round(p[0] * 2000))
+
+
 def clean_picks() -> bool:
     """Nettoyage des boucles publiées (CLEAN_PICKS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "clean_picks", CLEAN_PICKS))
@@ -938,8 +961,19 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
                 stats["exemples"].append({"essai": kind, "km": round(l.distance_m / 1000.0, 1),
                                           "avant": [[round(c[a][1], 5), round(c[a][0], 5)] for a, _ in win],
                                           "après": [where(w) for w in defect_windows(t)]})
+        if (forced_detours() and t is not None and why == "défauts" and (kind == "direct" or prof == "sport")
+                and getattr(l, "detours", None)):        # même détour au même endroit par le plus direct : la route
+            again = {spot_key(t.coords[d["a"]]) for d in (t.detours or [])}
+            for d in l.detours:
+                if spot_key(c[d["a"]]) in again:
+                    FORCED_SPOTS.add(spot_key(c[d["a"]]))
         if why == "ok" and (best is None or t.score > best.score):
             best = t
+    if forced_detours() and getattr(l, "detours", None):   # lacets et passages obligés : plus comptés (FORCED_DETOURS)
+        kept = [d for d in l.detours if spot_key(c[d["a"]]) not in FORCED_SPOTS]
+        if len(kept) < len(l.detours):
+            l.detours = kept
+            l.score = score(l)
     if best is not None:
         for attr in ("relief_fallback", "unpaved_fallback"):
             if getattr(l, attr, False):
@@ -3255,6 +3289,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours if backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) is None]
+    if loop.detours and forced_detours() and FORCED_SPOTS:   # lacet ou passage obligé déjà reconnu (FORCED_DETOURS)
+        loop.detours = [d for d in loop.detours if spot_key(coords[d["a"]]) not in FORCED_SPOTS]
     loop.surface_seq = surface_seq(edges, cum)
     if STEEP_DIRT_PENALTY:                                # terre (notée ou probable) sur une pente d'au moins 12 %
         n_ = min(len(loop.surface_seq), len(prof) - 1)

@@ -723,6 +723,19 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         g._TL.keep_previous = False
         b = relief_generate(gh, st_, sid, durations, levels, None)
         del g._TL.keep_previous
+    elif variant in ("g_clean", "g_ar", "g_rep", "g_mw"):  # mesures séparées par famille (22/10/2026)
+        flags = {"g_clean": ("clean_picks", "forced_detours"),
+                 "g_ar": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
+                          "spur_turn_window"),
+                 "g_rep": ("repeat_plain",), "g_mw": ("motorway_v2",)}[variant]
+        for f_ in flags:
+            setattr(g._TL, f_, True)
+        g._TL.clean_stats = {}
+        b = relief_generate(gh, st_, sid, durations, levels, None)
+        for f_ in flags:
+            delattr(g._TL, f_)
+        clean_stats = g._TL.clean_stats
+        del g._TL.clean_stats
     elif variant == "clean5":                             # nettoyage, ville, emboîtés, destination, répétition (21/10)
         g._TL.clean_picks = g._TL.city_backtrack = g._TL.nested_backtrack = True
         g._TL.backtrack_dest = g._TL.repeat_plain = g._TL.spur_turn_window = g._TL.motorway_v2 = True
