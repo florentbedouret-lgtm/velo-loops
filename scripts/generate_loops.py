@@ -905,15 +905,20 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
         return out
     stats = getattr(_TL, "clean_stats", None)
     best = None
-    variants = ([("boucle", True, widen(win + aw))] if targets else []) + ([("retrait", False, widen(win))] if win else [])
-    for kind, loopify, wide in variants:
+    variants = (([("boucle", True, widen(win + aw), l.profile)] if targets else [])
+                + ([("retrait", False, widen(win), l.profile)] if win else [])
+                # 5e essai (mesure du 21/10 : encore 293 retraits sur 373 refont le détour) : les profils « calm » préfèrent
+                # faire le tour d'un pâté de maisons par une piste cyclable plutôt que 100 m de rue ; un cycliste du coin
+                # va tout droit. Le morceau est aussi recalculé avec le profil « sport », sans attrait pour les pistes.
+                + ([("direct", False, widen(win), "sport")] if win and l.profile != "sport" else []))
+    for kind, loopify, wide, prof in variants:
         path = {"points": {"coordinates": c}, "details": det0, "ascend": l.ascend_gh_m}
         for a2, b2 in reversed(wide):                        # de la fin vers le début : les indices restent justes
             pts = [[c[a2][0], c[a2][1]]]
             if loopify:
                 pts += [p for a, b in targets if a2 <= a and b <= b2 for p in loop_extras(c, a, b)]
             pts.append([c[b2][0], c[b2][1]])
-            sub = gh.via(pts, l.profile, pass_through=len(pts) > 2)
+            sub = gh.via(pts, prof, pass_through=len(pts) > 2)
             if sub is None or len(sub["points"]["coordinates"]) < 2:
                 path = None
                 break
@@ -928,6 +933,11 @@ def clean_loop(gh, l, level, duration_h, bounds=None):
                else "ordre" if bounds is not None and not bounds[0] <= t.time_s <= bounds[1] else "ok")
         if stats is not None:
             stats[f"{kind} {why}"] = stats.get(f"{kind} {why}", 0) + 1
+            if why == "défauts" and len(stats.setdefault("exemples", [])) < 40:   # où le défaut reste (diagnostic)
+                where = lambda w: [round(t.coords[w[0]][1], 5), round(t.coords[w[0]][0], 5)]  # noqa: E731
+                stats["exemples"].append({"essai": kind, "km": round(l.distance_m / 1000.0, 1),
+                                          "avant": [[round(c[a][1], 5), round(c[a][0], 5)] for a, _ in win],
+                                          "après": [where(w) for w in defect_windows(t)]})
         if why == "ok" and (best is None or t.score > best.score):
             best = t
     if best is not None:
