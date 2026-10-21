@@ -1442,8 +1442,9 @@ GOAL_AVOID_DEG = 0.0009
 GOAL_FREE_M = 300.0
 GOAL_AVOID_PRIORITY = 0.15
 GOAL_MIN_SHARE, GOAL_MAX_SHARE = 0.2, 0.45     # but à 20-45 % de la longueur de la boucle, à vol d'oiseau
-GOAL_VILLAGES = 2                # villages visés au plus (les plus proches de 1/3 de la boucle, dans des directions
-#                                 différentes ; liste des buts de Florent, 22/10/2026)
+GOAL_VILLAGES = 0                # villages visés au plus (les plus proches de 1/3 de la boucle, directions différentes).
+#                                 0 (Florent, 22/10/2026) : un village quelconque n'est pas un but, seulement s'il est
+#                                 particulièrement joli ; critère à trouver (v20). Les lieux remarquables restent visés.
 VILLAGES = None                  # villages OSM (place=village), chargés dans main() si GOAL_RETURN
 
 
@@ -1485,7 +1486,7 @@ def goal_candidates(gh, st, level, profile, duration_h, log) -> list:
             if near:
                 q = min(near, key=lambda z: z[1])[0]
                 goals.append((k, q.x, q.y))
-    if VILLAGES is not None and VILLAGES.points:            # villages à la bonne distance, directions différentes
+    if GOAL_VILLAGES and VILLAGES is not None and VILLAGES.points:   # villages à la bonne distance
         ideal = loop_km / 3.0
         cand = sorted(((abs(haversine(lon, lat, x, y) / 1000.0 - ideal), x, y) for x, y in VILLAGES.points
                        if GOAL_MIN_SHARE * loop_km <= haversine(lon, lat, x, y) / 1000.0 <= GOAL_MAX_SHARE * loop_km))
