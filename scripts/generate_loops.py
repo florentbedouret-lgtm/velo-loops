@@ -734,6 +734,11 @@ def repeat_plain() -> bool:
     return bool(getattr(_TL, "repeat_plain", REPEAT_PLAIN))
 
 
+def spur_turn_window() -> bool:
+    """Demi-tours par un rond-point (SPUR_TURN_WINDOW), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "spur_turn_window", SPUR_TURN_WINDOW))
+
+
 def nested_backtrack() -> bool:
     """Allers-retours emboîtés (NESTED_BACKTRACK), réglable par fil d'exécution."""
     return bool(getattr(_TL, "nested_backtrack", NESTED_BACKTRACK))
@@ -1612,6 +1617,12 @@ REPEAT_PLAIN = False
 REPEAT_PLAIN_FREE = 0.05
 REPEAT_PLAIN_PER = 0.6
 REPEAT_PLAIN_MAX = 0.15
+# SPUR_TURN_WINDOW (même revue : Olot 45 min Sportif vers la C-152, Collbató 1 h 30 Tranquille carrer Ramon Casas) : un
+# demi-tour par un rond-point ou une petite boucle au bout tourne de 150° en plusieurs points, et l'aller-retour n'était
+# pas vu (ni jugé, ni pénalisé, ni retiré). Il est reconnu sur SPUR_TURN_WINDOW_M au plus, si le retour repasse à moins
+# de SPUR_CORRIDOR_M de l'aller à la même altitude (CORRIDOR_DZ_M : pas les lacets d'une montée). False : comme avant.
+SPUR_TURN_WINDOW = False
+SPUR_TURN_WINDOW_M = 150.0
 CORRIDOR_NEAR_M = 100.0         # 1re mesure (17/10/2026) à 150 m : 12 meilleures, 38 moins bonnes (couloir trop large)
 CORRIDOR_MIN_M = 400.0
 FALSE_START_SHARE = 0.33
@@ -4078,15 +4089,29 @@ def spur_list(coords) -> list:
     while i < len(k_) - 1:
         d = abs((bearing(k_[i][0], k_[i][1], k_[i + 1][0], k_[i + 1][1]) -
                  bearing(k_[i - 1][0], k_[i - 1][1], k_[i][0], k_[i][1]) + 180) % 360 - 180)
+        a, b, t = i - 1, i + 1, i
         if d < 150:
-            i += 1
-            continue
-        a, b = i - 1, i + 1
+            j = None
+            if spur_turn_window():                          # demi-tour par un rond-point ou une petite boucle au bout
+                h0 = bearing(k_[i - 1][0], k_[i - 1][1], k_[i][0], k_[i][1])
+                for x in range(i + 1, len(k_) - 1):
+                    if cum[x] - cum[i] > SPUR_TURN_WINDOW_M:
+                        break
+                    dx = abs((bearing(k_[x][0], k_[x][1], k_[x + 1][0], k_[x + 1][1]) - h0 + 180) % 360 - 180)
+                    if (dx >= 150 and near(k_[i - 1], k_[x + 1])
+                            and (len(k_[i - 1]) < 3 or abs(k_[i - 1][2] - k_[x + 1][2]) <= CORRIDOR_DZ_M)):
+                        j = x
+                        break
+            if j is None:
+                i += 1
+                continue
+            a, b = i - 1, j + 1
+            t = max(range(i, j + 1), key=lambda y: haversine(k_[a][0], k_[a][1], k_[y][0], k_[y][1]))
         while a > 0 and b < len(k_) - 1 and (near(k_[a - 1], k_[b + 1]) or
                                               any(near(k_[a - 1], k_[x]) for x in range(b, min(len(k_), b + 4)))):
             a -= 1
             b += 1
-        out.append({"a": idx[a], "t": idx[i], "b": idx[b], "m": cum[i] - cum[a],
+        out.append({"a": idx[a], "t": idx[t], "b": idx[b], "m": cum[t] - cum[a],
                     "start_m": cum[a], "end_m": cum[-1] - cum[b]})
         i = b
     return out

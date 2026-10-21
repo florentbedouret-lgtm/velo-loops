@@ -41,6 +41,7 @@ def test_reglages_v17():
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
+    assert g.SPUR_TURN_WINDOW is False                 # demi-tours par un rond-point, en essai
     assert g.REPEAT_PLAIN is False                     # répétition sur routes ordinaires, en essai
     assert g.CLEAN_PICKS is False                      # nettoyage des boucles publiées, en essai
     assert g.CITY_BACKTRACK is False                   # allers-retours en ville dense, en essai
@@ -648,4 +649,24 @@ def test_splice_path_details():
     assert rc == ["primary"] * 3 + ["cycleway"] * 2 + ["residential"] * 3
     assert new["details"]["surface"] == [[0, 8, "asphalt"]]
     assert abs(new["ascend"] - (9.0 - 3.0 + 3.0)) < 1e-9
+
+
+def test_spur_turn_window_roundabout():
+    """Demi-tour par un rond-point (SPUR_TURN_WINDOW, Olot) : 350 m d'aller, tour d'un rond-point de 15 m de rayon, retour
+    par la même route ; vu seulement avec la règle."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(42.18))
+    pts = [(-1500.0, 0.0)] + [(x, 0.0) for x in range(-1000, 351, 10)]
+    pts += [(350 + 15 * math.sin(a / 10.0 * 2 * math.pi), 15 - 15 * math.cos(a / 10.0 * 2 * math.pi)) for a in range(1, 10)]
+    pts += [(x, 2.0) for x in range(340, -1001, -10)] + [(-1500.0, 2.0), (-1500.0, 1500.0)]
+    coords = [[2.48 + x / kx, 42.18 + y / 110540.0, 400.0] for x, y in pts]
+    old = g.SPUR_TURN_WINDOW
+    try:
+        g.SPUR_TURN_WINDOW = False
+        before = [s for s in g.spur_list(coords) if s["m"] >= 300]
+        g.SPUR_TURN_WINDOW = True
+        after = [s for s in g.spur_list(coords) if s["m"] >= 300]
+    finally:
+        g.SPUR_TURN_WINDOW = old
+    assert before == [] and len(after) == 1
 
