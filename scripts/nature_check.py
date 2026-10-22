@@ -54,8 +54,8 @@ PART_LABELS = {"calm": "calme (ville)", "lights": "feux", "axes": "grands axes",
 class GH(g.GraphHopper):
     """GraphHopper de production + itinéraire passant par des points imposés (candidats « vers le vert »)."""
 
-    def via(self, points, profile, pass_through=False):          # même client que la production (mémoire comprise)
-        return g.GraphHopper.via(self, points, profile, pass_through)
+    def via(self, points, profile, pass_through=False, custom_model=None):   # même client que la production
+        return g.GraphHopper.via(self, points, profile, pass_through, custom_model=custom_model)
 
 
 def ref_path(gh, waypoints, profile, analyse_fn):
