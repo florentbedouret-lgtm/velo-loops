@@ -655,6 +655,8 @@ def destination_tip(p) -> bool:
     if POIS:
         if "lieu" in POIS and len(POIS["lieu"][0].query(pt, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)):
             return True
+        if dest_heritage() and len(POIS["patrimoine"][0].query(pt, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)):
+            return True                                  # monastère, château, bien patrimonial (DEST_HERITAGE)
         for k in ("peak", "pass"):
             if k in POIS and len(POIS[k][0].query(pt, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)):
                 return True
@@ -677,25 +679,29 @@ def extend_to_place(gh, l, level, duration_h) -> list:
     if not (POIS and "lieu" in POIS) or not getattr(l, "backtracks", None):
         return []
     import shapely
-    tree, items = POIS["lieu"]
+    heritage = dest_heritage()
+    trees = [POIS["lieu"]] + ([POIS["patrimoine"]] if heritage else [])
     seen = {r["n"] for r in (l.remarkable or [])}
     out = []
     for bt in l.backtracks:
         tip = shapely.Point(bt["lon"], bt["lat"])
-        for k in tree.query(tip, predicate="dwithin", distance=TURN_EXTEND_M / 111000.0):
-            name = items[k][1]
-            if name in seen:
-                continue
-            g_ = tree.geometries[k]
+        near = [(haversine(bt["lon"], bt["lat"], tr.geometries[k].x, tr.geometries[k].y), tr.geometries[k], it[k][1], n_)
+                for n_, (tr, it) in enumerate(trees)
+                for k in tr.query(tip, predicate="dwithin",
+                                  distance=(DEST_HERITAGE_EXTEND_M if heritage else TURN_EXTEND_M) / 111000.0)]
+        if heritage:                                         # le plus proche du demi-tour (DEST_HERITAGE)
+            near.sort(key=lambda z: z[0])
+        for _, g_, name, n_ in [z for z in near if z[2] not in seen][:1]:   # un lieu par aller-retour (comme avant)
             way = route_waypoints(l.coords)
             j = min(range(len(way)), key=lambda i: haversine(way[i][0], way[i][1], bt["lon"], bt["lat"]))
             way = way[:j + 1] + [[g_.x, g_.y]] + way[j:]    # du demi-tour au lieu, puis retour au même point
             path = gh.via(way, l.profile)
             t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+            reached = (name in {r["n"] for r in (t.remarkable or [])} if t is not None and n_ == 0 else
+                       t is not None and min(haversine(c[0], c[1], g_.x, g_.y) for c in t.coords) <= 150.0)
             if (t is not None and time_ok(t.time_s, duration_h) and overlap_ok(t) and t.u_turns <= MAX_UTURNS
-                    and dirt_ok(t) and name in {r["n"] for r in (t.remarkable or [])}):
+                    and dirt_ok(t) and reached):
                 out.append(t)
-            break                                        # un lieu par aller-retour
     return out
 
 
@@ -1432,6 +1438,86 @@ VARIANT_MIN_SCORE_RATIO = 0.7
 # les plus proches (mer, grande rivière, grand espace vert), seuls (triangle) ou enchaînés (rivière puis mer, etc.).
 TARGET_MIN_KM = 1.0              # lieu déjà au départ : rien à viser
 TARGET_MAX_SHARE = 0.4           # lieu au plus à 40 % de la longueur de la boucle
+# Les demandes de Florent après la 2e comparaison à l'aveugle (24/10/2026, « prends-les en compte dès maintenant ») :
+# (1) SMALL_MODEL : de petites routes (7 commentaires : Monistrol, Collserola, Folgueroles, la colonia Montserrat…) ; le
+#     bonus ajouté à la note n'avait presque pas d'effet : la préférence passe dans le profil de GraphHopper (modèle
+#     personnalisé ajouté à chaque requête) : petites routes goudronnées hors de la ville favorisées, grandes routes
+#     pénalisées. (2) WATER_HUG : longer la mer, les rivières, les lacs au plus près (Ciutat Vella, Barceloneta, El
+#     Masnou, le Besòs, le Llobregat, le Fluvià) : bonus par km à moins de ~50 m de l'eau, et un aller-retour le long de
+#     l'eau est accepté comme sur une piste (la promenade de la Barceloneta n'est pas une piste : l'aller-retour de Ciutat
+#     Vella 45 min était rejeté). (3) DEST_HERITAGE : faire demi-tour à un endroit naturel (Monistrol : « au Monestir de
+#     Sant Benet ou à la colonia Puig ») : les monastères, châteaux et biens patrimoniaux nommés deviennent des
+#     destinations, et un aller-retour tout proche est prolongé jusqu'à eux. (5) TOWNS_PEN : éviter les agglomérations
+#     et zones industrielles (Martorell, Sant Andreu de la Barca, Montcada - Granollers) : pénalité par km en ville au
+#     milieu de la boucle. (6) LOOP_SHAPE : une vraie boucle, claire : pénalité si le début et la fin se croisent (Sant
+#     Andreu 2 h) et si la boucle tourne plus que la moyenne (à sortie égale, 8 choix sur 12 pour la moins tournante).
+#     (4, détours restants) : le nettoyage et DETOUR_DEST / DEFECT_STRICT. False : comme avant ; hors de l'empreinte.
+SMALL_MODEL = False
+SMALL_MODEL_PRIORITY = [
+    {"if": "urban_density == RURAL && (road_class == UNCLASSIFIED || road_class == TERTIARY || "
+           "(road_class == TRACK && surface == ASPHALT))", "multiply_by": "1.5"},
+    {"if": "road_class == PRIMARY || road_class == SECONDARY || road_class == TRUNK", "multiply_by": "0.7"},
+]
+WATER_HUG = False
+WATER_HUG_DEG = 0.0006          # ~50 m de la mer, d'une rivière ou d'un lac
+WATER_HUG_PER_KM = 0.01
+WATER_HUG_MAX = 0.10
+DEST_HERITAGE = False
+DEST_HERITAGE_EXTEND_M = 2500.0
+TOWNS_PEN = False
+TOWNS_PEN_EDGE = 0.2            # le premier et le dernier cinquième (sortie et retour en ville) ne comptent pas
+TOWNS_PEN_PER_KM = 0.005
+TOWNS_PEN_MAX = 0.08
+LOOP_SHAPE = False
+LOOP_SHAPE_CROSS = 0.03         # début et fin qui se croisent (hors 150 m autour du départ)
+LOOP_SHAPE_END_M = 2000.0
+LOOP_SHAPE_TURNS_FREE = 1.5     # virages marqués (60° et plus, tous les 50 m) par km au-delà desquels on pénalise
+LOOP_SHAPE_TURNS_PER = 0.01
+LOOP_SHAPE_TURNS_MAX = 0.05
+
+
+def _flag(name, default):
+    return bool(getattr(_TL, name, default))
+
+
+def small_model() -> bool:
+    return _flag("small_model", SMALL_MODEL)
+
+
+def water_hug() -> bool:
+    return _flag("water_hug", WATER_HUG)
+
+
+def dest_heritage() -> bool:
+    return _flag("dest_heritage", DEST_HERITAGE) and bool(POIS) and "patrimoine" in POIS
+
+
+def towns_pen() -> bool:
+    return _flag("towns_pen", TOWNS_PEN)
+
+
+def loop_shape() -> bool:
+    return _flag("loop_shape", LOOP_SHAPE)
+
+
+def shape_measures(coords, cum) -> tuple:
+    """(début et fin se croisent, virages marqués par km) : LOOP_SHAPE."""
+    from shapely.geometry import LineString, Point
+    total = cum[-1]
+    head = [c[:2] for c, m in zip(coords, cum) if m <= LOOP_SHAPE_END_M]
+    tail = [c[:2] for c, m in zip(coords, cum) if total - m <= LOOP_SHAPE_END_M]
+    cross = False
+    if len(head) > 2 and len(tail) > 2:
+        home = Point(coords[0][0], coords[0][1]).buffer(150.0 / 111000.0)
+        hit = LineString(head).intersection(LineString(tail)).difference(home)
+        cross = not hit.is_empty
+    pts = [coords[0]]
+    for p in coords[1:]:
+        if haversine(pts[-1][0], pts[-1][1], p[0], p[1]) >= 50.0:
+            pts.append(p)
+    turns = sum(1 for a, b, c in zip(pts, pts[1:], pts[2:])
+                if abs((bearing(b[0], b[1], c[0], c[1]) - bearing(a[0], a[1], b[0], b[1]) + 180) % 360 - 180) >= 60)
+    return cross, turns / max(total / 1000.0, 0.1)
 # v20, 1er essai (docs/v20_proposition.md, accord de Florent le 22/10/2026) : GOAL_RETURN. Pour chaque but à la bonne
 # distance (lieu remarquable, col ou sommet, mer, rivière, forêt : attraction_points), l'aller est calculé seul, puis le
 # retour en demandant à GraphHopper d'éviter le couloir de l'aller (zone de GOAL_AVOID_DEG autour de l'aller, hors des
@@ -2530,10 +2616,12 @@ def load_pois(pbf: Path, workdir: Path):
     filt, out = workdir / "pois.osm.pbf", workdir / "pois.geojsonseq"
     subprocess.run(["osmium", "tags-filter", str(pbf), "n/amenity=drinking_water", "nw/amenity=fountain",
                     "nw/amenity=cafe", "nw/shop=bakery", "nw/railway=station", "n/mountain_pass=yes", "n/natural=saddle",
-                    "n/natural=peak", "nw/tourism=viewpoint", "-o", str(filt), "--overwrite"], check=True, capture_output=True)
+                    "n/natural=peak", "nw/tourism=viewpoint", "nw/historic=monastery", "nw/historic=castle",
+                    "nw/amenity=monastery", "nw/heritage=1", "nw/heritage=2", "-o", str(filt), "--overwrite"],
+                   check=True, capture_output=True)
     subprocess.run(["osmium", "export", str(filt), "-f", "geojsonseq", "-o", str(out), "--overwrite"], check=True,
                    capture_output=True)
-    kinds = {"w": [], "c": [], "g": [], "pass": [], "peak": [], "lieu": []}
+    kinds = {"w": [], "c": [], "g": [], "pass": [], "peak": [], "lieu": [], "patrimoine": []}
     # lieux remarquables : scripts/remarkable_places.json (Wikidata, au moins 6 articles Wikipédia ; sonde #163 : le simple
     # « a un article Wikipédia » retenait 63 petits turons de Catalogne, 239 boucles sur 459, le Tibidabo 2 fois seulement)
     try:
@@ -2568,6 +2656,9 @@ def load_pois(pbf: Path, workdir: Path):
                 kinds["pass"].append((pt, name))
             elif p.get("natural") == "peak" and name:
                 kinds["peak"].append((pt, name))
+            if name and (p.get("historic") in ("monastery", "castle") or p.get("amenity") == "monastery"
+                         or p.get("heritage") in ("1", "2")):
+                kinds["patrimoine"].append((pt, name))     # monastère, château, bien patrimonial (DEST_HERITAGE)
     if REMARKABLE_POINTS:                                    # points d'accès relus (« point ») : visés et comptés aussi
         from shapely.geometry import Point
         for e in remarkable_all.values():
@@ -2957,6 +3048,10 @@ class GraphHopper:
         import copy
         if scenic_areas() and body.get("profile") in SCENIC_PROFILES:   # zones agréables (SCENIC_AREAS)
             body = {**body, "profile": body["profile"] + "_scenic"}
+        if small_model():                                    # petites routes (SMALL_MODEL)
+            cm = dict(body.get("custom_model") or {})
+            cm["priority"] = list(cm.get("priority") or []) + SMALL_MODEL_PRIORITY
+            body = {**body, "custom_model": cm, "ch.disable": True}
         key = json.dumps(body, sort_keys=True)
         self.calls += 1
         if GH_MEMO and key in self._memo:
@@ -3455,6 +3550,28 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
     loop.small_roads = small_m / total                       # part sur petites routes goudronnées (SMALL_ROADS)
     loop.gh_details = det                                    # détails GraphHopper, pour recoudre un morceau (CLEAN_PICKS)
+    if water_hug() and LANDSCAPE is not None:              # au plus près de l'eau (WATER_HUG)
+        import numpy as np
+        import shapely
+        xy = sample_points(coords, cum, 100.0)
+        wpts = shapely.points(np.array(xy))
+        close = np.zeros(len(xy), dtype=bool)
+        for key_ in ("sea", "river", "water"):
+            tr_ = LANDSCAPE.trees.get(key_)
+            if tr_ is not None:
+                close[np.unique(tr_.query(wpts, predicate="dwithin", distance=WATER_HUG_DEG)[0])] = True
+        loop.water_km = 0.1 * float(close.sum())
+        if repeated > 0:                                     # aller-retour le long de l'eau : accepté comme sur piste
+            rep_water = sum(m for i, m in enumerate(rep_m) if rc_rep[i] != "c" and m > 0
+                            and int(cum[i] // 100) < len(close) and close[int(cum[i] // 100)])
+            loop.repeat_cycle_share = (rep_cycle + rep_water) / repeated
+    if towns_pen() and loop.scenery and (loop.scenery.get("landcover") or {}).get("citymask") is not None:
+        cm_ = loop.scenery["landcover"]["citymask"]          # bâti dense, tous les 100 m (VILLES : TOWNS_PEN)
+        n_ = len(cm_)
+        lo_, hi_ = int(TOWNS_PEN_EDGE * n_), int((1.0 - TOWNS_PEN_EDGE) * n_)
+        loop.towns_km = 0.1 * sum(1 for k in range(lo_, hi_) if cm_[k])
+    if loop_shape():                                         # vraie boucle, claire (LOOP_SHAPE)
+        loop.ends_cross, loop.turns_km = shape_measures(coords, cum)
     loop.rep_plain = 0.0                                     # répétition sur routes ordinaires (REPEAT_PLAIN)
     if repeat_plain():
         lc_ = ""
@@ -3550,6 +3667,15 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         total -= APPENDIX_PENALTY
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
+    if water_hug():                                       # au plus près de la mer, des rivières, des lacs (WATER_HUG)
+        total += min(WATER_HUG_MAX, WATER_HUG_PER_KM * getattr(l, "water_km", 0.0))
+    if towns_pen():                                       # traversées de villes au milieu de la boucle (TOWNS_PEN)
+        total -= min(TOWNS_PEN_MAX, TOWNS_PEN_PER_KM * getattr(l, "towns_km", 0.0))
+    if loop_shape():                                      # vraie boucle, claire (LOOP_SHAPE)
+        if getattr(l, "ends_cross", False):
+            total -= LOOP_SHAPE_CROSS
+        total -= min(LOOP_SHAPE_TURNS_MAX, LOOP_SHAPE_TURNS_PER * max(0.0, getattr(l, "turns_km", 0.0)
+                                                                        - LOOP_SHAPE_TURNS_FREE))
     if small_roads():                                     # petites routes goudronnées hors de la ville (SMALL_ROADS)
         total += SMALL_ROADS_W * getattr(l, "small_roads", 0.0)
     if defect_strict():                                    # défauts restants presque éliminatoires (DEFECT_STRICT)
@@ -4460,7 +4586,10 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         if part > cap * whole:
             return None
     pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]]))
-    if POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0]):
+    if (POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
+            or dest_heritage() and len(POIS["patrimoine"][0].query(
+                shapely.points(np.array([[coords[t if t is not None else b][0], coords[t if t is not None else b][1]]])),
+                predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])):
         return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
     if unp is not None:                                      # jamais sur la terre ou le gravier pour revenir sur ses pas
         dirt = sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
