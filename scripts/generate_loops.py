@@ -1453,10 +1453,14 @@ TARGET_MAX_SHARE = 0.4           # lieu au plus à 40 % de la longueur de la bou
 #     Andreu 2 h) et si la boucle tourne plus que la moyenne (à sortie égale, 8 choix sur 12 pour la moins tournante).
 #     (4, détours restants) : le nettoyage et DETOUR_DEST / DEFECT_STRICT. False : comme avant ; hors de l'empreinte.
 SMALL_MODEL = False
+# Ordre de Florent (24/10/2026) : 1 petite route dans la nature, 2 grosse route dans la nature, 3 route en ville.
+# Profil « calm » : ville 0,45, grande route 0,35 (une grande route de montagne passait sous une rue de ville) ; avec ce
+# modèle : petite route hors ville 1,5, grande route hors ville 0,35 x 1,6 = 0,56, rue de ville 0,45. Profil « sport »
+# (ville 0,5, grande route 0,6) : 1,5 / 0,96 / 0,5. Grande route en ville inchangée (la moins bien placée).
 SMALL_MODEL_PRIORITY = [
     {"if": "urban_density == RURAL && (road_class == UNCLASSIFIED || road_class == TERTIARY || "
            "(road_class == TRACK && surface == ASPHALT))", "multiply_by": "1.5"},
-    {"if": "road_class == PRIMARY || road_class == SECONDARY || road_class == TRUNK", "multiply_by": "0.7"},
+    {"else_if": "urban_density == RURAL && road_class == PRIMARY", "multiply_by": "1.6"},
 ]
 WATER_HUG = False
 WATER_HUG_DEG = 0.0006          # ~50 m de la mer, d'une rivière ou d'un lac
