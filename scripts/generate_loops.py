@@ -821,6 +821,18 @@ def smooth_window(coords, a: int, b: int) -> bool:
     return zones < 3
 
 
+# Les 43 jugements de Florent (revue et comparaison à l'aveugle, 21-22/10/2026). (1) Entre deux versions d'une même sortie,
+# il choisit 11 fois sur 12 celle qui repasse le moins ; la note n'en tenait presque pas compte (25 % répétés : 4,5
+# points). FLOW_V2 : répétition pesée FLOW_V2_FACTOR fois au lieu de FLOW_OVERLAP_FACTOR. (2) Florent : « l'attractivité
+# des petites routes de campagne / forêt tant qu'elles sont goudronnées ». SMALL_ROADS : bonus SMALL_ROADS_W par part
+# du parcours sur de petites routes goudronnées (classes SMALL_ROADS_CLASSES) hors de la ville. False : comme avant.
+FLOW_V2 = False
+FLOW_V2_FACTOR = 3.0
+SMALL_ROADS = False
+SMALL_ROADS_W = 0.10
+SMALL_ROADS_CLASSES = ("unclassified", "tertiary", "track", "living_street")
+
+
 def flow_v2() -> bool:
     """Répétition pesée davantage (FLOW_V2), réglable par fil d'exécution."""
     return bool(getattr(_TL, "flow_v2", FLOW_V2))
