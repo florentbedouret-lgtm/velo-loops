@@ -106,6 +106,17 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
 ### État au 04/10/2026
 Générateur **v15** en cours de calcul complet (série `full` lancée le 03/10 vers 22 h, fin estimée lundi 05/10 après-midi ; 387 départs sur 863 en v15 le 04/10 à 15 h, les autres en v13 / v14). Interface **UX v3** en ligne avec les retours de Florent. Claude suit et lance lui-même les runs avec GitHub CLI (`gh`) : diagnostics librement, runs qui publient sur accord de Florent (D40).
 
+### État au 24/10/2026
+**Deux comparaisons à l'aveugle** (A / B sur la carte, `revue-locale/`, hors dépôt) : 20 puis 24 cas jugés par Florent.
+Retenues pour la v19 : **le paquet** (nettoyage des boucles publiées, allers-retours sans but, détours sans excuse,
+défauts presque éliminatoires : 9 mieux / 3 moins bien) et **la répétition pesée 3 fois plus** (7 / 1) ; sur les 6
+boucles hors revue, la nouvelle version gagne 6 fois. Écartées : répétition sur routes ordinaires seule, voies rapides
+v2, petites routes en bonus, buts v20 1er essai (aucune boucle valide). **Les six demandes de Florent** (petites routes
+dans le profil selon son ordre, longer l'eau au plus près, demi-tour au patrimoine, éviter les villes, vraie boucle
+claire, détours restants) et **les lacets** (plus comptés comme détours) sont codés, éteints, en mesure (rx1 à rx4).
+Prochaine étape : comparaison sur la carte des boucles qui changent, puis activation dans l'empreinte v19 et relance du
+calcul (accord de Florent).
+
 ### État au 21/10/2026
 **Critère de qualité fixé par Florent (D81)** : la boucle proposée est celle que ferait un cycliste omniscient, qui
 connaît toutes les routes de la région, de ce niveau, partant de ce point pour cette durée. **v19 en calcul** avec 25
@@ -336,6 +347,21 @@ répétition par couloir (O-47). Soirée du 08/10 : retours de Florent sur des b
 - [ ] **O-88 — Boucles naturelles (v20)** : note de « naturel » étalonnée sur les verdicts de Florent (répétition,
   allers-retours, détours, virages, routes suivies longtemps) ; boucles construites autour d'un but à la bonne distance
   (col, belvédère, côte, village) avec aller et retour par des routes différentes, le tirage au hasard en complément.
+- [x] **O-89 — Comparaisons à l'aveugle** (22 et 24/10) : page locale (carte OpenFreeMap, MapLibre du dépôt) qui montre
+  deux versions de la même sortie dans un ordre tiré au hasard ; réponses copiées dans la conversation. Méthode retenue
+  pour juger chaque règle : la moyenne des notes ne veut plus rien dire dès qu'on ajoute une pénalité.
+- [ ] **O-90 — Paquet v19 + répétition ×3** (`CLEAN_PICKS`, `FORCED_DETOURS`, `CITY_BACKTRACK`, `NESTED_BACKTRACK`,
+  `BACKTRACK_DEST`, `SPUR_TURN_WINDOW`, `DETOUR_DEST`, `DEFECT_STRICT`, `HAIRPINS`, `FLOW_V2`) : retenus par les
+  comparaisons ; mesure d'ensemble rx1 / rx2 ; options secondaires vraiment perdues 88 sur 726 avant le correctif des
+  lacets (Florent : 9 sur 12 ne lui manqueraient pas ; les 3 regrettées, à la campagne, perdues par des lacets).
+- [ ] **O-91 — Les six demandes de Florent** (24/10) : `SMALL_MODEL` (petite route dans la nature > grosse route dans la
+  nature > route en ville, dans le profil de GraphHopper), `WATER_HUG` (à ~50 m de l'eau, aller-retour le long de l'eau
+  accepté), `DEST_HERITAGE` (monastères, châteaux, biens patrimoniaux comme destinations ; Monistrol : Sant Benet,
+  colonia Puig), `TOWNS_PEN`, `LOOP_SHAPE` ; mesure rx3 / rx4.
+- [ ] **O-92 — Villages « particulièrement jolis »** comme buts (Florent : pas un village quelconque) : critère à trouver
+  (patrimoine protégé, centre historique OSM, article Wikipédia fourni), à vérifier sur des villages qu'il connaît.
+- [ ] **O-93 — Bord de mer en Tranquille** (Ciutat Vella 45 min : aucun aller-retour le long de la mer parmi 30
+  candidats ; la promenade de la Barceloneta n'étant pas une piste, l'aller-retour était rejeté) : `WATER_HUG` en mesure.
 - **Proposition de contenu v19 : `docs/v19_proposition.md`** (effet mesuré, avis, étapes d'activation ; empreinte `V19_PARAMS` comptée seulement si une règle v19 est allumée) — à trancher par Florent après la v18.
 - **Outils de diagnostic corrigés le 09/10** : les tests avant / après tournaient sans la retouche (relief, terre, couloir, marge : à garder en tête) ; comparaisons de référence avec le sens du trajet (moins de demi-tours parasites) ; rapport des lieux : lieux écartés signalés ; tests automatiques avec les mêmes dépendances que le calcul (30 tests). Filet de la marge (`ordered_pool`) : une durée vidée est recalculée en plages strictes ; test v4 en cours (retouche comprise).
 - **Proposition de contenu v17 : `docs/v17_proposition.md`** (effet mesuré, avis, étapes d'activation) — à trancher par Florent.
@@ -403,3 +429,4 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | 15/10/2026 (après-midi et soir) | Analyste qualité, dev pipeline, UX | Revue de cohérence complète et comparaison v16 (O-70) ; causes racines codées éteintes et en mesure : tranches sans trou (O-71), allers-retours à pied (O-72), repli et relief (O-73) ; mise à jour automatique de l'app et coches (O-74) ; chaîne v18 relancée | Résultats des mesures O-71 à O-73 ; O-75 ; fin de la v18 puis activation de la v19 |
 | 16/10/2026 | Analyste qualité, dev pipeline, UX | v18 terminée et revue complète ; mesures et choix de Florent : départs voisins greffés et tronçon par tronçon à plusieurs boucles, tranches sans trou, longs allers-retours annoncés, repli et relief (25 m/km), allers-retours par des escaliers (D74 à D78, 20 règles v19, apply_v19 testé) ; bloc « Autres façons de rouler » refait et en ligne (O-76) ; boucles accrochées (O-77) | Mesure combinée v19, boucles accrochées 2e version, durées absentes (O-78), activation de la v19 |
 | 17-21/10/2026 | Analyste qualité, dev pipeline, UX | v19 relancée avec 4 règles de plus (O-80) ; relecture de l'Eixample : nettoyage des boucles publiées en 4 essais (O-82) ; chaîne coupée et corrigée (O-84) ; critère du cycliste omniscient (D81) ; revue à l'aveugle de 23 boucles (O-85), D80 remplacée (D82), demi-tours par un rond-point (O-87) | Bilan des mesures c8 / c9 / c0 ; décision de relancer la v19 avec elles ; note de « naturel » (O-88) |
+| 22-24/10/2026 | Analyste qualité, dev pipeline | Note de « naturel » : les 43 jugements montrent la répétition (11 paires sur 12) et les petites routes ; deux comparaisons à l'aveugle (O-89) : paquet et répétition ×3 retenus (O-90) ; proposition v20 et 1er essai des buts ; six demandes de Florent codées (O-91), lacets (HAIRPINS) | Comparaison des mesures rx1 à rx4 ; activation dans la v19 et relance (accord de Florent) |
