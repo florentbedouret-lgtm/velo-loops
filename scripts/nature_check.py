@@ -728,7 +728,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         del g._TL.keep_previous
     elif variant in ("g_clean", "g_ar", "g_rep", "g_mw", "g_final", "g_flow", "g_small", "g_goal", "g_v191", "g_req"):  # mesures séparées par famille (22/10/2026)
         v191 = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
-                "detour_dest", "defect_strict", "flow_v2")
+                "detour_dest", "defect_strict", "flow_v2", "hairpins")
         flags = {"g_v191": v191,
                  "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape"),
                  "g_goal": ("goal_return",), "g_flow": ("flow_v2",), "g_small": ("small_roads",), "g_final": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",

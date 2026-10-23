@@ -782,16 +782,43 @@ DETOUR_DEST = False
 DEFECT_STRICT = False
 DEFECT_STRICT_PEN = 0.08
 DEFECT_STRICT_MAX = 0.20
-# Les 43 jugements de Florent (revue et comparaison à l'aveugle, 21-22/10/2026). (1) Entre deux versions d'une même sortie,
-# il choisit 11 fois sur 12 celle qui repasse le moins ; la note n'en tenait presque pas compte (25 % répétés : 4,5
-# points). FLOW_V2 : répétition pesée FLOW_V2_FACTOR fois au lieu de FLOW_OVERLAP_FACTOR. (2) Florent : « l'attractivité
-# des petites routes de campagne / forêt tant qu'elles sont goudronnées ». SMALL_ROADS : bonus SMALL_ROADS_W par part
-# du parcours sur de petites routes goudronnées (classes SMALL_ROADS_CLASSES) hors de la ville. False : comme avant.
-FLOW_V2 = False
-FLOW_V2_FACTOR = 3.0
-SMALL_ROADS = False
-SMALL_ROADS_W = 0.10
-SMALL_ROADS_CLASSES = ("unclassified", "tertiary", "track", "living_street")
+# HAIRPINS (24/10/2026, options regrettées par Florent : Folgueroles 6 h, Monistrol 2 h) : leurs « détours » étaient des
+# lacets (épingle du Pont del Llop sur la C-154, BP-1121), rendus presque éliminatoires par DEFECT_STRICT. Un détour en
+# pâté de maisons tourne à angle vif à 3 carrefours au moins ; un lacet ne fait qu'un virage (2 pour un double lacet) :
+# un détour à moins de 3 virages vifs (tracé complet de GraphHopper) n'est plus compté. False : comme avant.
+HAIRPINS = False
+HAIRPIN_STEP_M = 15.0
+HAIRPIN_SHARP_DEG = 60.0
+
+
+def hairpins() -> bool:
+    """Lacets non comptés comme détours (HAIRPINS), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "hairpins", HAIRPINS))
+
+
+def smooth_window(coords, a: int, b: int) -> bool:
+    """Le tracé coords[a..b] est-il un lacet plutôt qu'un tour de pâté de maisons ? Virages vifs (au moins
+    HAIRPIN_SHARP_DEG entre le cap des HAIRPIN_STEP_M avant et celui des HAIRPIN_STEP_M après un point), regroupés à
+    moins de 40 m : un pâté de maisons en a au moins 3 (les carrefours), un lacet 1, un double lacet 2."""
+    cum = [0.0]
+    for p, q in zip(coords[a:b], coords[a + 1:b + 1]):
+        cum.append(cum[-1] + haversine(p[0], p[1], q[0], q[1]))
+    seg = coords[a:b + 1]
+    zones, last = 0, -1e9
+    for i in range(1, len(seg) - 1):
+        j = i - 1
+        while j > 0 and cum[i] - cum[j] < HAIRPIN_STEP_M:
+            j -= 1
+        k = i + 1
+        while k < len(seg) - 1 and cum[k] - cum[i] < HAIRPIN_STEP_M:
+            k += 1
+        turn = abs((bearing(seg[i][0], seg[i][1], seg[k][0], seg[k][1])
+                    - bearing(seg[j][0], seg[j][1], seg[i][0], seg[i][1]) + 180) % 360 - 180)
+        if turn >= HAIRPIN_SHARP_DEG:
+            if cum[i] - last > 40.0:
+                zones += 1
+            last = cum[i]
+    return zones < 3
 
 
 def flow_v2() -> bool:
@@ -3528,6 +3555,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])]
                             if backtrack_dest() else [])     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
+    if loop.detours and hairpins():                      # lacets : la route elle-même (HAIRPINS)
+        loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])]
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours
                         if (backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) or "")

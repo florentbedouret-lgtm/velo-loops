@@ -41,7 +41,7 @@ def test_reglages_v17():
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
-    for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE"):
+    for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -715,4 +715,16 @@ def test_shape_measures():
     assert not cross and turns < 0.5
     eight = path([(0, 0), (2000, 0), (2000, 4000), (-2000, 4000), (-2000, -1000), (1000, -1000), (1000, 500), (0, 0)])
     assert g.shape_measures(eight, cum(eight))[0]
+
+
+def test_smooth_window_hairpin_vs_block():
+    """Lacet (courbe continue) contre détour en pâté de maisons (angles droits) : HAIRPINS."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.9))
+    hair = [[2.1 + 60 * math.cos(math.pi * k / 40) / kx, 41.9 + 60 * math.sin(math.pi * k / 40) / 110540.0] for k in range(41)]
+    block = []
+    for (x0, y0), (x1, y1) in zip([(0, 0), (0, 120), (120, 120), (120, 0)], [(0, 120), (120, 120), (120, 0), (100, 0)]):
+        block += [[2.1 + (x0 + (x1 - x0) * k / 10) / kx, 41.9 + (y0 + (y1 - y0) * k / 10) / 110540.0] for k in range(10)]
+    assert g.smooth_window(hair, 0, len(hair) - 1)
+    assert not g.smooth_window(block, 0, len(block) - 1)
 
