@@ -9,6 +9,9 @@ import json
 import math
 import subprocess
 import sys
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 EXAMPLES = ["Rupit", "Mura", "Cardona", "Caldes de Montbui", "Sitges", "Sant Pol de Mar", "Garraf",
@@ -40,6 +43,24 @@ def export(pbf: Path, wd: Path, name: str, filters: list) -> list:
             c = c[0]
         feats.append((c[0], c[1], f.get("properties") or {}))
     return feats
+
+
+def pageviews(tag: str):
+    """Lectures sur 12 mois de l'article Wikipédia du lieu (tag OSM « ca:Rupit i Pruit »), API publique de Wikimedia ;
+    None si indisponible."""
+    if not tag or ":" not in tag:
+        return None
+    lang, title = tag.split(":", 1)
+    url = ("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/%s.wikipedia/all-access/user/%s/monthly/"
+           "20250901/20260831" % (lang, urllib.parse.quote(title.replace(" ", "_"), safe="")))
+    req = urllib.request.Request(url, headers={"User-Agent": "velo-loops diagnostic (github.com/florentbedouret-lgtm)"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return sum(i.get("views", 0) for i in json.load(r).get("items", []))
+    except Exception:  # noqa: BLE001 : article absent ou API indisponible
+        return None
+    finally:
+        time.sleep(0.05)
 
 
 def main():
@@ -101,6 +122,7 @@ def main():
         low = row["name"].lower()
         row["exemple"] = any(e.lower() == low or low.startswith(e.lower() + " ") or low.startswith(e.lower() + ",")
                              for e in EXAMPLES)
+        row["lectures_wikipedia"] = pageviews(p0.get("wikipedia"))
         rows.append(row)
     json.dump({"examples": EXAMPLES, "places": rows}, sys.stdout, ensure_ascii=False)
 
