@@ -46,7 +46,9 @@ def main():
     pbf, wd = Path(sys.argv[1]), Path(sys.argv[2])
     places = [p for p in export(pbf, wd, "vil_places", ["n/place=village,town,hamlet"]) if p[2].get("name")]
     feats = export(pbf, wd, "vil_feats", ["nwr/historic", "nwr/heritage", "nwr/tourism=attraction,museum",
-                                          "nwr/amenity=place_of_worship"])
+                                          "nwr/amenity=place_of_worship",
+                                          "nwr/tourism=hotel,guest_house,hostel,apartment,chalet,information,viewpoint",
+                                          "nwr/amenity=restaurant,cafe,bar"])
     nature = export(pbf, wd, "vil_nature", ["nwr/landuse=forest", "nwr/natural=wood", "nwr/natural=water",
                                             "w/waterway=river", "n/natural=peak", "nwr/natural=cliff",
                                             "nwr/leisure=nature_reserve", "nwr/boundary=protected_area"])
@@ -62,7 +64,7 @@ def main():
         kx = 111320.0 * math.cos(math.radians(y0))
         row = {"name": p0["name"], "place": p0.get("place"), "lon": round(x0, 5), "lat": round(y0, 5),
                "population": p0.get("population"), "wikidata": bool(p0.get("wikidata")),
-               "wikipedia": bool(p0.get("wikipedia"))}
+               "wikipedia": p0.get("wikipedia"), "wikidata_id": p0.get("wikidata")}
         near = []
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
@@ -76,6 +78,10 @@ def main():
             row[f"patrimoine_{r}"] = sum(1 for p in sel if p.get("heritage"))
             row[f"patrimoine_national_{r}"] = sum(1 for p in sel if str(p.get("heritage")) in ("1", "2"))
             row[f"curiosites_{r}"] = sum(1 for p in sel if p.get("tourism") in ("attraction", "museum"))
+            row[f"hebergements_{r}"] = sum(1 for p in sel if p.get("tourism") in ("hotel", "guest_house", "hostel",
+                                                                                     "apartment", "chalet"))
+            row[f"accueil_{r}"] = sum(1 for p in sel if p.get("tourism") in ("information", "viewpoint"))
+            row[f"restauration_{r}"] = sum(1 for p in sel if p.get("amenity") in ("restaurant", "cafe", "bar"))
             row[f"avec_wikidata_{r}"] = sum(1 for p in sel if p.get("wikidata") and (p.get("historic") or p.get("heritage")))
         nn = []                                               # cadre : nature à moins de 1 km (premier point de l'objet)
         for dx in (-1, 0, 1):
