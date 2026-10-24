@@ -10,6 +10,7 @@ import math
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -45,22 +46,44 @@ def export(pbf: Path, wd: Path, name: str, filters: list) -> list:
     return feats
 
 
-def pageviews(tag: str):
-    """Lectures sur 12 mois de l'article Wikipédia du lieu (tag OSM « ca:Rupit i Pruit »), API publique de Wikimedia ;
-    None si indisponible."""
-    if not tag or ":" not in tag:
+UA = {"User-Agent": "velo-loops diagnostic (github.com/florentbedouret-lgtm/velo-loops)"}
+
+
+def _get(url: str):
+    """JSON d'une API publique de Wikimedia, avec un rythme modéré et deux nouvelles tentatives (429, 5xx)."""
+    for k in range(3):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                time.sleep(0.15)
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            time.sleep(2.0 * (k + 1))
+        except Exception:  # noqa: BLE001 : réseau
+            time.sleep(2.0 * (k + 1))
+    return None
+
+
+def ca_titles(qids: list) -> dict:
+    """Titre de l'article catalan et nombre de langues (sitelinks) de chaque identifiant Wikidata."""
+    out = {}
+    for i in range(0, len(qids), 50):
+        j = _get("https://www.wikidata.org/w/api.php?action=wbgetentities&props=sitelinks&format=json&ids="
+                 + "|".join(qids[i:i + 50])) or {}
+        for q, e in (j.get("entities") or {}).items():
+            sl = e.get("sitelinks") or {}
+            out[q] = ((sl.get("cawiki") or {}).get("title"), len(sl))
+    return out
+
+
+def pageviews(lang: str, title: str):
+    """Lectures sur 12 mois d'un article Wikipédia (API publique de Wikimedia) ; None si indisponible."""
+    if not title:
         return None
-    lang, title = tag.split(":", 1)
-    url = ("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/%s.wikipedia/all-access/user/%s/monthly/"
-           "20250901/20260831" % (lang, urllib.parse.quote(title.replace(" ", "_"), safe="")))
-    req = urllib.request.Request(url, headers={"User-Agent": "velo-loops diagnostic (github.com/florentbedouret-lgtm)"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return sum(i.get("views", 0) for i in json.load(r).get("items", []))
-    except Exception:  # noqa: BLE001 : article absent ou API indisponible
-        return None
-    finally:
-        time.sleep(0.05)
+    j = _get("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/%s.wikipedia/all-access/user/%s/monthly/"
+             "20250901/20260831" % (lang, urllib.parse.quote(title.replace(" ", "_"), safe="")))
+    return None if j is None else sum(i.get("views", 0) for i in j.get("items", []))
 
 
 def main():
@@ -122,8 +145,14 @@ def main():
         low = row["name"].lower()
         row["exemple"] = any(e.lower() == low or low.startswith(e.lower() + " ") or low.startswith(e.lower() + ",")
                              for e in EXAMPLES)
-        row["lectures_wikipedia"] = pageviews(p0.get("wikipedia"))
         rows.append(row)
+    titles = ca_titles(sorted({r["wikidata_id"] for r in rows if r.get("wikidata_id")}))
+    for r in rows:
+        t, n = titles.get(r.get("wikidata_id") or "", (None, 0))
+        if not t and r.get("wikipedia") and str(r["wikipedia"]).startswith("ca:"):
+            t = str(r["wikipedia"])[3:]
+        r["langues_wikipedia"] = n
+        r["lectures_wikipedia"] = pageviews("ca", t)
     json.dump({"examples": EXAMPLES, "places": rows}, sys.stdout, ensure_ascii=False)
 
 
