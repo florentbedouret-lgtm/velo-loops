@@ -42,31 +42,29 @@ def main():
             ways.append((p, c, length))
     idx = json.loads(urllib.request.urlopen(site + "/index.json", timeout=60).read())
     cell = 0.002
-    found = {}
+    grid: dict = {}                                          # tous les points de toutes les boucles publiées
     for e in idx["starts"]:
         try:
             js = json.loads(urllib.request.urlopen(f"{site}/starts/{e['id']}.json", timeout=60).read())
         except Exception:  # noqa: BLE001
             continue
-        grid: dict = {}
         for o in js["options"]:
             for c in o["coords"]:
                 grid.setdefault((int(c[0] / cell), int(c[1] / cell)), []).append((c[0], c[1], o["id"]))
-        if not grid:
+    print(f"{len(ways)} pistes grade2, {sum(len(v) for v in grid.values())} points de boucles", file=sys.stderr)
+    found = {}
+    for p, c, length in ways:
+        if not any((int(v[0] / cell), int(v[1] / cell)) in grid for v in c):
             continue
-        for p, c, length in ways:
-            hits = []
-            for v in c:
-                gx, gy = int(v[0] / cell), int(v[1] / cell)
-                hits.append([q for dx in (-1, 0, 1) for dy in (-1, 0, 1)
-                             for q in grid.get((gx + dx, gy + dy), []) if hav(v, q) < 40])
-            if sum(1 for h in hits if h) >= max(3, 0.6 * len(c)):
-                key = p.get("@id") or "%s" % (c[len(c) // 2],)
-                ids = sorted({q[2] for h in hits for q in h})
-                rec = found.setdefault(str(key), {"name": p.get("name"), "surface": p.get("surface"),
-                                                 "long_m": round(length), "lat": round(c[len(c) // 2][1], 5),
-                                                 "lon": round(c[len(c) // 2][0], 5), "boucles": []})
-                rec["boucles"] += ids
+        hits = []
+        for v in c:
+            gx, gy = int(v[0] / cell), int(v[1] / cell)
+            hits.append([q for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                         for q in grid.get((gx + dx, gy + dy), []) if hav(v, q) < 40])
+        if sum(1 for h in hits if h) >= max(3, 0.6 * len(c)):
+            ids = sorted({q[2] for h in hits for q in h})
+            found["%.5f,%.5f" % (c[len(c) // 2][1], c[len(c) // 2][0])] = {
+                "name": p.get("name"), "surface": p.get("surface"), "long_m": round(length), "boucles": ids}
     json.dump(found, sys.stdout, ensure_ascii=False)
 
 
