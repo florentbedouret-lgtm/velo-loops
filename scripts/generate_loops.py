@@ -864,6 +864,7 @@ def spot_key(p) -> tuple:
 
 
 WATER_ALONG_SHARE = 0.6          # aller-retour « le long de l'eau » : au moins 60 % à moins de WATER_HUG_DEG de l'eau
+WATER_ALONG_SEA_DEG = 0.0025     # ~200 m de la mer : la piste du front de mer passe derrière la plage (mesure du 25/10)
 
 
 def along_water(coords, a: int, b: int) -> bool:
@@ -877,10 +878,10 @@ def along_water(coords, a: int, b: int) -> bool:
     seg = coords[a:b + 1]
     pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 40)]]))
     close = np.zeros(len(pts), dtype=bool)
-    for key_ in ("sea", "river", "water"):
+    for key_, deg_ in (("sea", WATER_ALONG_SEA_DEG), ("river", WATER_HUG_DEG), ("water", WATER_HUG_DEG)):
         tr_ = LANDSCAPE.trees.get(key_)
         if tr_ is not None:
-            close[np.unique(tr_.query(pts, predicate="dwithin", distance=WATER_HUG_DEG)[0])] = True
+            close[np.unique(tr_.query(pts, predicate="dwithin", distance=deg_)[0])] = True
     return float(close.mean()) >= WATER_ALONG_SHARE
 
 
@@ -3484,7 +3485,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     if backtrack_dest() and useful:                      # « piste » ou « montée » : seulement vers une destination
         keep = []
         for w in useful:
-            if w[3] in ("piste", "montée") and not destination_tip(coords[w[2]]):
+            if (w[3] in ("piste", "montée") and not destination_tip(coords[w[2]])
+                    and not along_water(coords, w[0], w[1])):      # piste du front de mer : gardée
                 demoted.append((w, "aimless"))
             else:
                 keep.append(w)
