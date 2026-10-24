@@ -1538,6 +1538,38 @@ LOOP_SHAPE_END_M = 2000.0
 LOOP_SHAPE_TURNS_FREE = 1.5     # virages marqués (60° et plus, tous les 50 m) par km au-delà desquels on pénalise
 LOOP_SHAPE_TURNS_PER = 0.01
 LOOP_SHAPE_TURNS_MAX = 0.05
+# VILLAGE_PLUS (Florent, 24/10/2026, 92 villages retenus sur une liste proposée par les données ouvertes : lectures de la
+# page Wikipédia et densité de restaurants et cafés) : un joli village n'est pas un but (« passer dans un village à vélo
+# est très rapide »), mais y passer est un plus : par son centre ancien (à moins de VILLAGE_CORE_M du point OSM du
+# village), ou le long de la mer pour un village côtier (centre à moins de VILLAGE_COAST_DEG de la mer).
+# scripts/pretty_villages.json. False : comme avant.
+VILLAGE_PLUS = False
+VILLAGE_CORE_M = 150.0
+VILLAGE_COAST_DEG = 0.012       # ~1 km
+VILLAGE_SEA_M = 1000.0          # village côtier : passage le long de la mer à moins de 1 km de son centre
+VILLAGE_PER = 0.02
+VILLAGE_MAX = 0.06
+_PRETTY: list = []
+
+
+def village_plus() -> bool:
+    return _flag("village_plus", VILLAGE_PLUS)
+
+
+def pretty_villages() -> list:
+    """Villages jolis de Florent [(lon, lat, nom, côtier)], chargés une fois."""
+    if not _PRETTY:
+        try:
+            data = json.loads((Path(__file__).parent / "pretty_villages.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = []
+        sea = LANDSCAPE.trees.get("sea") if LANDSCAPE is not None else None
+        import shapely
+        for v in data:
+            coast = bool(sea is not None and len(sea.query(shapely.Point(v["lon"], v["lat"]), predicate="dwithin",
+                                                           distance=VILLAGE_COAST_DEG)))
+            _PRETTY.append((v["lon"], v["lat"], v["name"], coast))
+    return _PRETTY
 
 
 def _flag(name, default):
@@ -3639,6 +3671,24 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         n_ = len(cm_)
         lo_, hi_ = int(TOWNS_PEN_EDGE * n_), int((1.0 - TOWNS_PEN_EDGE) * n_)
         loop.towns_km = 0.1 * sum(1 for k in range(lo_, hi_) if cm_[k])
+    if village_plus():                                       # jolis villages traversés (VILLAGE_PLUS)
+        import numpy as np
+        import shapely
+        sea_ = LANDSCAPE.trees.get("sea") if LANDSCAPE is not None else None
+        xy_ = sample_points(coords, cum, 25.0)
+        loop.villages = []
+        for vx, vy, vname, coast in pretty_villages():
+            d_ = [haversine(vx, vy, x, y) for x, y in xy_[::8]]
+            if not d_ or min(d_) > VILLAGE_SEA_M + 500.0:
+                continue                                     # loin de la boucle
+            if coast and sea_ is not None:
+                near_ = [(x, y) for x, y in xy_ if haversine(vx, vy, x, y) <= VILLAGE_SEA_M]
+                ok_ = bool(near_) and len(sea_.query(shapely.points(np.array(near_)), predicate="dwithin",
+                                                     distance=WATER_HUG_DEG)[0]) > 0
+            else:
+                ok_ = min(haversine(vx, vy, x, y) for x, y in xy_) <= VILLAGE_CORE_M
+            if ok_:
+                loop.villages.append(vname)
     if loop_shape():                                         # vraie boucle, claire (LOOP_SHAPE)
         loop.ends_cross, loop.turns_km = shape_measures(coords, cum)
     loop.rep_plain = 0.0                                     # répétition sur routes ordinaires (REPEAT_PLAIN)
@@ -3741,6 +3791,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         total -= APPENDIX_PENALTY
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
+    if village_plus():                                    # jolis villages traversés (VILLAGE_PLUS)
+        total += min(VILLAGE_MAX, VILLAGE_PER * len(getattr(l, "villages", None) or []))
     if water_hug():                                       # au plus près de la mer, des rivières, des lacs (WATER_HUG)
         total += min(WATER_HUG_MAX, WATER_HUG_PER_KM * getattr(l, "water_km", 0.0))
     if towns_pen():                                       # traversées de villes au milieu de la boucle (TOWNS_PEN)

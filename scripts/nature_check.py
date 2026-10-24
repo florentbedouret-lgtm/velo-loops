@@ -730,7 +730,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         v191 = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
                 "detour_dest", "defect_strict", "flow_v2", "hairpins")
         flags = {"g_v191": v191,
-                 "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape"),
+                 "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape", "village_plus"),
                  "g_goal": ("goal_return",), "g_flow": ("flow_v2",), "g_small": ("small_roads",), "g_final": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
                              "spur_turn_window", "detour_dest", "defect_strict"),
                  "g_clean": ("clean_picks", "forced_detours"),

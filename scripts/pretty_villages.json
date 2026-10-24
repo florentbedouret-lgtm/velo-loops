@@ -1,0 +1,462 @@
+[
+{
+"name": "Montseny",
+"lon": 2.39521,
+"lat": 41.75937
+},
+{
+"name": "Beget",
+"lon": 2.48015,
+"lat": 42.32088
+},
+{
+"name": "Tavertet",
+"lon": 2.41825,
+"lat": 41.99555
+},
+{
+"name": "Mura",
+"lon": 1.97647,
+"lat": 41.69982
+},
+{
+"name": "Gósol",
+"lon": 1.66055,
+"lat": 42.23651
+},
+{
+"name": "Brunyola",
+"lon": 2.68395,
+"lat": 41.90491
+},
+{
+"name": "Riells",
+"lon": 2.51291,
+"lat": 41.77643
+},
+{
+"name": "Sant Feliu de Buixalleu",
+"lon": 2.58615,
+"lat": 41.7913
+},
+{
+"name": "Rupit",
+"lon": 2.46539,
+"lat": 42.02433
+},
+{
+"name": "Besalú",
+"lon": 2.69596,
+"lat": 42.19864
+},
+{
+"name": "Fornells de la Muntanya",
+"lon": 2.04758,
+"lat": 42.32436
+},
+{
+"name": "Rajadell",
+"lon": 1.70563,
+"lat": 41.72919
+},
+{
+"name": "Rubió",
+"lon": 1.57012,
+"lat": 41.64424
+},
+{
+"name": "Granera",
+"lon": 2.057,
+"lat": 41.72551
+},
+{
+"name": "Saldes",
+"lon": 1.73495,
+"lat": 42.22876
+},
+{
+"name": "Castellar de n'Hug",
+"lon": 2.01659,
+"lat": 42.2826
+},
+{
+"name": "Vidrà",
+"lon": 2.31068,
+"lat": 42.12282
+},
+{
+"name": "Marganell",
+"lon": 1.79002,
+"lat": 41.64067
+},
+{
+"name": "Cambrils",
+"lon": 1.38636,
+"lat": 42.1339
+},
+{
+"name": "Montfalcó Murallat",
+"lon": 1.33983,
+"lat": 41.68879
+},
+{
+"name": "Montgat",
+"lon": 2.27898,
+"lat": 41.46686
+},
+{
+"name": "les Llosses",
+"lon": 2.11667,
+"lat": 42.15063
+},
+{
+"name": "Sant Llorenç de Morunys",
+"lon": 1.58859,
+"lat": 42.13608
+},
+{
+"name": "Josa de Cadí",
+"lon": 1.6191,
+"lat": 42.25727
+},
+{
+"name": "Sant Romà de Sau",
+"lon": 2.40924,
+"lat": 41.96647
+},
+{
+"name": "Camprodon",
+"lon": 2.36493,
+"lat": 42.31279
+},
+{
+"name": "Argelaguer",
+"lon": 2.64149,
+"lat": 42.21452
+},
+{
+"name": "Ribes de Freser",
+"lon": 2.16782,
+"lat": 42.30573
+},
+{
+"name": "Querol",
+"lon": 1.39702,
+"lat": 41.42341
+},
+{
+"name": "Santes Creus",
+"lon": 1.3629,
+"lat": 41.34918
+},
+{
+"name": "Estana",
+"lon": 1.66205,
+"lat": 42.32043
+},
+{
+"name": "Queralbs",
+"lon": 2.16328,
+"lat": 42.34957
+},
+{
+"name": "Cercs",
+"lon": 1.86062,
+"lat": 42.1464
+},
+{
+"name": "Vic",
+"lon": 2.25459,
+"lat": 41.9302
+},
+{
+"name": "Santa Eulàlia de Ronçana",
+"lon": 2.22926,
+"lat": 41.6524
+},
+{
+"name": "Ogassa",
+"lon": 2.27778,
+"lat": 42.26563
+},
+{
+"name": "Gironella",
+"lon": 1.88253,
+"lat": 42.03376
+},
+{
+"name": "Sitges",
+"lon": 1.81141,
+"lat": 41.23536
+},
+{
+"name": "Santa Coloma de Queralt",
+"lon": 1.38842,
+"lat": 41.5321
+},
+{
+"name": "Vallfogona de Ripollès",
+"lon": 2.30362,
+"lat": 42.19631
+},
+{
+"name": "Talamanca",
+"lon": 1.97725,
+"lat": 41.73818
+},
+{
+"name": "Gallifa",
+"lon": 2.11643,
+"lat": 41.6937
+},
+{
+"name": "Tuixent",
+"lon": 1.56598,
+"lat": 42.23125
+},
+{
+"name": "Tavèrnoles",
+"lon": 2.3263,
+"lat": 41.95208
+},
+{
+"name": "Perafita",
+"lon": 2.10712,
+"lat": 42.04238
+},
+{
+"name": "Rocabruna",
+"lon": 2.45145,
+"lat": 42.33868
+},
+{
+"name": "Molló",
+"lon": 2.4044,
+"lat": 42.34854
+},
+{
+"name": "la Pobla de Lillet",
+"lon": 1.97493,
+"lat": 42.24374
+},
+{
+"name": "Espinelves",
+"lon": 2.41736,
+"lat": 41.86896
+},
+{
+"name": "Olot",
+"lon": 2.48902,
+"lat": 42.18222
+},
+{
+"name": "Gaià",
+"lon": 1.92553,
+"lat": 41.9161
+},
+{
+"name": "la Nou de Berguedà",
+"lon": 1.88504,
+"lat": 42.16665
+},
+{
+"name": "Beuda",
+"lon": 2.70974,
+"lat": 42.23726
+},
+{
+"name": "Collsuspina",
+"lon": 2.17435,
+"lat": 41.82607
+},
+{
+"name": "Albanyà",
+"lon": 2.7193,
+"lat": 42.30469
+},
+{
+"name": "Joanetes",
+"lon": 2.42364,
+"lat": 42.12154
+},
+{
+"name": "Ripoll",
+"lon": 2.19325,
+"lat": 42.19824
+},
+{
+"name": "l'Estany",
+"lon": 2.11335,
+"lat": 41.87017
+},
+{
+"name": "Sant Feliu de Pallerols",
+"lon": 2.5078,
+"lat": 42.07582
+},
+{
+"name": "Santa Maria de Besora",
+"lon": 2.25892,
+"lat": 42.12728
+},
+{
+"name": "Borredà",
+"lon": 1.99411,
+"lat": 42.13555
+},
+{
+"name": "Castellgalí",
+"lon": 1.8378,
+"lat": 41.67328
+},
+{
+"name": "Colònia Estabanell",
+"lon": 2.36,
+"lat": 42.29383
+},
+{
+"name": "Gombrèn",
+"lon": 2.0906,
+"lat": 42.24843
+},
+{
+"name": "Organyà",
+"lon": 1.32782,
+"lat": 42.21078
+},
+{
+"name": "el Vilar",
+"lon": 1.86189,
+"lat": 41.63336
+},
+{
+"name": "Pardines",
+"lon": 2.21399,
+"lat": 42.31273
+},
+{
+"name": "Montgrony",
+"lon": 2.08597,
+"lat": 42.26565
+},
+{
+"name": "el Brull",
+"lon": 2.30523,
+"lat": 41.81681
+},
+{
+"name": "Calella",
+"lon": 2.65761,
+"lat": 41.61329
+},
+{
+"name": "Coll de Nargó",
+"lon": 1.31613,
+"lat": 42.17391
+},
+{
+"name": "els Hostalets d'en Bas",
+"lon": 2.4501,
+"lat": 42.10212
+},
+{
+"name": "Copons",
+"lon": 1.51793,
+"lat": 41.63637
+},
+{
+"name": "Gurb",
+"lon": 2.2433,
+"lat": 41.94099
+},
+{
+"name": "Sant Sebastià de Montmajor",
+"lon": 2.11875,
+"lat": 41.66455
+},
+{
+"name": "Planoles",
+"lon": 2.10297,
+"lat": 42.31483
+},
+{
+"name": "Prats de Lluçanès",
+"lon": 2.02987,
+"lat": 42.00854
+},
+{
+"name": "la Llacuna",
+"lon": 1.53461,
+"lat": 41.47298
+},
+{
+"name": "Oix",
+"lon": 2.52798,
+"lat": 42.27201
+},
+{
+"name": "Sant Pere Sallavinera",
+"lon": 1.57452,
+"lat": 41.73657
+},
+{
+"name": "Solsona",
+"lon": 1.5184,
+"lat": 41.99458
+},
+{
+"name": "Can Bros",
+"lon": 1.92158,
+"lat": 41.49756
+},
+{
+"name": "Ardèvol",
+"lon": 1.51919,
+"lat": 41.85091
+},
+{
+"name": "Cardona",
+"lon": 1.68133,
+"lat": 41.91428
+},
+{
+"name": "Caldes de Montbui",
+"lon": 2.16261,
+"lat": 41.63448
+},
+{
+"name": "Sant Pol de Mar",
+"lon": 2.62381,
+"lat": 41.60301
+},
+{
+"name": "Bagà",
+"lon": 1.86259,
+"lat": 42.25277
+},
+{
+"name": "Súria",
+"lon": 1.75266,
+"lat": 41.83281
+},
+{
+"name": "Moià",
+"lon": 2.09784,
+"lat": 41.81304
+},
+{
+"name": "Pujalt",
+"lon": 1.42113,
+"lat": 41.71699
+},
+{
+"name": "Pontons",
+"lon": 1.5163,
+"lat": 41.41559
+},
+{
+"name": "Canet de Mar",
+"lon": 2.5778,
+"lat": 41.59009
+}
+]
