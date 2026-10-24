@@ -1004,6 +1004,101 @@ def splice_path(path: dict, a: int, b: int, sub: dict) -> dict:
             "ascend": max(0.0, float(path.get("ascend", 0.0)) - up + float(sub.get("ascend", 0.0)))}
 
 
+# SHORTCUT (Florent, 25/10/2026, 3e comparaison : Les Corts par le Passeig de la Bonanova au lieu de Via Augusta puis
+# la Ronda del General Mitre ; Collbató par le Carrer de França ; Terrassa par le Camí de Can Boada ; Navàs par le Carrer
+# dels Germans Pons) : « sur une route A, il vaut mieux continuer sur A plutôt que de la quitter pour y revenir quelques
+# centaines de mètres plus loin ; la quitter plusieurs kilomètres pour une route plus agréable, oui, mais il faut une
+# vraie raison ». Le détecteur de détours ne voyait que les retours au même point. Ici : les coudes de la boucle choisie
+# (entre SHORTCUT_MIN_M et SHORTCUT_MAX_M de chemin, au moins SHORTCUT_EXCESS_M et SHORTCUT_RATIO fois de plus que la
+# ligne droite) sont recalculés au plus direct et recousus ; la version directe n'est gardée que si la boucle note mieux
+# (SHORTCUT_GAIN) : un coude par une route plus agréable reste (la note le préfère), un lacet aussi (pas plus direct).
+SHORTCUT = False
+SHORTCUT_MIN_M, SHORTCUT_MAX_M = 300.0, 3000.0
+SHORTCUT_EXCESS_M = 250.0
+SHORTCUT_RATIO = 1.35
+SHORTCUT_TOP = 4
+SHORTCUT_GAIN = 0.003
+SHORTCUT_END_M = 300.0
+SHORTCUT_SAME_DIR_DEG = 45.0    # même direction avant de quitter la route et après l'avoir retrouvée (pas un virage)
+
+
+def shortcut() -> bool:
+    """« Continuer tout droit » (SHORTCUT), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "shortcut", SHORTCUT))
+
+
+def bend_windows(coords) -> list:
+    """Coudes d'une boucle (voir SHORTCUT) : [(a, b)] indices, le plus grand surplus d'abord, sans chevauchement."""
+    idx, cum = [0], [0.0]
+    for i in range(1, len(coords)):
+        d = haversine(coords[idx[-1]][0], coords[idx[-1]][1], coords[i][0], coords[i][1])
+        if d >= 25.0:
+            idx.append(i)
+            cum.append(cum[-1] + d)
+    total = cum[-1]
+    cands = []
+    for p in range(len(idx)):
+        if cum[p] < SHORTCUT_END_M:
+            continue
+        best = None
+        for q in range(p + 1, len(idx)):
+            L = cum[q] - cum[p]
+            if L > SHORTCUT_MAX_M or total - cum[q] < SHORTCUT_END_M:
+                break
+            if L < SHORTCUT_MIN_M:
+                continue
+            D = haversine(coords[idx[p]][0], coords[idx[p]][1], coords[idx[q]][0], coords[idx[q]][1])
+            if L - D >= SHORTCUT_EXCESS_M and L >= SHORTCUT_RATIO * D and (best is None or L - D > best[0]):
+                p0 = max(0, next((k for k in range(p, -1, -1) if cum[p] - cum[k] >= 100.0), 0))
+                q1 = next((k for k in range(q, len(idx)) if cum[k] - cum[q] >= 100.0), len(idx) - 1)
+                h_in = bearing(coords[idx[p0]][0], coords[idx[p0]][1], coords[idx[p]][0], coords[idx[p]][1])
+                h_out = bearing(coords[idx[q]][0], coords[idx[q]][1], coords[idx[q1]][0], coords[idx[q1]][1])
+                if abs((h_out - h_in + 180) % 360 - 180) <= SHORTCUT_SAME_DIR_DEG:   # on reprend la même direction
+                    best = (L - D, idx[p], idx[q])
+        if best:
+            cands.append(best)
+    out = []
+    for _, a, b in sorted(cands, reverse=True):
+        if all(b < a2 or a > b2 for a2, b2 in out):
+            out.append((a, b))
+    return out
+
+
+def shortcut_loop(gh, l, level, duration_h, bounds=None):
+    """La boucle l sans ses coudes inutiles (SHORTCUT), ou None si aucun raccourci ne la rend meilleure."""
+    best, stats = l, getattr(_TL, "clean_stats", None)
+    for _ in range(SHORTCUT_TOP):
+        det0 = getattr(best, "gh_details", None)
+        wins = bend_windows(best.coords)[:SHORTCUT_TOP] if det0 is not None else []
+        gained = None
+        for a, b in wins:
+            c = best.coords
+            for prof in dict.fromkeys([best.profile, "sport"]):
+                sub = gh.via([[c[a][0], c[a][1]], [c[b][0], c[b][1]]], prof)
+                if sub is None or len(sub["points"]["coordinates"]) < 2:
+                    continue
+                path = splice_path({"points": {"coordinates": c}, "details": det0, "ascend": best.ascend_gh_m}, a, b, sub)
+                t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
+                ok = (t is not None and time_ok(t.time_s, duration_h) and overlap_ok(t) and t.u_turns <= MAX_UTURNS
+                      and dirt_ok(t) and relief_ok(t) and len(defect_windows(t)) <= len(defect_windows(best))
+                      and t.score >= best.score + 100 * SHORTCUT_GAIN
+                      and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+                if stats is not None:
+                    k_ = "raccourci " + ("ok" if ok else "refusé")
+                    stats[k_] = stats.get(k_, 0) + 1
+                if ok and (gained is None or t.score > gained.score):
+                    gained = t
+            if gained is not None:
+                break                                    # indices changés : coudes recherchés à nouveau
+        if gained is None:
+            break
+        for attr in ("relief_fallback", "unpaved_fallback", "cleaned_from", "cleaned_kind"):
+            if getattr(best, attr, None):
+                setattr(gained, attr, getattr(best, attr))
+        best = gained
+    return None if best is l else best
+
+
 def clean_loop(gh, l, level, duration_h, bounds=None):
     """La même boucle sans ses détours, éperons et boucles accrochées (CLEAN_PICKS), ou None. 4e essai (mesure du
     18/10/2026 : recalculer toute la boucle par des points tous les 2 km rajoutait des détours ailleurs, 315 essais
@@ -5268,6 +5363,13 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
                     + ("pas de version propre valide" if t is None else f"{t.score:.1f} ({len(defect_windows(t))} restant)"))
                 if t is not None:
                     pool = [t if x is l else x for x in pool]
+    if shortcut() and pool:                                  # continuer tout droit (SHORTCUT)
+        pool = list(pool)
+        for _, l in pick_options(pool, prior):
+            t = shortcut_loop(gh, l, level, duration_h, bounds)
+            log(f"    tout droit : note {l.score:.1f} -> " + ("inchangée" if t is None else f"{t.score:.1f}"))
+            if t is not None:
+                pool = [t if x is l else x for x in pool]
     picks = pick_options(pool, prior)
     if lights_late() and picks:                              # feux en fin de boucle (LIGHTS_LATE)
         picks = lights_late_swap(gh, level, duration_h, picks, log)

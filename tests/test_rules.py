@@ -41,7 +41,7 @@ def test_reglages_v17():
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
-    for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS"):
+    for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -727,4 +727,23 @@ def test_smooth_window_hairpin_vs_block():
         block += [[2.1 + (x0 + (x1 - x0) * k / 10) / kx, 41.9 + (y0 + (y1 - y0) * k / 10) / 110540.0] for k in range(10)]
     assert g.smooth_window(hair, 0, len(hair) - 1)
     assert not g.smooth_window(block, 0, len(block) - 1)
+
+
+def test_bend_windows():
+    """Continuer tout droit (SHORTCUT) : un crochet de 600 m hors d'une route droite est vu ; une route droite non."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.5))
+
+    def path(pts, step=10.0):
+        out = []
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            n = max(1, int(math.hypot(x1 - x0, y1 - y0) // step))
+            out += [[2.0 + (x0 + (x1 - x0) * k / n) / kx, 41.5 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
+        out.append([2.0 + pts[-1][0] / kx, 41.5 + pts[-1][1] / 110540.0])
+        return out
+    straight = path([(0, 0), (5000, 0), (5000, 5000), (0, 5000), (0, 0)])
+    hook = path([(0, 0), (2000, 0), (2000, 300), (2400, 300), (2400, 0), (5000, 0), (5000, 5000), (0, 5000), (0, 0)])
+    assert not [w for w in g.bend_windows(straight) if w[1] - w[0] < len(straight) // 6]
+    wins = g.bend_windows(hook)
+    assert any(abs(hook[a][0] - (2.0 + 2000 / kx)) < 200 / kx for a, _ in wins)
 

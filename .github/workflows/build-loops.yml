@@ -471,6 +471,8 @@ jobs:
             [ "$DIAG_PART" = "rv7" ] && NATURE_TRACE="esplugues-de-llobregat|1|modere"
             # bord de mer (22/10/2026, Florent : longer la mer au plus près, Ciutat Vella 45 min et Castelldefels 1 h)
             [ "$DIAG_PART" = "rw7" ] && RELIEF_IDS="ciutat-vella;castelldefels" && NATURE_TRACE="ciutat-vella|0.75|facile;castelldefels|1|soutenu"
+            [ "$DIAG_PART" = "rx3" ] && NATURE_TRACE="les-corts|3|modere;terrassa|0.75|soutenu"
+            [ "$DIAG_PART" = "rx4" ] && NATURE_TRACE="collbato|6|facile;manresa|6|facile"
             [ "$DIAG_PART" = "rv9" ] && NATURE_TRACE="sants-montjuic|1|facile;sant-andreu|2|facile"
             [ "$DIAG_PART" = "rv0" ] && NATURE_TRACE="ripoll|1|facile;granollers|6|facile"
             [ "$DIAG_PART" = "c8" ] && RELIEF_IDS="l-eixample;gracia;sarria-sant-gervasi;sant-marti;sants-montjuic;les-corts;horta-guinardo;sant-andreu;ciutat-vella" && NATURE_TRACE="l-eixample|1|modere;l-eixample|2|soutenu"
