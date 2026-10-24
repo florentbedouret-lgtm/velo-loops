@@ -49,8 +49,12 @@ def main():
         except Exception:  # noqa: BLE001
             continue
         for o in js["options"]:
-            for c in o["coords"]:
-                grid.setdefault((int(c[0] / cell), int(c[1] / cell)), []).append((c[0], c[1], o["id"]))
+            cs = o["coords"]
+            for a_, b_ in zip(cs, cs[1:]):                   # tracé publié simplifié : un point tous les ~20 m
+                n = max(1, int(hav(a_, b_) // 20))
+                for k in range(n):
+                    x, y = a_[0] + (b_[0] - a_[0]) * k / n, a_[1] + (b_[1] - a_[1]) * k / n
+                    grid.setdefault((int(x / cell), int(y / cell)), []).append((x, y, o["id"]))
     print(f"{len(ways)} pistes grade2, {sum(len(v) for v in grid.values())} points de boucles", file=sys.stderr)
     found = {}
     for p, c, length in ways:
