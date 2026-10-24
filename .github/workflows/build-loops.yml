@@ -92,7 +92,7 @@ concurrency:
   # diagnostics (rien n'est publié) dans leur propre file : ils tournent en parallèle des calculs sans les annuler
   # diag_part=surf (carte seule) et les parties lancées depuis le 08/10/2026 au soir (o1, o2, cmp3) : chacune dans sa file,
   # elles tournent en parallèle sans prendre la place d'un diagnostic en attente
-  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","audit","o1","o2","cmp2","cmp3","cmp3b","cmp4","cmp5","cmp6","cmp7","w1","w2","b1","b2","t1","t2","1","2","3","4","v1","v2","k1","k2","x1","x2","k3","x3","x4","v3","f1","f2","g1","g2","p1","p2","n1","n2","s1","s2","z1","z2","h1","h2","e1","e2","y1","y2","y3","q1","q2","q3","q4","u1","u2","j1","j2","l1","l2","l3","i1","i2","i3","i4","m1","m2","m3","m4","m5","m6","m7","m8","m9","m0","a3","a4","a5","a6","a7","a8","a9","c1","c2","c3","c4","c5","c6","c7","c8","c9","c0","rv1","rv2","rv3","rv4","rv5","rv6","rv7","rv8","rv9","rv0","rw1","rw2","rw3","rw4","rw5","rw6","rw7","rx1","rx2","rx3","rx4","a1","a2","h3","h4","e3","e4","h5","h6","h7","h8","h9","h0","e5","e6","e7","e8","e9","s3","s4","s5","s6","s7","s8","s9","s0"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
+  group: ${{ (inputs.mode == 'nature_check' && contains(fromJSON('["surf","audit","o1","o2","cmp2","cmp3","cmp3b","cmp4","cmp5","cmp6","cmp7","w1","w2","b1","b2","t1","t2","1","2","3","4","v1","v2","k1","k2","x1","x2","k3","x3","x4","v3","f1","f2","g1","g2","p1","p2","n1","n2","s1","s2","z1","z2","h1","h2","e1","e2","y1","y2","y3","q1","q2","q3","q4","u1","u2","j1","j2","l1","l2","l3","i1","i2","i3","i4","m1","m2","m3","m4","m5","m6","m7","m8","m9","m0","a3","a4","a5","a6","a7","a8","a9","c1","c2","c3","c4","c5","c6","c7","c8","c9","c0","rv1","rv2","rv3","rv4","rv5","rv6","rv7","rv8","rv9","rv0","rw1","rw2","rw3","rw4","rw5","rw6","rw7","rx1","rx2","rx3","rx4","vil","a1","a2","h3","h4","e3","e4","h5","h6","h7","h8","h9","h0","e5","e6","e7","e8","e9","s3","s4","s5","s6","s7","s8","s9","s0"]'), inputs.diag_part)) && format('diagnostic-{0}', inputs.diag_part) || (contains(fromJSON('["nature_check","landcover_check","slope_check"]'), inputs.mode) && 'diagnostic' || 'build-loops') }}
   cancel-in-progress: false      # un lancement lancé par erreur attend la fin du précédent au lieu de l'interrompre
 
 env:
@@ -388,6 +388,11 @@ jobs:
           MARGIN_TEM="castellnou-can-mir-sud-est;canyet-sud;pineda-de-bages;can-rovira-nou-sud-ouest;la-palma-de-cervello;rocacrespa-est;vallirana;les-ginesteres-nord-est;sant-vicenc-de-castellet;barbera-del-valles;castelloli;sant-vicenc-de-montalt;torello;els-caus-els-pinetons-est;zona-franca-port-est;el-pla-de-sant-tirs;feners-est;sant-feliu-de-codines;argelaguer;el-collell-est;vilobi-del-penedes;mura;santa-coloma-de-farners;rossinyol-i-coforb-est;el-coll-est-2;sot-d-en-mola-est;rubio;masies-de-sansuies-est;el-pala-de-torroella-sud;can-servitge-est"
           # relief par allure (08/10/2026) : parties r1 / r2 ; le test de la marge ne tourne pas dans ce cas
           case "$DIAG_PART" in r*|f*|d*|t*|o[12]|w[12]|b[12]|v[123]|k[123]|x[1234]|g[12]|p[12]|n[12]|s[0-9]|z[12]|h[0-9]|e[1-9]|y[123]|q[1-4]|u[12]|j[12]|l[123]|i[1-4]|m[0-9]|a[1-9]|c[0-9]|pages|cmp*|places) NATURE_MARGIN="" ;; esac
+          if [ "$DIAG_PART" = "vil" ]; then                # villages « particulièrement jolis » (O-92, 24/10/2026)
+            python scripts/village_probe.py data/region.osm.pbf data > data/nature_compare_villages.json
+            ls -la data/nature_compare_villages.json
+            exit 0
+          fi
           if [ "$DIAG_PART" = "pages" ]; then              # essai des pages par départ sur toutes les données publiées
             mkdir -p data/pages_test
             python scripts/build_start_pages.py --data "https://florentbedouret-lgtm.github.io/velo-loops/web/data"               --out data/pages_test | tee data/pages_test.txt
