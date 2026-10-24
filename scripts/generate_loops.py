@@ -863,6 +863,27 @@ def spot_key(p) -> tuple:
     return (round(p[1] * 2000), round(p[0] * 2000))
 
 
+WATER_ALONG_SHARE = 0.6          # aller-retour « le long de l'eau » : au moins 60 % à moins de WATER_HUG_DEG de l'eau
+
+
+def along_water(coords, a: int, b: int) -> bool:
+    """L'aller-retour coords[a..b] suit-il la mer, une rivière ou un lac (WATER_ALONG_SHARE à ~50 m) ? Florent
+    (21/10/2026) : mieux vaut revenir le long de la mer que par une route désagréable ; mesure du 24/10 : le paquet
+    retirait ces allers-retours (bord de mer -10 %). Sans paysage chargé : non."""
+    if LANDSCAPE is None or b - a < 2:
+        return False
+    import numpy as np
+    import shapely
+    seg = coords[a:b + 1]
+    pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 40)]]))
+    close = np.zeros(len(pts), dtype=bool)
+    for key_ in ("sea", "river", "water"):
+        tr_ = LANDSCAPE.trees.get(key_)
+        if tr_ is not None:
+            close[np.unique(tr_.query(pts, predicate="dwithin", distance=WATER_HUG_DEG)[0])] = True
+    return float(close.mean()) >= WATER_ALONG_SHARE
+
+
 def clean_picks() -> bool:
     """Nettoyage des boucles publiées (CLEAN_PICKS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "clean_picks", CLEAN_PICKS))
@@ -3417,7 +3438,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             span = [(cum[i + 1] - cum[i], str(ud_[i]).lower() == "city") for i in range(w[0], min(w[1], len(ud_)))]
             tot = sum(m for m, _ in span)
             if (w[3] in ("nature", "piste", "montée") and tot > 0
-                    and sum(m for m, c in span if c) >= CITY_BACKTRACK_SHARE * tot):
+                    and sum(m for m, c in span if c) >= CITY_BACKTRACK_SHARE * tot
+                    and not along_water(coords, w[0], w[1])):     # le long de la mer : gardé (Barceloneta)
                 demoted.append((w, "city"))
             else:
                 keep.append(w)
@@ -3561,10 +3583,12 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                         "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
                         "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2)}
                        for a_, b_, t, w in useful]
-    loop.aimless_bt = (sum(1 for b_ in loop.backtracks if b_["why"] in ("nature", "piste")
-                           and not destination_tip([b_["lon"], b_["lat"]])) if turn_rules() else 0)
+    loop.aimless_bt = (sum(1 for (a_, b_, t_, w_) in useful if w_ in ("nature", "piste")
+                           and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
+                           and not (backtrack_dest() and along_water(coords, a_, b_))) if turn_rules() else 0)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
-    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])]
+    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])
+                             and not along_water(coords, a_, b_)]
                             if backtrack_dest() else [])     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and hairpins():                      # lacets : la route elle-même (HAIRPINS)
