@@ -3618,7 +3618,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     if loop_shape():                                         # vraie boucle, claire (LOOP_SHAPE)
         loop.ends_cross, loop.turns_km = shape_measures(coords, cum)
     loop.rep_plain = 0.0                                     # répétition sur routes ordinaires (REPEAT_PLAIN)
-    if repeat_plain():
+    if repeat_plain() or flow_v2():                          # FLOW_V2 aussi : seule la répétition ordinaire est pesée 3 fois
         lc_ = ""
         if loop.scenery and (loop.scenery.get("landcover") or {}).get("cls") is not None:
             lc_ = landcover_seq(loop.scenery["landcover"]["cls"])
@@ -3646,7 +3646,12 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         "calm": 1.0 - (s.get("urban_car", s["urban"])["city"] + 0.4 * s.get("urban_car", s["urban"])["residential"]),
         "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
         "infra": min(1.0, 2.0 * s["dedicated_cycleway"]),
-        "flow": 1.0 - min(1.0, (FLOW_V2_FACTOR if flow_v2() else FLOW_OVERLAP_FACTOR) * l.overlap + 0.15 * l.u_turns),
+        # FLOW_V2, 2e version (mesure du 24/10/2026 : bord de mer -15 %, nature en baisse ; Florent préfère revenir le
+        # long de la mer plutôt que par une route désagréable) : seule la répétition sur routes ordinaires (rep_plain :
+        # ni bord de l'eau, ni forêt, ni piste hors de la ville) est pesée FLOW_V2_FACTOR fois ; l'autre comme avant.
+        "flow": 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
+                          + ((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0) if flow_v2() else 0.0)
+                          + 0.15 * l.u_turns),
     }
     weights = dict(WEIGHTS)
     if l.signals is not None:
