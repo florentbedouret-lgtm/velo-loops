@@ -11,7 +11,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-EXAMPLES = ["Rupit", "Mura", "Cardona", "Caldes de Montbui", "Sitges", "Sant Pol de Mar", "Garraf"]
+EXAMPLES = ["Rupit", "Mura", "Cardona", "Caldes de Montbui", "Sitges", "Sant Pol de Mar", "Garraf",
+            "Castellar de n'Hug", "Bagà", "Tavertet", "Talamanca", "Gironella", "Súria", "Moià", "Pujalt", "Castellet",
+            "Montseny", "Pontons", "Canet de Mar", "Colònia Güell"]
 RADII_M = (400, 800)
 
 
@@ -42,13 +44,19 @@ def export(pbf: Path, wd: Path, name: str, filters: list) -> list:
 
 def main():
     pbf, wd = Path(sys.argv[1]), Path(sys.argv[2])
-    places = [p for p in export(pbf, wd, "vil_places", ["n/place=village,town"]) if p[2].get("name")]
+    places = [p for p in export(pbf, wd, "vil_places", ["n/place=village,town,hamlet"]) if p[2].get("name")]
     feats = export(pbf, wd, "vil_feats", ["nwr/historic", "nwr/heritage", "nwr/tourism=attraction,museum",
                                           "nwr/amenity=place_of_worship"])
+    nature = export(pbf, wd, "vil_nature", ["nwr/landuse=forest", "nwr/natural=wood", "nwr/natural=water",
+                                            "w/waterway=river", "n/natural=peak", "nwr/natural=cliff",
+                                            "nwr/leisure=nature_reserve", "nwr/boundary=protected_area"])
     cell = 0.01
     grid: dict = {}
     for x, y, p in feats:
         grid.setdefault((int(x / cell), int(y / cell)), []).append((x, y, p))
+    ngrid: dict = {}
+    for x, y, p in nature:
+        ngrid.setdefault((int(x / cell), int(y / cell)), []).append((x, y, p))
     rows = []
     for x0, y0, p0 in places:
         kx = 111320.0 * math.cos(math.radians(y0))
@@ -69,7 +77,23 @@ def main():
             row[f"patrimoine_national_{r}"] = sum(1 for p in sel if str(p.get("heritage")) in ("1", "2"))
             row[f"curiosites_{r}"] = sum(1 for p in sel if p.get("tourism") in ("attraction", "museum"))
             row[f"avec_wikidata_{r}"] = sum(1 for p in sel if p.get("wikidata") and (p.get("historic") or p.get("heritage")))
-        row["exemple"] = any(e.lower() == row["name"].lower() or row["name"].lower().startswith(e.lower() + " ")
+        nn = []                                               # cadre : nature à moins de 1 km (premier point de l'objet)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for x, y, p in ngrid.get((int(x0 / cell) + dx, int(y0 / cell) + dy), []):
+                    if math.hypot((x - x0) * kx, (y - y0) * 110540.0) <= 1000:
+                        nn.append(p)
+        row["foret_1km"] = sum(1 for p in nn if p.get("landuse") == "forest" or p.get("natural") == "wood")
+        row["eau_1km"] = sum(1 for p in nn if p.get("natural") == "water" or p.get("waterway") == "river")
+        row["sommets_1km"] = sum(1 for p in nn if p.get("natural") == "peak")
+        row["falaises_1km"] = sum(1 for p in nn if p.get("natural") == "cliff")
+        row["protege_1km"] = sum(1 for p in nn if p.get("leisure") == "nature_reserve" or p.get("boundary") == "protected_area")
+        try:
+            row["altitude"] = float(str(p0.get("ele", "")).split()[0])
+        except (ValueError, IndexError):
+            row["altitude"] = None
+        low = row["name"].lower()
+        row["exemple"] = any(e.lower() == low or low.startswith(e.lower() + " ") or low.startswith(e.lower() + ",")
                              for e in EXAMPLES)
         rows.append(row)
     json.dump({"examples": EXAMPLES, "places": rows}, sys.stdout, ensure_ascii=False)
