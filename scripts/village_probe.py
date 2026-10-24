@@ -51,17 +51,19 @@ UA = {"User-Agent": "velo-loops diagnostic (github.com/florentbedouret-lgtm/velo
 
 def _get(url: str):
     """JSON d'une API publique de Wikimedia, avec un rythme modéré et deux nouvelles tentatives (429, 5xx)."""
-    for k in range(3):
+    for k in range(5):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
-                time.sleep(0.15)
+                time.sleep(0.5)
                 return json.load(r)
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 return None
-            time.sleep(2.0 * (k + 1))
-        except Exception:  # noqa: BLE001 : réseau
-            time.sleep(2.0 * (k + 1))
+            print(f"! {e.code} : nouvel essai dans {5 * 2 ** k} s", file=sys.stderr)
+            time.sleep(5.0 * 2 ** k)
+        except Exception as e:  # noqa: BLE001 : réseau
+            print(f"! {type(e).__name__} : nouvel essai", file=sys.stderr)
+            time.sleep(5.0 * 2 ** k)
     return None
 
 
