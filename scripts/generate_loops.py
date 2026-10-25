@@ -4726,9 +4726,8 @@ def spur_list(coords) -> list:
     while i < len(k_) - 1:
         d = abs((bearing(k_[i][0], k_[i][1], k_[i + 1][0], k_[i + 1][1]) -
                  bearing(k_[i - 1][0], k_[i - 1][1], k_[i][0], k_[i][1]) + 180) % 360 - 180)
-        a, b, t = i - 1, i + 1, i
+        a, b, t, j = i - 1, i + 1, i, None
         if d < 150:
-            j = None
             if spur_turn_window():                          # demi-tour par un rond-point ou une petite boucle au bout
                 h0 = bearing(k_[i - 1][0], k_[i - 1][1], k_[i][0], k_[i][1])
                 for x in range(i + 1, len(k_) - 1):
@@ -4748,6 +4747,13 @@ def spur_list(coords) -> list:
                                               any(near(k_[a - 1], k_[x]) for x in range(b, min(len(k_), b + 4)))):
             a -= 1
             b += 1
+        if (j is not None and len(k_[a]) > 2 and len(k_[b]) > 2
+                and abs(k_[a][2] - k_[b][2]) > CORRIDOR_DZ_M):
+            # lacets d'une montée, pas un demi-tour (25/10/2026, Folgueroles 6 h, Monistrol 1,5 h : 3 « éperons » de
+            # 160 à 240 m dans les lacets, la meilleure boucle perdait 37 points) : un vrai aller-retour revient par la
+            # même route, à la même altitude
+            i = j + 1
+            continue
         out.append({"a": idx[a], "t": idx[t], "b": idx[b], "m": cum[t] - cum[a],
                     "start_m": cum[a], "end_m": cum[-1] - cum[b]})
         i = b

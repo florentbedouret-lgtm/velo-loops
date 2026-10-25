@@ -680,6 +680,28 @@ def test_spur_turn_window_roundabout():
     assert before == [] and len(after) == 1
 
 
+def test_spur_turn_window_hairpin():
+    """Lacet d'une montée (SPUR_TURN_WINDOW, Folgueroles 6 h) : la route tourne de 180° en 50 m et repart 30 m plus haut
+    à côté de l'aller, en continuant de monter ; ce n'est pas un demi-tour, aucun éperon."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(42.0))
+    pts = [(x, 0.0) for x in range(-1000, 201, 10)]
+    pts += [(200 + 15 * math.sin(a / 10.0 * math.pi), 15 - 15 * math.cos(a / 10.0 * math.pi)) for a in range(1, 10)]
+    pts += [(x, 30.0) for x in range(200, -1001, -10)] + [(-1000.0, 1500.0)]
+    z, coords = 400.0, []
+    for n, (x, y) in enumerate(pts):
+        if n:
+            z += 0.06 * math.hypot(x - pts[n - 1][0], y - pts[n - 1][1])
+        coords.append([2.3 + x / kx, 42.0 + y / 110540.0, z])
+    old = g.SPUR_TURN_WINDOW
+    try:
+        g.SPUR_TURN_WINDOW = True
+        found = g.spur_list(coords)
+    finally:
+        g.SPUR_TURN_WINDOW = old
+    assert found == []
+
+
 def test_concat_paths():
     """v20 (GOAL_RETURN) : l'aller puis le retour, détails décalés, point de jonction gardé une fois."""
     p1 = {"points": {"coordinates": [[0, 0], [0, 1], [0, 2]]}, "ascend": 5.0,

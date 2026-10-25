@@ -520,6 +520,9 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
                      "defauts": {"detours": [{k: v for k, v in x.items() if k not in ("a", "b")} for x in (l.detours or [])],
                                  "eperons": [[x.get("km"), x.get("m"), [k for k in x if x[k] is True]] for x in (l.spurs or [])],
                                  "allers_retours": [[x.get("km"), x.get("m"), x.get("why")] for x in (l.backtracks or [])],
+                                 "accrochees": [[x.get("km"), x.get("m"), bool(x.get("corridor"))]
+                                                for x in (getattr(l, "appendices", None) or [])],
+                                 "nb_defauts": len(g.defect_windows(l)),
                                  "sans_but": getattr(l, "aimless_bt", 0), "eau_sans_but": getattr(l, "water_bt", 0),
                                  "montee_demi_tour": getattr(l, "climb_mid_bt", 0),
                                  "rep_ordinaire": round(getattr(l, "rep_plain", 0.0), 3)},
