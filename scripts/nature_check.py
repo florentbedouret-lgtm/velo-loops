@@ -517,9 +517,9 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
                      "terre_ok": g.dirt_ok(l),
                      # 25/10/2026 (Monistrol, Folgueroles : bonnes boucles perdues) : quelles règles d'essai coûtent des
                      # points, la note recalculée avec chacune éteinte, et les défauts vus
-                     "defauts": {"detours": [[x["km"], x.get("m")] for x in (l.detours or [])],
-                                 "eperons": [[x["km"], x.get("m"), [k for k in x if x[k] is True]] for x in (l.spurs or [])],
-                                 "allers_retours": [[x["km"], x["m"], x["why"]] for x in (l.backtracks or [])],
+                     "defauts": {"detours": [{k: v for k, v in x.items() if k not in ("a", "b")} for x in (l.detours or [])],
+                                 "eperons": [[x.get("km"), x.get("m"), [k for k in x if x[k] is True]] for x in (l.spurs or [])],
+                                 "allers_retours": [[x.get("km"), x.get("m"), x.get("why")] for x in (l.backtracks or [])],
                                  "sans_but": getattr(l, "aimless_bt", 0), "eau_sans_but": getattr(l, "water_bt", 0),
                                  "montee_demi_tour": getattr(l, "climb_mid_bt", 0),
                                  "rep_ordinaire": round(getattr(l, "rep_plain", 0.0), 3)},
