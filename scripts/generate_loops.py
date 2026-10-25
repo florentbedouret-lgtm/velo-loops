@@ -828,6 +828,7 @@ def smooth_window(coords, a: int, b: int) -> bool:
 # du parcours sur de petites routes goudronnées (classes SMALL_ROADS_CLASSES) hors de la ville. False : comme avant.
 FLOW_V2 = False
 FLOW_V2_FACTOR = 3.0
+FLOW_V2_NICE = 2.0              # répétition le long de l'eau, en forêt ou sur piste hors ville (3e version, 25/10/2026)
 SMALL_ROADS = False
 SMALL_ROADS_W = 0.10
 SMALL_ROADS_CLASSES = ("unclassified", "tertiary", "track", "living_street")
@@ -3738,9 +3739,11 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                            and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
                            and not (backtrack_dest() and along_water(coords, a_, b_))) if turn_rules() else 0)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
-    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])
-                             and not along_water(coords, a_, b_)]
-                            if backtrack_dest() else [])     # allers-retours « nature » sans destination (BACKTRACK_DEST)
+    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])]
+                            if backtrack_dest() else [])     # le long de l'eau aussi : bouclé si une boucle propre existe
+    loop.water_bt = (sum(1 for a_, b_, t_, w_ in useful if w_ in ("nature", "piste")
+                         and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])
+                         and along_water(coords, a_, b_)) if backtrack_dest() else 0)     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and hairpins():                      # lacets : la route elle-même (HAIRPINS)
         loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])]
@@ -3842,8 +3845,13 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         # FLOW_V2, 2e version (mesure du 24/10/2026 : bord de mer -15 %, nature en baisse ; Florent préfère revenir le
         # long de la mer plutôt que par une route désagréable) : seule la répétition sur routes ordinaires (rep_plain :
         # ni bord de l'eau, ni forêt, ni piste hors de la ville) est pesée FLOW_V2_FACTOR fois ; l'autre comme avant.
+        # 3e version (25/10/2026, 3e comparaison : Folgueroles 6 h, Monistrol 3 h, Sants-Montjuïc 1 h, la version qui
+        # repasse le moins gagne ; une répétition « agréable » gratuite laissait un aller-retour de 16 km battre une vraie
+        # boucle) : répétition agréable pesée FLOW_V2_NICE fois, ordinaire FLOW_V2_FACTOR fois.
         "flow": 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
-                          + ((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0) if flow_v2() else 0.0)
+                          + (((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0)
+                              + (FLOW_V2_NICE - FLOW_OVERLAP_FACTOR) * max(0.0, l.overlap - getattr(l, "rep_plain", 0.0)))
+                             if flow_v2() else 0.0)
                           + 0.15 * l.u_turns),
     }
     weights = dict(WEIGHTS)
@@ -3900,6 +3908,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
             total -= min(BACKTRACK_DEST_NATURE_MAX, BACKTRACK_DEST_NATURE_PEN * l.aimless_bt)
         else:
             total -= min(TURN_AIMLESS_MAX, TURN_AIMLESS_PEN * l.aimless_bt)
+    if backtrack_dest() and getattr(l, "water_bt", 0):    # le long de l'eau sans but : moitié de la pénalité (25/10)
+        total -= min(BACKTRACK_DEST_NATURE_MAX / 2, BACKTRACK_DEST_NATURE_PEN / 2 * l.water_bt)
     if repeat_plain() and getattr(l, "rep_plain", 0.0) > REPEAT_PLAIN_FREE:   # répétition sur routes ordinaires
         total -= min(REPEAT_PLAIN_MAX, REPEAT_PLAIN_PER * (l.rep_plain - REPEAT_PLAIN_FREE))
     if backtrack_long():                                  # long aller-retour annoncé, plus gratuit (BACKTRACK_LONG)
