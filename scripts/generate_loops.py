@@ -1619,6 +1619,12 @@ SMALL_MODEL_PRIORITY = [
     {"else_if": "urban_density == RURAL && road_class == PRIMARY", "multiply_by": "1.6"},
 ]
 WATER_HUG = False
+# (25/10/2026) Le Passeig Marítim de la Barceloneta, au bord de la mer, est une rue piétonne ouverte aux vélos (OSM
+# highway=pedestrian, bicycle=yes) : le profil vélo ne favorisait que les chemins partagés (footway, path) et passait par
+# la piste de l'Avinguda del Litoral, derrière la plage. Avec WATER_HUG, une rue piétonne ouverte aux vélos est traitée
+# comme un chemin partagé (jamais là où le vélo n'est pas explicitement permis).
+WATER_HUG_PRIORITY = [{"if": "road_class == PEDESTRIAN && (bike_road_access == YES || bike_road_access == DESIGNATED)",
+                       "multiply_by": "1.3"}]
 WATER_HUG_DEG = 0.0006          # ~50 m de la mer, d'une rivière ou d'un lac
 WATER_HUG_PER_KM = 0.01
 WATER_HUG_MAX = 0.10
@@ -3252,10 +3258,11 @@ class GraphHopper:
         import copy
         if scenic_areas() and body.get("profile") in SCENIC_PROFILES:   # zones agréables (SCENIC_AREAS)
             body = {**body, "profile": body["profile"] + "_scenic"}
-        if small_model() or track_grade():                   # petites routes (SMALL_MODEL), pistes grade2+ (TRACK_GRADE)
+        if small_model() or track_grade() or water_hug():    # petites routes, pistes grade2+, bord de l'eau
             cm = dict(body.get("custom_model") or {})
             cm["priority"] = (list(cm.get("priority") or []) + (SMALL_MODEL_PRIORITY if small_model() else [])
-                              + (TRACK_GRADE_PRIORITY if track_grade() else []))
+                              + (TRACK_GRADE_PRIORITY if track_grade() else [])
+                              + (WATER_HUG_PRIORITY if water_hug() else []))
             body = {**body, "custom_model": cm, "ch.disable": True}
         key = json.dumps(body, sort_keys=True)
         self.calls += 1
