@@ -460,6 +460,26 @@ def report_prev_check(results, out_json, out_md, t0, steps=("2000", "500", "300"
     Path(out_md).write_text("\n".join(L) + "\n", encoding="utf-8")
 
 
+TRIAL_FLAGS = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
+               "detour_dest", "defect_strict", "flow_v2", "hairpins", "small_model", "water_hug", "dest_heritage",
+               "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "repeat_plain")
+
+
+def ablation(path, level, profile, d) -> dict:
+    """Note d'un tracé avec chaque règle d'essai allumée éteinte à son tour (TRACE) : {règle: note}."""
+    out = {}
+    for f_ in TRIAL_FLAGS:
+        if getattr(g._TL, f_, False) is not True:
+            continue
+        setattr(g._TL, f_, False)
+        try:
+            l = g.analyse(path, level, profile, d, 2000, None)
+            out[f_] = None if l is None else l.score
+        finally:
+            setattr(g._TL, f_, True)
+    return out
+
+
 def trace_pool(gh, st_, sid, level, d, options, logf):
     """Candidates d'une durée (TRACE) : note, durée, origine, conformité, et pourquoi l'ordre des durées les écarte."""
     g._TL.trace_detail = []                              # détail des voies agréables et des départs voisins
@@ -494,7 +514,16 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
                      "valide_ici": g.time_ok(l.time_s, d), "plages": fits, "dpk": round(l.dplus_per_km, 1),
                      # 16/10/2026 : tous les contrôles du filet (previous_candidates), pas seulement la durée
                      "repetition": round(l.overlap, 3), "repetition_ok": g.overlap_ok(l), "demi_tours": l.u_turns,
-                     "terre_ok": g.dirt_ok(l)})
+                     "terre_ok": g.dirt_ok(l),
+                     # 25/10/2026 (Monistrol, Folgueroles : bonnes boucles perdues) : quelles règles d'essai coûtent des
+                     # points, la note recalculée avec chacune éteinte, et les défauts vus
+                     "defauts": {"detours": [[x["km"], x.get("m")] for x in (l.detours or [])],
+                                 "eperons": [[x["km"], x.get("m"), [k for k in x if x[k] is True]] for x in (l.spurs or [])],
+                                 "allers_retours": [[x["km"], x["m"], x["why"]] for x in (l.backtracks or [])],
+                                 "sans_but": getattr(l, "aimless_bt", 0), "eau_sans_but": getattr(l, "water_bt", 0),
+                                 "montee_demi_tour": getattr(l, "climb_mid_bt", 0),
+                                 "rep_ordinaire": round(getattr(l, "rep_plain", 0.0), 3)},
+                     "ablation": ablation(path, level, profile, d)})
     return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows,
             "publiees": prev,
             "detail": detail}

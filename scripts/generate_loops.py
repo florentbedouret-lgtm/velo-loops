@@ -3609,7 +3609,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     if backtrack_dest() and useful:                      # « piste » ou « montée » : seulement vers une destination
         keep = []
         for w in useful:
-            if (w[3] in ("piste", "montée") and not destination_tip(coords[w[2]])
+            # montée sans but : gardée comme un aller-retour « nature » (25/10/2026, Monistrol 1,5 h : « en montagne,
+            # mieux vaut un aller-retour agréable qu'un retour désagréable », Florent) ; le demi-tour en pleine montée
+            # reste pénalisé (TURN_RULES) et le nettoyage essaie d'en faire une boucle (aimless_windows)
+            if (w[3] == "piste" and not destination_tip(coords[w[2]])
                     and not along_water(coords, w[0], w[1])):      # piste du front de mer : gardée
                 demoted.append((w, "aimless"))
             else:
@@ -3745,7 +3748,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                            and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
                            and not (backtrack_dest() and along_water(coords, a_, b_))) if turn_rules() else 0)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
-    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ == "nature" and not destination_tip(coords[t_])]
+    loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ in ("nature", "montée")
+                             and not destination_tip(coords[t_])]
                             if backtrack_dest() else [])     # le long de l'eau aussi : bouclé si une boucle propre existe
     loop.water_bt = (sum(1 for a_, b_, t_, w_ in useful if w_ in ("nature", "piste")
                          and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])

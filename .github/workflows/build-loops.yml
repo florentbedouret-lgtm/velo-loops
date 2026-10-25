@@ -478,8 +478,8 @@ jobs:
             [ "$DIAG_PART" = "rw7" ] && RELIEF_IDS="ciutat-vella;castelldefels" && NATURE_TRACE="ciutat-vella|0.75|facile;castelldefels|1|soutenu"
             # mesure finale, départs restants (25/10/2026)
             [ "$DIAG_PART" = "rx5" ] && RELIEF_IDS="terrassa;collbato" && NATURE_TRACE="terrassa|0.75|soutenu;collbato|6|facile"
-            [ "$DIAG_PART" = "rx6" ] && RELIEF_IDS="manresa;monistrol-de-montserrat" && NATURE_TRACE="manresa|6|facile;monistrol-de-montserrat|1.5|modere"
-            [ "$DIAG_PART" = "rx7" ] && RELIEF_IDS="folgueroles;les-corts;mataro" && NATURE_TRACE="folgueroles|6|soutenu;les-corts|3|modere"
+            [ "$DIAG_PART" = "rx6" ] && RELIEF_IDS="monistrol-de-montserrat" && NATURE_TRACE="monistrol-de-montserrat|3|facile;monistrol-de-montserrat|1.5|modere"
+            [ "$DIAG_PART" = "rx7" ] && RELIEF_IDS="folgueroles" && NATURE_TRACE="folgueroles|6|soutenu"
             [ "$DIAG_PART" = "rx3" ] && NATURE_TRACE="les-corts|3|modere;terrassa|0.75|soutenu"
             [ "$DIAG_PART" = "rx4" ] && NATURE_TRACE="collbato|6|facile;manresa|6|facile"
             [ "$DIAG_PART" = "rv9" ] && NATURE_TRACE="sants-montjuic|1|facile;sant-andreu|2|facile"
