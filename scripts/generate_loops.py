@@ -797,14 +797,16 @@ def hairpins() -> bool:
 
 
 def smooth_window(coords, a: int, b: int) -> bool:
-    """Le tracé coords[a..b] est-il un lacet plutôt qu'un tour de pâté de maisons ? Virages vifs (au moins
-    HAIRPIN_SHARP_DEG entre le cap des HAIRPIN_STEP_M avant et celui des HAIRPIN_STEP_M après un point), regroupés à
-    moins de 40 m : un pâté de maisons en a au moins 3 (les carrefours), un lacet 1, un double lacet 2."""
+    """Le tracé coords[a..b] est-il un lacet (ou une série de lacets) plutôt qu'un tour de pâté de maisons ? Virages
+    vifs (au moins HAIRPIN_SHARP_DEG entre le cap des HAIRPIN_STEP_M avant et celui des HAIRPIN_STEP_M après un point),
+    regroupés à moins de 40 m. Un pâté de maisons tourne au moins 3 fois du même côté (droite, droite, droite) ; un lacet
+    ne fait qu'un ou deux virages, une série de lacets tourne alternativement d'un côté puis de l'autre (25/10/2026 :
+    les lacets en série de Folgueroles 6 h comptaient comme détours)."""
     cum = [0.0]
     for p, q in zip(coords[a:b], coords[a + 1:b + 1]):
         cum.append(cum[-1] + haversine(p[0], p[1], q[0], q[1]))
     seg = coords[a:b + 1]
-    zones, last = 0, -1e9
+    signs, last = [], -1e9
     for i in range(1, len(seg) - 1):
         j = i - 1
         while j > 0 and cum[i] - cum[j] < HAIRPIN_STEP_M:
@@ -812,13 +814,17 @@ def smooth_window(coords, a: int, b: int) -> bool:
         k = i + 1
         while k < len(seg) - 1 and cum[k] - cum[i] < HAIRPIN_STEP_M:
             k += 1
-        turn = abs((bearing(seg[i][0], seg[i][1], seg[k][0], seg[k][1])
-                    - bearing(seg[j][0], seg[j][1], seg[i][0], seg[i][1]) + 180) % 360 - 180)
-        if turn >= HAIRPIN_SHARP_DEG:
+        turn = (bearing(seg[i][0], seg[i][1], seg[k][0], seg[k][1])
+                - bearing(seg[j][0], seg[j][1], seg[i][0], seg[i][1]) + 180) % 360 - 180
+        if abs(turn) >= HAIRPIN_SHARP_DEG:
             if cum[i] - last > 40.0:
-                zones += 1
+                signs.append(1 if turn > 0 else -1)
             last = cum[i]
-    return zones < 3
+    run = best = 0                                           # plus longue suite de virages du même côté
+    for n, sg in enumerate(signs):
+        run = run + 1 if n and sg == signs[n - 1] else 1
+        best = max(best, run)
+    return best < 3
 
 
 # Les 43 jugements de Florent (revue et comparaison à l'aveugle, 21-22/10/2026). (1) Entre deux versions d'une même sortie,

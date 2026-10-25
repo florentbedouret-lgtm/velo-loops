@@ -747,3 +747,15 @@ def test_bend_windows():
     wins = g.bend_windows(hook)
     assert any(abs(hook[a][0] - (2.0 + 2000 / kx)) < 200 / kx for a, _ in wins)
 
+
+def test_smooth_window_switchbacks():
+    """Série de lacets (gauche, droite, gauche, droite) : la route ; HAIRPINS, 25/10/2026."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.9))
+    pts = [(0, 0), (200, 0), (200, 40), (0, 40), (0, 80), (200, 80), (200, 120), (0, 120)]
+    zig = []
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        n = max(1, int(math.hypot(x1 - x0, y1 - y0) // 5))
+        zig += [[2.1 + (x0 + (x1 - x0) * k / n) / kx, 41.9 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
+    assert g.smooth_window(zig, 0, len(zig) - 1)
+
