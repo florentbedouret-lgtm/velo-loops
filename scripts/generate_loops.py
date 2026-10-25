@@ -2237,6 +2237,18 @@ DETAILS = ["road_class", "surface", "urban_density", "bike_network", "bike_road_
 # celles de qualité 1 à 13 % seulement. Sans revêtement noté, on compte donc comme non goudronnés : les pistes (track) de
 # qualité autre que 1, et les sentiers (path, footway, bridleway) hors de la ville. Même règle que road_surface.json.
 PROBABLE_UNPAVED_PATHS = {"path", "footway", "bridleway"}
+# TRACK_GRADE (Florent, 25/10/2026, vérification sur le terrain de 10 pistes grade2 notées goudronnées dans OSM et
+# empruntées par des boucles : 6 sont en fait non goudronnées, dont 4 des 5 notées en béton ; Camí de la Pleta, Camí de
+# Sant Marçal de Montseny…) : une piste (track) de catégorie grade2 à grade5 compte comme probablement non goudronnée
+# quel que soit le revêtement noté, et GraphHopper l'évite (TRACK_GRADE_PRIORITY). False : comme avant.
+TRACK_GRADE = False
+TRACK_GRADE_PRIORITY = [{"if": "road_class == TRACK && (track_type == GRADE2 || track_type == GRADE3 || "
+                               "track_type == GRADE4 || track_type == GRADE5)", "multiply_by": "0.3"}]
+
+
+def track_grade() -> bool:
+    """Pistes grade2 et plus comptées non goudronnées (TRACK_GRADE), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "track_grade", TRACK_GRADE))
 
 
 # --------------------------------------------------------------------------- géométrie
@@ -3240,9 +3252,10 @@ class GraphHopper:
         import copy
         if scenic_areas() and body.get("profile") in SCENIC_PROFILES:   # zones agréables (SCENIC_AREAS)
             body = {**body, "profile": body["profile"] + "_scenic"}
-        if small_model():                                    # petites routes (SMALL_MODEL)
+        if small_model() or track_grade():                   # petites routes (SMALL_MODEL), pistes grade2+ (TRACK_GRADE)
             cm = dict(body.get("custom_model") or {})
-            cm["priority"] = list(cm.get("priority") or []) + SMALL_MODEL_PRIORITY
+            cm["priority"] = (list(cm.get("priority") or []) + (SMALL_MODEL_PRIORITY if small_model() else [])
+                              + (TRACK_GRADE_PRIORITY if track_grade() else []))
             body = {**body, "custom_model": cm, "ch.disable": True}
         key = json.dumps(body, sort_keys=True)
         self.calls += 1
@@ -3401,6 +3414,8 @@ def unpaved_edges(det, n) -> list:
     for i in range(n):
         if sf[i] in UNPAVED:
             out.append("u")
+        elif track_grade() and rc[i] == "track" and tt[i] in ("grade2", "grade3", "grade4", "grade5"):
+            out.append("p")                                  # revêtement noté douteux sur une piste grade2+ (TRACK_GRADE)
         elif sf[i] in (None, "missing") and ((rc[i] == "track" and tt[i] != "grade1")
                                               or (rc[i] in PROBABLE_UNPAVED_PATHS and ud[i] == "rural")):
             out.append("p")
