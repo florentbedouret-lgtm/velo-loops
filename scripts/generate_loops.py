@@ -624,6 +624,26 @@ def backtrack_long() -> bool:
     return bool(getattr(_TL, "backtrack_long", BACKTRACK_LONG))
 
 
+# AR_SUM (26/10/2026, 4e comparaison, Ripoll 6 h Sportif : deux allers-retours « relief » de 25 et 11 km, 20 % du
+# parcours repassé ; Florent préfère la version qui « a davantage l'air d'une boucle ») : la part des allers-retours utiles
+# compte en cumulé, au-delà de AR_SUM_SHARE (comme BACKTRACK_LONG) ; les lieux remarquables n'y comptent pas (Sant Miquel
+# de Fai « vaut vraiment le coup »). False : comme avant. Hors de l'empreinte tant qu'elle est éteinte.
+AR_SUM = False
+AR_SUM_SHARE = 0.15
+
+
+def ar_sum() -> bool:
+    """Allers-retours utiles en cumulé (AR_SUM), réglable par fil d'exécution."""
+    return bool(getattr(_TL, "ar_sum", AR_SUM))
+
+
+def ar_sum_share(l) -> float:
+    """Part du parcours en allers-retours utiles, hors lieux remarquables (AR_SUM)."""
+    if not l.distance_m:
+        return 0.0
+    return sum(b["m"] for b in (getattr(l, "backtracks", None) or []) if b.get("why") != "lieu") / l.distance_m
+
+
 def long_backtrack(l):
     """Le plus long aller-retour utile de la boucle s'il dépasse BACKTRACK_LONG_SHARE du parcours : (part, aller-retour),
     sinon None."""
@@ -1088,6 +1108,8 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                 t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
                 ok = (t is not None and time_ok(t.time_s, duration_h) and overlap_ok(t) and t.u_turns <= MAX_UTURNS
                       and dirt_ok(t) and relief_ok(t) and len(defect_windows(t)) <= len(defect_windows(best))
+                      # pas par une grande route (26/10/2026 : le raccourci « sport » prenait les grands axes)
+                      and t.shares["main_roads"] <= best.shares["main_roads"] + 0.01
                       and t.score >= best.score + 100 * SHORTCUT_GAIN
                       and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
                 if stats is not None:
@@ -1623,7 +1645,10 @@ SMALL_MODEL = False
 SMALL_MODEL_PRIORITY = [
     {"if": "urban_density == RURAL && (road_class == UNCLASSIFIED || road_class == TERTIARY || "
            "(road_class == TRACK && surface == ASPHALT))", "multiply_by": "1.5"},
-    {"else_if": "urban_density == RURAL && road_class == PRIMARY", "multiply_by": "1.6"},
+    # 1,6 -> 1,4 (26/10/2026, 4e comparaison : Sant Martí 3 h, Cornellà 3 h perdues avec 20 % de grands axes au lieu de
+    # 0 à 7 %) : une grande route en nature passe devant la ville (0,35 x 1,4 = 0,49 contre 0,45), jamais devant une
+    # petite route (Florent : petite route en nature, puis grande route en nature, puis la ville)
+    {"else_if": "urban_density == RURAL && road_class == PRIMARY", "multiply_by": "1.4"},
 ]
 WATER_HUG = False
 # (25/10/2026) Le Passeig Marítim de la Barceloneta, au bord de la mer, est une rue piétonne ouverte aux vélos (OSM
@@ -3926,6 +3951,8 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
         lb = long_backtrack(l)
         if lb is not None:
             total -= min(BACKTRACK_LONG_MAX, BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER * (lb[0] - BACKTRACK_LONG_SHARE))
+        elif ar_sum() and ar_sum_share(l) > AR_SUM_SHARE:   # plusieurs allers-retours : en cumulé (AR_SUM)
+            total -= min(BACKTRACK_LONG_MAX, BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER * (ar_sum_share(l) - AR_SUM_SHARE))
     if getattr(l, "appendices", None):                    # petite boucle accrochée sans but : 3 points, une seule fois
         total -= APPENDIX_PENALTY
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
