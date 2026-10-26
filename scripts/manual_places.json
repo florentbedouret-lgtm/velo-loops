@@ -1,0 +1,6 @@
+{
+ "_note": "Destinations de demi-tour ajoutées à la main, absentes d'OSM (DEST_HERITAGE : comptées comme monastère, château ou bien patrimonial). « point » [lon, lat] : l'endroit où faire demi-tour à vélo. Source : Florent (connaissance du terrain), jamais Google.",
+ "places": [
+  {"name": "Monestir de Sant Benet de Montserrat", "point": [1.8269726, 41.6093603], "source": "Florent, 26/10/2026 (Monistrol 1 h 30 : faire demi-tour au monastère plutôt qu'en pleine route de Montserrat)"}
+ ]
+}

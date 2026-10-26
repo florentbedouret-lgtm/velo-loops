@@ -2908,6 +2908,12 @@ def load_pois(pbf: Path, workdir: Path):
                 name = e.get("point_name") or e["label"]          # ex. « Coll de Pal » plutôt que le sommet voisin
                 kinds["lieu"].append((Point(e["point"][0], e["point"][1]), name))
                 LIEU_FAME[name] = e.get("sitelinks", 0)
+    try:                                                     # destinations ajoutées à la main (absentes d'OSM)
+        from shapely.geometry import Point
+        for e in json.loads((Path(__file__).parent / "manual_places.json").read_text(encoding="utf-8"))["places"]:
+            kinds["patrimoine"].append((Point(e["point"][0], e["point"][1]), e["name"]))
+    except (OSError, ValueError, KeyError):
+        pass
     print("Points d'intérêt : " + ", ".join(f"{k} {len(v)}" for k, v in kinds.items()), flush=True)
     return {k: (STRtree([g for g, _ in v]), v) for k, v in kinds.items() if v}
 
@@ -5838,6 +5844,9 @@ def params_hash(config_dir: str = "config") -> str:
     rp = Path(__file__).parent / "remarkable_places.json"   # liste des lieux (points d'accès) : change les boucles aussi
     if rp.exists():
         h.update(rp.read_bytes())
+    mp = Path(__file__).parent / "manual_places.json"     # destinations à la main : comptent seulement avec DEST_HERITAGE
+    if DEST_HERITAGE and mp.exists():
+        h.update(mp.read_bytes())
     cfg = Path(config_dir)
     if cfg.exists():
         for f in sorted(cfg.rglob("*")):
