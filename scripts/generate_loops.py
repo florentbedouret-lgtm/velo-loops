@@ -1047,6 +1047,13 @@ SHORTCUT_TOP = 4
 SHORTCUT_GAIN = 0.003
 SHORTCUT_END_M = 300.0
 SHORTCUT_SAME_DIR_DEG = 45.0    # même direction avant de quitter la route et après l'avoir retrouvée (pas un virage)
+# 2e version (26/10/2026, 4e comparaison : crochets hors de la Diagonal vers la Monumental et le Parc Diagonal Mar,
+# sous-boucle à Sant Cugat, Avinguda del Mar) : ces crochets étaient vus, mais classés 7e à 10e derrière les longues
+# routes sinueuses de Collserola, et seuls les 4 premiers coudes étaient essayés. Maintenant : d'abord les crochets qui
+# quittent une route pour la reprendre (même osm_way_id), puis les coudes en ville, puis les autres ; pour chaque départ,
+# le plus court coude qui reprend la même direction en ligne droite ; SHORTCUT_WINDOWS coudes essayés par tour.
+SHORTCUT_WINDOWS = 8
+SHORTCUT_HOOK_EXCESS_M = 150.0
 
 
 def shortcut() -> bool:
@@ -1054,38 +1061,58 @@ def shortcut() -> bool:
     return bool(getattr(_TL, "shortcut", SHORTCUT))
 
 
-def bend_windows(coords) -> list:
-    """Coudes d'une boucle (voir SHORTCUT) : [(a, b)] indices, le plus grand surplus d'abord, sans chevauchement."""
-    idx, cum = [0], [0.0]
-    for i in range(1, len(coords)):
-        d = haversine(coords[idx[-1]][0], coords[idx[-1]][1], coords[i][0], coords[i][1])
-        if d >= 25.0:
-            idx.append(i)
-            cum.append(cum[-1] + d)
-    total = cum[-1]
+def bend_windows(coords, ways=None, urban=None) -> list:
+    """Coudes d'une boucle (voir SHORTCUT) : [(a, b)] indices, sans chevauchement ; d'abord les crochets (quitter une
+    route pour la reprendre, même osm_way_id), puis ceux en ville, puis les plus tordus (chemin
+    rapporté à la ligne droite). ways, urban : une valeur
+    par tronçon (facultatifs)."""
+    cuma = [0.0]
+    for p, q in zip(coords, coords[1:]):
+        cuma.append(cuma[-1] + haversine(p[0], p[1], q[0], q[1]))
+    total = cuma[-1]
+    town = lambda a, b: bool(urban) and sum(1 for u in urban[a:b] if u) >= 0.5 * max(1, b - a)  # noqa: E731
+    ang = lambda x, y: abs((x - y + 180) % 360 - 180)  # noqa: E731
     cands = []
+    idx = [0]
+    for i in range(1, len(coords)):
+        if cuma[i] - cuma[idx[-1]] >= 25.0:
+            idx.append(i)
     for p in range(len(idx)):
-        if cum[p] < SHORTCUT_END_M:
+        if cuma[idx[p]] < SHORTCUT_END_M:
             continue
-        best = None
         for q in range(p + 1, len(idx)):
-            L = cum[q] - cum[p]
-            if L > SHORTCUT_MAX_M or total - cum[q] < SHORTCUT_END_M:
+            L = cuma[idx[q]] - cuma[idx[p]]
+            if L > SHORTCUT_MAX_M or total - cuma[idx[q]] < SHORTCUT_END_M:
                 break
             if L < SHORTCUT_MIN_M:
                 continue
             D = haversine(coords[idx[p]][0], coords[idx[p]][1], coords[idx[q]][0], coords[idx[q]][1])
-            if L - D >= SHORTCUT_EXCESS_M and L >= SHORTCUT_RATIO * D and (best is None or L - D > best[0]):
-                p0 = max(0, next((k for k in range(p, -1, -1) if cum[p] - cum[k] >= 100.0), 0))
-                q1 = next((k for k in range(q, len(idx)) if cum[k] - cum[q] >= 100.0), len(idx) - 1)
+            if L - D >= SHORTCUT_EXCESS_M and L >= SHORTCUT_RATIO * D:
+                p0 = max(0, next((k for k in range(p, -1, -1) if cuma[idx[p]] - cuma[idx[k]] >= 100.0), 0))
+                q1 = next((k for k in range(q, len(idx)) if cuma[idx[k]] - cuma[idx[q]] >= 100.0), len(idx) - 1)
                 h_in = bearing(coords[idx[p0]][0], coords[idx[p0]][1], coords[idx[p]][0], coords[idx[p]][1])
                 h_out = bearing(coords[idx[q]][0], coords[idx[q]][1], coords[idx[q1]][0], coords[idx[q1]][1])
-                if abs((h_out - h_in + 180) % 360 - 180) <= SHORTCUT_SAME_DIR_DEG:   # on reprend la même direction
-                    best = (L - D, idx[p], idx[q])
-        if best:
-            cands.append(best)
+                h_ch = bearing(coords[idx[p]][0], coords[idx[p]][1], coords[idx[q]][0], coords[idx[q]][1])
+                if (ang(h_out, h_in) <= SHORTCUT_SAME_DIR_DEG and ang(h_ch, h_in) <= SHORTCUT_SAME_DIR_DEG
+                        and ang(h_ch, h_out) <= SHORTCUT_SAME_DIR_DEG):   # on continue tout droit sur la même route
+                    cands.append((0, town(idx[p], idx[q]), L / max(D, 1.0), idx[p], idx[q]))
+                    break                                    # le plus court coude qui part d'ici
+    if ways:                                                 # quitter une route pour la reprendre plus loin
+        last: dict = {}
+        for e, w in enumerate(ways):
+            if w is None:
+                continue
+            i = last.get(w)
+            if i is not None and i < e - 1:
+                a, b = i + 1, e
+                L = cuma[b] - cuma[a]
+                D = haversine(coords[a][0], coords[a][1], coords[b][0], coords[b][1])
+                if (SHORTCUT_MIN_M <= L <= SHORTCUT_MAX_M and L - D >= SHORTCUT_HOOK_EXCESS_M
+                        and cuma[a] >= SHORTCUT_END_M and total - cuma[b] >= SHORTCUT_END_M):
+                    cands.append((1, town(a, b), L / max(D, 1.0), a, b))
+            last[w] = e
     out = []
-    for _, a, b in sorted(cands, reverse=True):
+    for *_, a, b in sorted(cands, reverse=True):          # le plus « crochet » d'abord (chemin / ligne droite)
         if all(b < a2 or a > b2 for a2, b2 in out):
             out.append((a, b))
     return out
@@ -1096,7 +1123,11 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
     best, stats = l, getattr(_TL, "clean_stats", None)
     for _ in range(SHORTCUT_TOP):
         det0 = getattr(best, "gh_details", None)
-        wins = bend_windows(best.coords)[:SHORTCUT_TOP] if det0 is not None else []
+        wins = []
+        if det0 is not None:
+            n_ = len(best.coords) - 1
+            urb_ = [u in ("city", "residential") for u in per_edge(det0.get("urban_density"), n_)]
+            wins = bend_windows(best.coords, per_edge(det0.get("osm_way_id"), n_), urb_)[:SHORTCUT_WINDOWS]
         gained = None
         for a, b in wins:
             c = best.coords
@@ -1126,6 +1157,118 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                 setattr(gained, attr, getattr(best, attr))
         best = gained
     return None if best is l else best
+
+
+def _cum(coords) -> list:
+    out = [0.0]
+    for p, q in zip(coords, coords[1:]):
+        out.append(out[-1] + haversine(p[0], p[1], q[0], q[1]))
+    return out
+
+
+def _keep_attrs(src, dst):
+    for attr in ("relief_fallback", "unpaved_fallback", "cleaned_from", "cleaned_kind"):
+        if getattr(src, attr, None):
+            setattr(dst, attr, getattr(src, attr))
+
+
+def village_via_loop(gh, l, level, duration_h, bounds=None):
+    """La boucle l passant par le centre des jolis villages tout proches (VILLAGE_VIA), ou None."""
+    if getattr(l, "gh_details", None) is None or not pretty_villages():
+        return None
+    best, stats = l, getattr(_TL, "clean_stats", None)
+    c0 = l.coords[::5]
+    near = []
+    for vx, vy, name, coast in pretty_villages():
+        if coast or name in (getattr(l, "villages", None) or []):
+            continue                                         # côtier : le long de la mer, pas par le centre
+        d = min(haversine(vx, vy, p[0], p[1]) for p in c0)
+        if d <= VILLAGE_VIA_NEAR_M:
+            near.append((d, vx, vy, name))
+    for _, vx, vy, name in sorted(near)[:VILLAGE_VIA_TOP]:
+        c, cum = best.coords, _cum(best.coords)
+        k = min(range(len(c)), key=lambda i: haversine(vx, vy, c[i][0], c[i][1]))
+        a = max((i for i in range(k + 1) if cum[k] - cum[i] >= VILLAGE_VIA_SIDE_M), default=0)
+        b = min((i for i in range(k, len(c)) if cum[i] - cum[k] >= VILLAGE_VIA_SIDE_M), default=len(c) - 1)
+        if cum[a] < SHORTCUT_END_M or cum[-1] - cum[b] < SHORTCUT_END_M:
+            continue
+        sub = gh.via([[c[a][0], c[a][1]], [vx, vy], [c[b][0], c[b][1]]], best.profile, pass_through=True)
+        if sub is None or len(sub["points"]["coordinates"]) < 2:
+            continue
+        path = splice_path({"points": {"coordinates": c}, "details": best.gh_details, "ascend": best.ascend_gh_m},
+                           a, b, sub)
+        t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
+        ok = (t is not None and name in (getattr(t, "villages", None) or []) and time_ok(t.time_s, duration_h)
+              and overlap_ok(t) and t.u_turns <= MAX_UTURNS and dirt_ok(t) and relief_ok(t)
+              and len(defect_windows(t)) <= len(defect_windows(best))
+              and t.shares["main_roads"] <= best.shares["main_roads"] + 0.01 and t.score >= best.score
+              and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+        if stats is not None:
+            k_ = "village " + ("ok" if ok else "refusé")
+            stats[k_] = stats.get(k_, 0) + 1
+        if ok:
+            _keep_attrs(best, t)
+            best = t
+    return None if best is l else best
+
+
+def pleasant_mask(l) -> list:
+    """Par tranche de 100 m : agréable ? (nature ou forêt, piste cyclable hors de la ville, bord de l'eau ; PLEASANT_AR)"""
+    import numpy as np
+    import shapely
+    cum = _cum(l.coords)
+    n = int(cum[-1] // 100) + 1
+    lc_ = ""
+    if l.scenery and (l.scenery.get("landcover") or {}).get("cls") is not None:
+        lc_ = landcover_seq(l.scenery["landcover"]["cls"])
+    road_, nz_ = l.road_seq or "", (l.scenery or {}).get("noisy")
+    water = [False] * n
+    if LANDSCAPE is not None:
+        pts = shapely.points(np.array(sample_points(l.coords, cum, 100.0)))
+        for key_, deg_ in (("sea", WATER_ALONG_SEA_DEG), ("river", WATER_HUG_DEG), ("water", WATER_HUG_DEG)):
+            tr_ = LANDSCAPE.trees.get(key_)
+            if tr_ is not None:
+                for i in np.unique(tr_.query(pts, predicate="dwithin", distance=deg_)[0]):
+                    if i < n:
+                        water[int(i)] = True
+    out = []
+    for k in range(n):
+        nice = (water[k] or (k < len(lc_) and lc_[k] in "ef")
+                or (k < len(road_) and road_[k] == "c" and (k >= len(lc_) or lc_[k] != "v")))
+        out.append(bool(nice and (water[k] or not (nz_ and k < len(nz_) and nz_[k]))))
+    return out
+
+
+def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
+    """Allers-retours par la moitié agréable de la boucle l (PLEASANT_AR) : [Loop]."""
+    stats = getattr(_TL, "clean_stats", None)
+    mask = pleasant_mask(l)
+    c, cum = l.coords, _cum(l.coords)
+    if len(mask) < 10:
+        return []
+    t_ = max(range(len(c)), key=lambda i: haversine(c[0][0], c[0][1], c[i][0], c[i][1]))
+    kT = min(len(mask) - 1, int(cum[t_] // 100))
+    share = lambda ks: sum(1 for k in ks if mask[k]) / max(1, len(ks))  # noqa: E731
+    p_all, out = share(range(len(mask))), []
+    for half, ks in (("aller", range(0, kT)), ("retour", range(kT, len(mask)))):
+        p = share(ks)
+        if p < PLEASANT_AR_MIN or p - p_all < PLEASANT_AR_GAP:
+            continue
+        seg = c[:t_ + 1] if half == "aller" else c[t_:][::-1]
+        sc = _cum(seg)
+        seg = seg[:next((i for i, m in enumerate(sc) if m >= cum[-1] / 2.0), len(seg) - 1) + 1]   # même durée
+        way = [w[:2] for w in route_waypoints(seg, step_m=500.0)]
+        path = gh.via(way + way[-2::-1], l.profile, pass_through=True)
+        t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+        ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
+              and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+        if stats is not None:
+            k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
+            stats[k_] = stats.get(k_, 0) + 1
+        if ok:
+            _keep_attrs(l, t)
+            out.append(t)
+    return out
 
 
 def clean_loop(gh, l, level, duration_h, bounds=None):
@@ -1672,6 +1815,12 @@ LOOP_SHAPE_END_M = 2000.0
 LOOP_SHAPE_TURNS_FREE = 1.5     # virages marqués (60° et plus, tous les 50 m) par km au-delà desquels on pénalise
 LOOP_SHAPE_TURNS_PER = 0.01
 LOOP_SHAPE_TURNS_MAX = 0.05
+# sous-boucles (26/10/2026, 4e comparaison : Horta 3 h et Cornellà 3 h repassent au même carrefour de Sant Cugat après
+# une boucle de 7 km, « éviter de repasser au même endroit et ainsi conserver un aspect de boucle ») : LOOP_SHAPE_SUB par
+# sous-boucle d'au moins LOOP_SHAPE_SUB_MIN_M (les petites sont des boucles accrochées), au plus LOOP_SHAPE_SUB_MAX
+LOOP_SHAPE_SUB = 0.03
+LOOP_SHAPE_SUB_MIN_M = 1500.0
+LOOP_SHAPE_SUB_MAX = 0.06
 # VILLAGE_PLUS (Florent, 24/10/2026, 92 villages retenus sur une liste proposée par les données ouvertes : lectures de la
 # page Wikipédia et densité de restaurants et cafés) : un joli village n'est pas un but (« passer dans un village à vélo
 # est très rapide »), mais y passer est un plus : par son centre ancien (à moins de VILLAGE_CORE_M du point OSM du
@@ -1684,6 +1833,32 @@ VILLAGE_SEA_M = 1000.0          # village côtier : passage le long de la mer à
 VILLAGE_PER = 0.02
 VILLAGE_MAX = 0.06
 _PRETTY: list = []
+# VILLAGE_VIA (26/10/2026, 4e comparaison, Ripoll 6 h : la boucle passe à côté de la Pobla de Lillet, Castellar de n'Hug,
+# Planoles, Fornells de la Muntanya « mais ne passe dans le casco antiguo d'aucun d'entre eux ») : pour les options
+# choisies, chaque joli village (non côtier) à moins de VILLAGE_VIA_NEAR_M de la boucle sans y passer est essayé : la
+# boucle quitte son tracé VILLAGE_VIA_SIDE_M avant le point le plus proche, passe par le centre du village et reprend son
+# tracé VILLAGE_VIA_SIDE_M après ; gardé si la boucle note au moins aussi bien (bonus village compris). False : comme avant.
+VILLAGE_VIA = False
+VILLAGE_VIA_NEAR_M = 2000.0
+VILLAGE_VIA_SIDE_M = 1000.0
+VILLAGE_VIA_TOP = 3
+# PLEASANT_AR (26/10/2026, 4e comparaison, Ciutat Vella 3 h : « un des cas où il serait plus sympa de repasser en bord
+# de mer à l'aller comme au retour plutôt que de faire un chemin différent en ville » ; « valable pour le bord de mer mais
+# aussi pour toute route particulièrement agréable : nature, piste du Besòs », Florent) : quand une moitié de la boucle
+# choisie (jusqu'au point le plus loin du départ) est agréable (au moins PLEASANT_AR_MIN de nature, forêt, piste cyclable
+# hors de la ville ou bord de l'eau) et nettement plus que l'ensemble (PLEASANT_AR_GAP), l'aller-retour par cette moitié
+# est ajouté aux candidates ; la note départage. False : comme avant.
+PLEASANT_AR = False
+PLEASANT_AR_MIN = 0.6
+PLEASANT_AR_GAP = 0.15
+
+
+def village_via() -> bool:
+    return _flag("village_via", VILLAGE_VIA)
+
+
+def pleasant_ar() -> bool:
+    return _flag("pleasant_ar", PLEASANT_AR)
 
 
 def village_plus() -> bool:
@@ -1728,6 +1903,36 @@ def towns_pen() -> bool:
 
 def loop_shape() -> bool:
     return _flag("loop_shape", LOOP_SHAPE)
+
+
+def sub_loops(coords, cum) -> int:
+    """Sous-boucles (LOOP_SHAPE) : la boucle repasse à moins de 25 m d'un point déjà parcouru, au moins
+    LOOP_SHAPE_SUB_MIN_M plus tôt (et au plus la moitié du parcours), sans ensuite suivre le même chemin (sinon c'est de
+    la répétition, déjà comptée), hors des LOOP_SHAPE_END_M du départ et de l'arrivée."""
+    total = cum[-1]
+    pts = sample_points(coords, cum, 20.0)
+    cell = 0.0005
+    grid: dict = {}
+
+    def near(k, r):
+        gx, gy = int(pts[k][0] / cell), int(pts[k][1] / cell)
+        return [j for dx in (-1, 0, 1) for dy in (-1, 0, 1) for j in grid.get((gx + dx, gy + dy), [])
+                if haversine(pts[k][0], pts[k][1], pts[j][0], pts[j][1]) < r]
+    count, skip_to = 0, -1
+    for k in range(len(pts)):
+        d = 20.0 * k
+        if skip_to < k and LOOP_SHAPE_END_M <= d <= total - LOOP_SHAPE_END_M:
+            js = [j for j in near(k, 25.0) if LOOP_SHAPE_SUB_MIN_M <= 20.0 * (k - j) <= total / 2
+                  and 20.0 * j >= LOOP_SHAPE_END_M]
+            if js:
+                j = min(js)
+                follow = sum(1 for m in range(1, 9) if k + m < len(pts)
+                             and any(abs(x - j) <= 12 for x in near(k + m, 30.0)))
+                if follow < 5:                                   # se croise et repart ailleurs : une sous-boucle
+                    count += 1
+                    skip_to = k + 50                             # pas deux fois le même carrefour
+        grid.setdefault((int(pts[k][0] / cell), int(pts[k][1] / cell)), []).append(k)
+    return count
 
 
 def shape_measures(coords, cum) -> tuple:
@@ -3854,6 +4059,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                 loop.villages.append(vname)
     if loop_shape():                                         # vraie boucle, claire (LOOP_SHAPE)
         loop.ends_cross, loop.turns_km = shape_measures(coords, cum)
+        loop.sub_loops = sub_loops(coords, cum)
     loop.rep_plain = 0.0                                     # répétition sur routes ordinaires (REPEAT_PLAIN)
     if repeat_plain() or flow_v2():                          # FLOW_V2 aussi : seule la répétition ordinaire est pesée 3 fois
         lc_ = ""
@@ -3970,6 +4176,7 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     if towns_pen():                                       # traversées de villes au milieu de la boucle (TOWNS_PEN)
         total -= min(TOWNS_PEN_MAX, TOWNS_PEN_PER_KM * getattr(l, "towns_km", 0.0))
     if loop_shape():                                      # vraie boucle, claire (LOOP_SHAPE)
+        total -= min(LOOP_SHAPE_SUB_MAX, LOOP_SHAPE_SUB * getattr(l, "sub_loops", 0))   # sous-boucles (26/10/2026)
         if getattr(l, "ends_cross", False):
             total -= LOOP_SHAPE_CROSS
         total -= min(LOOP_SHAPE_TURNS_MAX, LOOP_SHAPE_TURNS_PER * max(0.0, getattr(l, "turns_km", 0.0)
@@ -5449,6 +5656,17 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
         for _, l in pick_options(pool, prior):
             t = shortcut_loop(gh, l, level, duration_h, bounds)
             log(f"    tout droit : note {l.score:.1f} -> " + ("inchangée" if t is None else f"{t.score:.1f}"))
+            if t is not None:
+                pool = [t if x is l else x for x in pool]
+    if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)
+        extra = [t for _, l in pick_options(pool, prior) for t in pleasant_ar_candidates(gh, l, level, duration_h, bounds)]
+        log(f"    aller-retour agréable : {len(extra)} candidate(s)")
+        pool = list(pool) + extra
+    if village_via() and village_plus() and pool:            # par le centre des jolis villages (VILLAGE_VIA)
+        pool = list(pool)
+        for _, l in pick_options(pool, prior):
+            t = village_via_loop(gh, l, level, duration_h, bounds)
+            log(f"    villages : note {l.score:.1f} -> " + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     picks = pick_options(pool, prior)

@@ -41,7 +41,8 @@ def test_reglages_v17():
     assert g.BACKTRACK_LONG is True                    # longs allers-retours annoncés, en essai
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
-    for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM"):
+    for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
+               "VILLAGE_VIA", "PLEASANT_AR"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -780,4 +781,53 @@ def test_smooth_window_switchbacks():
         n = max(1, int(math.hypot(x1 - x0, y1 - y0) // 5))
         zig += [[2.1 + (x0 + (x1 - x0) * k / n) / kx, 41.9 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
     assert g.smooth_window(zig, 0, len(zig) - 1)
+
+
+def test_bend_windows_same_road_hook():
+    """Crochet hors de la route A puis retour sur A (SHORTCUT, 2e version, la Diagonal) : vu en premier grâce à
+    osm_way_id."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.4))
+
+    def path(pts, step=10.0):
+        out = []
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            n = max(1, int(math.hypot(x1 - x0, y1 - y0) // step))
+            out += [[2.1 + (x0 + (x1 - x0) * k / n) / kx, 41.4 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
+        out.append([2.1 + pts[-1][0] / kx, 41.4 + pts[-1][1] / 110540.0])
+        return out
+    hook = path([(0, 0), (2000, 0), (2000, -250), (2300, -250), (2300, 0), (6000, 0), (6000, 6000), (0, 6000), (0, 0)])
+    ways = []
+    for p in hook[:-1]:
+        x, y = (p[0] - 2.1) * kx, (p[1] - 41.4) * 110540.0
+        ways.append("B" if (y < -1 or (1999 < x < 2301 and y < 1)) else "A")
+    wins = g.bend_windows(hook, ways)
+    assert wins and abs((hook[wins[0][0]][0] - 2.1) * kx - 2000) < 30
+
+
+def test_sub_loops():
+    """Sous-boucle (LOOP_SHAPE, 26/10/2026, Sant Cugat) : la boucle repasse au même carrefour après un tour ; un carré
+    non."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.4))
+
+    def path(pts, step=20.0):
+        out = []
+        for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+            n = max(1, int(math.hypot(x1 - x0, y1 - y0) // step))
+            out += [[2.1 + (x0 + (x1 - x0) * k / n) / kx, 41.4 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
+        out.append([2.1 + pts[-1][0] / kx, 41.4 + pts[-1][1] / 110540.0])
+        return out
+
+    def cum(c):
+        r = [0.0]
+        for a, b in zip(c, c[1:]):
+            r.append(r[-1] + g.haversine(a[0], a[1], b[0], b[1]))
+        return r
+    square = path([(0, 0), (6000, 0), (6000, 6000), (0, 6000), (0, 0)])
+    assert g.sub_loops(square, cum(square)) == 0
+    # au carrefour (6000, 3000) : un tour vers l'est (sous-boucle), retour au carrefour par l'ouest, puis vers le nord
+    sub = path([(0, 0), (6000, 0), (6000, 3000), (7000, 3000), (7000, 2000), (5500, 2000), (5500, 3000), (6000, 3000),
+                (6000, 6000), (0, 6000), (0, 0)])
+    assert g.sub_loops(sub, cum(sub)) >= 1
 
