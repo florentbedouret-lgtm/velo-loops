@@ -693,6 +693,9 @@ def destination_tip(p) -> bool:
     return False
 
 
+MANUAL_PLACES: set = set()      # noms des destinations de scripts/manual_places.json (chargées avec les points d'intérêt)
+
+
 def extend_to_place(gh, l, level, duration_h) -> list:
     """La même boucle, ses allers-retours prolongés jusqu'au lieu remarquable tout proche qu'ils n'atteignent pas
     (TURN_RULES, cas de Montserrat)."""
@@ -710,8 +713,10 @@ def extend_to_place(gh, l, level, duration_h) -> list:
                 for k in tr.query(tip, predicate="dwithin",
                                   distance=(DEST_HERITAGE_EXTEND_M if heritage else TURN_EXTEND_M) / 111000.0)]
         if heritage:                                         # le plus proche du demi-tour (DEST_HERITAGE)
-            near.sort(key=lambda z: z[0])
-        for _, g_, name, n_ in [z for z in near if z[2] not in seen][:1]:   # un lieu par aller-retour (comme avant)
+            # les destinations de Florent d'abord, puis les deux plus proches (26/10/2026 : Monistrol 1 h 30, le demi-tour
+            # à 400 m du Monestir de Sant Benet n'était prolongé que vers le bien patrimonial le plus proche)
+            near.sort(key=lambda z: (z[2] not in MANUAL_PLACES, z[0]))
+        for _, g_, name, n_ in [z for z in near if z[2] not in seen][:2 if heritage else 1]:   # un lieu (comme avant)
             way = route_waypoints(l.coords)
             j = min(range(len(way)), key=lambda i: haversine(way[i][0], way[i][1], bt["lon"], bt["lat"]))
             way = way[:j + 1] + [[g_.x, g_.y]] + way[j:]    # du demi-tour au lieu, puis retour au même point
@@ -3117,6 +3122,7 @@ def load_pois(pbf: Path, workdir: Path):
         from shapely.geometry import Point
         for e in json.loads((Path(__file__).parent / "manual_places.json").read_text(encoding="utf-8"))["places"]:
             kinds["patrimoine"].append((Point(e["point"][0], e["point"][1]), e["name"]))
+            MANUAL_PLACES.add(e["name"])
     except (OSError, ValueError, KeyError):
         pass
     print("Points d'intérêt : " + ", ".join(f"{k} {len(v)}" for k, v in kinds.items()), flush=True)
