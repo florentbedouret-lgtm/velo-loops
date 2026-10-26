@@ -3993,7 +3993,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
     repeated = sum(rep_m)
-    loop.rep_mask = [m > 0 for m in rep_m] if repeat_fix() else None   # tronçons repassés (REPEAT_FIX)
+    rep_mask_ = [m > 0 for m in rep_m] if repeat_fix() else None   # tronçons repassés (REPEAT_FIX)
     rep_cycle = sum(m for i, m in enumerate(rep_m) if rc_rep[i] == "c")
     # mesure v16 gardée pour le filtre (10/10/2026, mesure combinée : 14 durées vidées en montagne, boucles à 24-54 % par
     # couloir mais 14-24 % en v16, sans autre boucle possible) : la mesure par couloir compte dans la note, jamais plus
@@ -4156,6 +4156,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.appendices = loop.appendices + appendix_spurs(loop, coords, cum, level, false_starts(coords, cum))
     loop.small_roads = small_m / total                       # part sur petites routes goudronnées (SMALL_ROADS)
     loop.gh_details = det                                    # détails GraphHopper, pour recoudre un morceau (CLEAN_PICKS)
+    loop.rep_mask = rep_mask_
     if water_hug() and LANDSCAPE is not None:              # au plus près de l'eau (WATER_HUG)
         import numpy as np
         import shapely
