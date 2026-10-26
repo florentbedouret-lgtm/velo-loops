@@ -42,7 +42,7 @@ def test_reglages_v17():
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
-               "VILLAGE_VIA", "PLEASANT_AR"):
+               "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "REPEAT_FIX"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -766,9 +766,9 @@ def test_bend_windows():
         return out
     straight = path([(0, 0), (5000, 0), (5000, 5000), (0, 5000), (0, 0)])
     hook = path([(0, 0), (2000, 0), (2000, 300), (2400, 300), (2400, 0), (5000, 0), (5000, 5000), (0, 5000), (0, 0)])
-    assert not [w for w in g.bend_windows(straight) if w[1] - w[0] < len(straight) // 6]
+    assert not [w for w in g.bend_windows(straight) if w[1] - w[0] < len(straight) // 6]   # (a, b, tout droit)
     wins = g.bend_windows(hook)
-    assert any(abs(hook[a][0] - (2.0 + 2000 / kx)) < 200 / kx for a, _ in wins)
+    assert any(abs(hook[a][0] - (2.0 + 2000 / kx)) < 200 / kx for a, *_ in wins)
 
 
 def test_smooth_window_switchbacks():

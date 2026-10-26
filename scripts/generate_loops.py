@@ -641,13 +641,14 @@ def ar_sum_share(l) -> float:
     """Part du parcours en allers-retours utiles, hors lieux remarquables (AR_SUM)."""
     if not l.distance_m:
         return 0.0
-    return sum(b["m"] for b in (getattr(l, "backtracks", None) or []) if b.get("why") != "lieu") / l.distance_m
+    return sum(b["m"] for b in (getattr(l, "backtracks", None) or [])
+               if b.get("why") != "lieu" and not b.get("water")) / l.distance_m
 
 
 def long_backtrack(l):
     """Le plus long aller-retour utile de la boucle s'il dépasse BACKTRACK_LONG_SHARE du parcours : (part, aller-retour),
     sinon None."""
-    bts = getattr(l, "backtracks", None) or []
+    bts = [b for b in (getattr(l, "backtracks", None) or []) if not b.get("water")]   # le long de l'eau : WATER_AR
     if not bts or not l.distance_m:
         return None
     b = max(bts, key=lambda x: x["m"])
@@ -1059,6 +1060,12 @@ SHORTCUT_SAME_DIR_DEG = 45.0    # même direction avant de quitter la route et a
 # le plus court coude qui reprend la même direction en ligne droite ; SHORTCUT_WINDOWS coudes essayés par tour.
 SHORTCUT_WINDOWS = 8
 SHORTCUT_HOOK_EXCESS_M = 150.0
+# 3e version (26/10/2026, 5e comparaison : la Bonanova au lieu de rester sur Via Augusta, Carrer del Llobregós, Avinguda
+# Prat de la Riba, Carrer de Ramon Llull, Montcada ; « il faut une vraie raison de quitter cette route ») : un crochet
+# (même route quittée puis reprise, jusqu'à SHORTCUT_HOOK_MAX_M) ou un coude en ville est redressé même si la note baisse
+# un peu (au plus SHORTCUT_TOWN_SLACK) : une rue un peu plus calme n'est pas une vraie raison ; ailleurs, comme avant.
+SHORTCUT_HOOK_MAX_M = 5000.0
+SHORTCUT_TOWN_SLACK = 0.02
 
 
 def shortcut() -> bool:
@@ -1112,14 +1119,14 @@ def bend_windows(coords, ways=None, urban=None) -> list:
                 a, b = i + 1, e
                 L = cuma[b] - cuma[a]
                 D = haversine(coords[a][0], coords[a][1], coords[b][0], coords[b][1])
-                if (SHORTCUT_MIN_M <= L <= SHORTCUT_MAX_M and L - D >= SHORTCUT_HOOK_EXCESS_M
+                if (SHORTCUT_MIN_M <= L <= SHORTCUT_HOOK_MAX_M and L - D >= SHORTCUT_HOOK_EXCESS_M
                         and cuma[a] >= SHORTCUT_END_M and total - cuma[b] >= SHORTCUT_END_M):
                     cands.append((1, town(a, b), L / max(D, 1.0), a, b))
             last[w] = e
     out = []
-    for *_, a, b in sorted(cands, reverse=True):          # le plus « crochet » d'abord (chemin / ligne droite)
-        if all(b < a2 or a > b2 for a2, b2 in out):
-            out.append((a, b))
+    for hook_, town_, _, a, b in sorted(cands, reverse=True):   # le plus « crochet » d'abord (chemin / ligne droite)
+        if all(b < a2 or a > b2 for a2, b2, _ in out):
+            out.append((a, b, bool(hook_ or town_)))
     return out
 
 
@@ -1134,8 +1141,9 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
             urb_ = [u in ("city", "residential") for u in per_edge(det0.get("urban_density"), n_)]
             wins = bend_windows(best.coords, per_edge(det0.get("osm_way_id"), n_), urb_)[:SHORTCUT_WINDOWS]
         gained = None
-        for a, b in wins:
+        for a, b, straight_ in wins:
             c = best.coords
+            gain_ = -SHORTCUT_TOWN_SLACK if straight_ else SHORTCUT_GAIN   # crochet ou ville : tout droit (3e version)
             for prof in dict.fromkeys([best.profile, "sport"]):
                 sub = gh.via([[c[a][0], c[a][1]], [c[b][0], c[b][1]]], prof)
                 if sub is None or len(sub["points"]["coordinates"]) < 2:
@@ -1146,7 +1154,7 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                       and dirt_ok(t) and relief_ok(t) and len(defect_windows(t)) <= len(defect_windows(best))
                       # pas par une grande route (26/10/2026 : le raccourci « sport » prenait les grands axes)
                       and t.shares["main_roads"] <= best.shares["main_roads"] + 0.01
-                      and t.score >= best.score + 100 * SHORTCUT_GAIN
+                      and t.score >= best.score + 100 * gain_
                       and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
                 if stats is not None:
                     k_ = "raccourci " + ("ok" if ok else "refusé")
@@ -1274,6 +1282,98 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
             _keep_attrs(l, t)
             out.append(t)
     return out
+
+
+# REPEAT_FIX (26/10/2026, 5e comparaison : la répétition inutile dans Sant Cugat (Horta 3 h), l'Avinguda del Mar
+# (Castelldefels 1 h), Collbató 45 min « il faudrait éviter de repasser par les mêmes tronçons qui rendent la boucle moins
+# claire » ; 11 fois sur 12 Florent préfère la version qui repasse le moins) : pour les options choisies, chaque tronçon
+# repassé d'au moins REPEAT_FIX_MIN_M (hors bord de l'eau avec WATER_AR) est recalculé au second passage en évitant le
+# premier (zone de GOAL_AVOID_DEG, priorité GOAL_AVOID_PRIORITY : pénalisé, pas interdit), avec REPEAT_FIX_MARGIN_M de
+# chaque côté ; gardé si la répétition baisse et que la note ne baisse pas de plus de REPEAT_FIX_SLACK. False : comme avant.
+REPEAT_FIX = False
+REPEAT_FIX_MIN_M = 300.0
+REPEAT_FIX_MARGIN_M = 300.0
+REPEAT_FIX_TOP = 3
+REPEAT_FIX_SLACK = 0.01
+
+
+def repeat_fix() -> bool:
+    return _flag("repeat_fix", REPEAT_FIX)
+
+
+def repeat_runs(l) -> list:
+    """Tronçons repassés (second passage) d'au moins REPEAT_FIX_MIN_M : [(a, b)] indices, les plus longs d'abord."""
+    mask = getattr(l, "rep_mask", None)
+    if not mask:
+        return []
+    c, cum = l.coords, _cum(l.coords)
+    wclose = water_close(c, cum) if water_ar() else []
+    runs, i = [], 0
+    while i < len(mask):
+        if not mask[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(mask) and mask[j]:
+            j += 1
+        m = cum[min(j, len(cum) - 1)] - cum[i]
+        k = int(cum[(i + j) // 2] // 100)
+        if m >= REPEAT_FIX_MIN_M and not (k < len(wclose) and wclose[k]):
+            mid = c[(i + j) // 2]
+            if any(haversine(mid[0], mid[1], p[0], p[1]) < 40.0 for p in c[:i:3]):   # le second passage
+                runs.append((m, i, j))
+        i = j
+    return [(a, b) for _, a, b in sorted(runs, reverse=True)]
+
+
+def repeat_fix_loop(gh, l, level, duration_h, bounds=None):
+    """La boucle l sans ses tronçons repassés (REPEAT_FIX), ou None."""
+    import shapely
+    from shapely.geometry import LineString, mapping
+    best, stats = l, getattr(_TL, "clean_stats", None)
+    for _ in range(REPEAT_FIX_TOP):
+        runs = repeat_runs(best) if getattr(best, "gh_details", None) is not None else []
+        done = None
+        for a, b in runs[:REPEAT_FIX_TOP]:
+            c, cum = best.coords, _cum(best.coords)
+            a2 = max((i for i in range(a + 1) if cum[a] - cum[i] >= REPEAT_FIX_MARGIN_M), default=0)
+            b2 = min((i for i in range(b, len(c)) if cum[i] - cum[b] >= REPEAT_FIX_MARGIN_M), default=len(c) - 1)
+            if cum[a2] < SHORTCUT_END_M or cum[-1] - cum[b2] < SHORTCUT_END_M:
+                continue
+            kx = 111320.0 * math.cos(math.radians(c[a][1]))
+            free = 60.0 / kx
+            zone = (LineString([(p[0], p[1]) for p in c[a:b + 1]]).buffer(GOAL_AVOID_DEG)
+                    .difference(shapely.Point(c[a2][0], c[a2][1]).buffer(free))
+                    .difference(shapely.Point(c[b2][0], c[b2][1]).buffer(free)))
+            if zone.is_empty:
+                continue
+            cm = {"priority": [{"if": "in_deja", "multiply_by": str(GOAL_AVOID_PRIORITY)}],
+                  "areas": {"type": "FeatureCollection",
+                            "features": [{"type": "Feature", "id": "deja", "properties": {},
+                                          "geometry": mapping(zone.simplify(0.0002))}]}}
+            sub = gh.via([[c[a2][0], c[a2][1]], [c[b2][0], c[b2][1]]], best.profile, custom_model=cm)
+            if sub is None or len(sub["points"]["coordinates"]) < 2:
+                continue
+            path = splice_path({"points": {"coordinates": c}, "details": best.gh_details, "ascend": best.ascend_gh_m},
+                               a2, b2, sub)
+            t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
+            ok = (t is not None and t.overlap < best.overlap - 0.005 and time_ok(t.time_s, duration_h)
+                  and overlap_ok(t) and t.u_turns <= MAX_UTURNS and dirt_ok(t) and relief_ok(t)
+                  and len(defect_windows(t)) <= len(defect_windows(best))
+                  and t.shares["main_roads"] <= best.shares["main_roads"] + 0.01
+                  and t.score >= best.score - 100 * REPEAT_FIX_SLACK
+                  and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+            if stats is not None:
+                k_ = "répétition " + ("ok" if ok else "refusé")
+                stats[k_] = stats.get(k_, 0) + 1
+            if ok:
+                done = t
+                break
+        if done is None:
+            break
+        _keep_attrs(best, done)
+        best = done
+    return None if best is l else best
 
 
 def clean_loop(gh, l, level, duration_h, bounds=None):
@@ -1856,6 +1956,35 @@ VILLAGE_VIA_TOP = 3
 PLEASANT_AR = False
 PLEASANT_AR_MIN = 0.6
 PLEASANT_AR_GAP = 0.15
+# WATER_AR (26/10/2026, 5e comparaison : « le retour devrait longer la côte en reprenant la même route plutôt que de
+# chercher à l'éviter en passant par la ville. Cette remarque revient souvent », Florent ; Ciutat Vella 1 h 30 et 3 h,
+# Cornellà 1 h 30, Castelldefels 3 h). Les allers-retours au bord de l'eau fabriqués (PLEASANT_AR) ne gagnaient jamais :
+# la répétition, même agréable, coûtait toute la « fluidité » (18 points) et le long aller-retour jusqu'à 12 points.
+# Ici, la répétition le long de la mer (à WATER_ALONG_SEA_DEG), d'une rivière ou d'un lac (à WATER_HUG_DEG) est pesée
+# WATER_AR_WEIGHT fois dans la fluidité, et un aller-retour le long de l'eau n'est plus un « long aller-retour »
+# (BACKTRACK_LONG, AR_SUM). Une vraie boucle agréable garde l'avantage (pas de répétition du tout) ; un retour par la
+# ville perd en calme et en feux. La nature reste comme avant (FLOW_V2_NICE : Folgueroles, 3e comparaison).
+WATER_AR = False
+WATER_AR_WEIGHT = 0.5
+
+
+def water_ar() -> bool:
+    return _flag("water_ar", WATER_AR)
+
+
+def water_close(coords, cum, step=100.0) -> list:
+    """Par tranche de step m : au bord de la mer (WATER_ALONG_SEA_DEG), d'une rivière ou d'un lac (WATER_HUG_DEG) ?"""
+    if LANDSCAPE is None:
+        return []
+    import numpy as np
+    import shapely
+    pts = shapely.points(np.array(sample_points(coords, cum, step)))
+    close = np.zeros(len(pts), dtype=bool)
+    for key_, deg_ in (("sea", WATER_ALONG_SEA_DEG), ("river", WATER_HUG_DEG), ("water", WATER_HUG_DEG)):
+        tr_ = LANDSCAPE.trees.get(key_)
+        if tr_ is not None:
+            close[np.unique(tr_.query(pts, predicate="dwithin", distance=deg_)[0])] = True
+    return [bool(x) for x in close]
 
 
 def village_via() -> bool:
@@ -3864,6 +3993,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
     repeated = sum(rep_m)
+    loop.rep_mask = [m > 0 for m in rep_m] if repeat_fix() else None   # tronçons repassés (REPEAT_FIX)
     rep_cycle = sum(m for i, m in enumerate(rep_m) if rc_rep[i] == "c")
     # mesure v16 gardée pour le filtre (10/10/2026, mesure combinée : 14 durées vidées en montagne, boucles à 24-54 % par
     # couloir mais 14-24 % en v16, sans autre boucle possible) : la mesure par couloir compte dans la note, jamais plus
@@ -3984,7 +4114,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                 taken.append((a_, b_))
     loop.backtracks = [{"why": w, "m": round(cum[min(b_, len(cum) - 1)] - cum[a_]), "lat": round(coords[t][1], 5),
                         "lon": round(coords[t][0], 5), "km": round(cum[t] / 1000.0, 1),
-                        "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2)}
+                        "from_km": round(cum[a_] / 1000.0, 2), "to_km": round(cum[min(b_, len(cum) - 1)] / 1000.0, 2),
+                        **({"water": True} if water_ar() and along_water(coords, a_, b_) else {})}
                        for a_, b_, t, w in useful]
     loop.aimless_bt = (sum(1 for (a_, b_, t_, w_) in useful if w_ in ("nature", "piste")
                            and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
@@ -4073,6 +4204,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             lc_ = landcover_seq(loop.scenery["landcover"]["cls"])
         road_ = loop.road_seq or ""
         plain = 0.0
+        wclose_ = water_close(coords, cum) if water_ar() else []
+        w_plain = w_nice = 0.0                               # répétition au bord de l'eau (WATER_AR)
         for i, m in enumerate(rep_m):
             if m <= 0:
                 continue
@@ -4083,7 +4216,13 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                     and not (nz_ and k < len(nz_) and nz_[k]))
             if not nice:
                 plain += m
+            if k < len(wclose_) and wclose_[k]:
+                if nice:
+                    w_nice += m
+                else:
+                    w_plain += m
         loop.rep_plain = plain / total
+        loop.rep_water_plain, loop.rep_water_nice = w_plain / total, w_nice / total
     loop.score = score(loop)
     return loop
 
@@ -4105,6 +4244,10 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
                           + (((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0)
                               + (FLOW_V2_NICE - FLOW_OVERLAP_FACTOR) * max(0.0, l.overlap - getattr(l, "rep_plain", 0.0)))
                              if flow_v2() else 0.0)
+                          # au bord de l'eau : WATER_AR_WEIGHT au lieu de 3 (ordinaire) ou 2 (agréable) (WATER_AR)
+                          - (((FLOW_V2_FACTOR - WATER_AR_WEIGHT) * getattr(l, "rep_water_plain", 0.0)
+                              + (FLOW_V2_NICE - WATER_AR_WEIGHT) * getattr(l, "rep_water_nice", 0.0))
+                             if flow_v2() and water_ar() else 0.0)
                           + 0.15 * l.u_turns),
     }
     weights = dict(WEIGHTS)
@@ -5662,6 +5805,13 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
         for _, l in pick_options(pool, prior):
             t = shortcut_loop(gh, l, level, duration_h, bounds)
             log(f"    tout droit : note {l.score:.1f} -> " + ("inchangée" if t is None else f"{t.score:.1f}"))
+            if t is not None:
+                pool = [t if x is l else x for x in pool]
+    if repeat_fix() and pool:                                # sans les tronçons repassés (REPEAT_FIX)
+        pool = list(pool)
+        for _, l in pick_options(pool, prior):
+            t = repeat_fix_loop(gh, l, level, duration_h, bounds)
+            log(f"    répétition : {l.overlap:.0%} -> " + ("inchangée" if t is None else f"{t.overlap:.0%}, note {t.score:.1f}"))
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)

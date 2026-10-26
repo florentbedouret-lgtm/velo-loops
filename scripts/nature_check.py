@@ -462,7 +462,8 @@ def report_prev_check(results, out_json, out_md, t0, steps=("2000", "500", "300"
 
 TRIAL_FLAGS = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
                "detour_dest", "defect_strict", "flow_v2", "hairpins", "small_model", "water_hug", "dest_heritage",
-               "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "repeat_plain", "ar_sum", "village_via", "pleasant_ar")
+               "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "repeat_plain", "ar_sum", "village_via", "pleasant_ar",
+               "water_ar", "repeat_fix")
 
 
 def ablation(path, level, profile, d) -> dict:
@@ -664,6 +665,9 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                              "late": bool(getattr(l, "lights_late", False)),
                              "scenic": bool(getattr(l, "scenic_retouched", False)),
                              "seafront_km": round(getattr(l, "seafront_km", 0.0), 1),
+                             # pour les comparaisons (Florent, 26/10/2026 : % de ville, feux par km, % de nature…)
+                             "city": round(lc.get("city", 0), 3), "rep_plain": round(getattr(l, "rep_plain", 0.0), 3),
+                             "sub_loops": getattr(l, "sub_loops", 0), "villages": getattr(l, "villages", None) or [],
                              "motorway_km": round(getattr(l, "motorway_km", 0.0), 1),
                              "useful": o.get("backtracks", []), "retouched": bool(o.get("retouched")),
                              "shortened": bool(o.get("shortened")), "crossed": bool(o.get("crossed")),
@@ -762,7 +766,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         v191 = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
                 "detour_dest", "defect_strict", "flow_v2", "hairpins")
         flags = {"g_v191": v191,
-                 "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "ar_sum", "village_via", "pleasant_ar"),
+                 "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "ar_sum", "village_via", "pleasant_ar", "water_ar", "repeat_fix"),
                  "g_goal": ("goal_return",), "g_flow": ("flow_v2",), "g_small": ("small_roads",), "g_final": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
                              "spur_turn_window", "detour_dest", "defect_strict"),
                  "g_clean": ("clean_picks", "forced_detours"),
