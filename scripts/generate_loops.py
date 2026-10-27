@@ -1351,10 +1351,10 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         from shapely.geometry import LineString, mapping
         orig = {"points": {"coordinates": c}, "details": l.gh_details, "ascend": l.ascend_gh_m}
         if half == "aller":                                  # l'aller jusqu'à mi-durée, puis retour par le même chemin
-            cut = next((i for i in range(t_ + 1) if cum[i] >= cum[-1] / 2.0), t_)
+            cut = next((i for i in range(len(c)) if cum[i] >= cum[-1] / 2.0), t_)   # mi-durée (27/10 : trop court)
             corridor, ends = c[:cut + 1], [[c[cut][0], c[cut][1]], [c[-1][0], c[-1][1]]]
         else:                                                # le retour de la boucle, parcouru aussi à l'aller
-            cut = next((i for i in range(t_, len(c)) if cum[-1] - cum[i] <= cum[-1] / 2.0), t_)
+            cut = next((i for i in range(len(c)) if cum[-1] - cum[i] <= cum[-1] / 2.0), t_)
             corridor, ends = c[cut:], [[c[0][0], c[0][1]], [c[cut][0], c[cut][1]]]
         seg = corridor if half == "aller" else corridor[::-1]
         zone = LineString([(p_[0], p_[1]) for p_ in corridor]).buffer(PLEASANT_AR_CORRIDOR_DEG).simplify(0.0002)
@@ -1366,6 +1366,9 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         if leg is not None and len(leg["points"]["coordinates"]) > 1:
             path = splice_path(orig, cut, len(c) - 1, leg) if half == "aller" else splice_path(orig, 0, cut, leg)
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+        if t is not None and water_ar():                     # aller-retour agréable voulu : sa répétition est le but
+            t.pleasant_ar = True
+            t.score = score(t)
         ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
               and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
         why_ = ("" if ok else "sans itinéraire" if t is None else "durée" if not time_ok(t.time_s, duration_h)
@@ -4365,7 +4368,13 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         # 3e version (25/10/2026, 3e comparaison : Folgueroles 6 h, Monistrol 3 h, Sants-Montjuïc 1 h, la version qui
         # repasse le moins gagne ; une répétition « agréable » gratuite laissait un aller-retour de 16 km battre une vraie
         # boucle) : répétition agréable pesée FLOW_V2_NICE fois, ordinaire FLOW_V2_FACTOR fois.
-        "flow": 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
+        # aller-retour agréable fabriqué (PLEASANT_AR + WATER_AR, 27/10/2026 : même avec la répétition au bord de l'eau
+        # pesée 0,5, l'accès en ville repassé, pesé 3 fois, mettait la fluidité à 0 ; Florent : « le retour devrait longer
+        # la côte en reprenant la même route plutôt que de passer par la ville ») : la répétition n'y coûte rien, seuls
+        # le calme, les feux, les grands axes et le paysage départagent ; il n'est fabriqué que si sa moitié est nettement
+        # plus agréable que la boucle
+        "flow": (1.0 - min(1.0, 0.15 * l.u_turns)) if getattr(l, "pleasant_ar", False) else
+                1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
                           + (((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0)
                               + (FLOW_V2_NICE - FLOW_OVERLAP_FACTOR) * max(0.0, l.overlap - getattr(l, "rep_plain", 0.0)))
                              if flow_v2() else 0.0)
