@@ -1,0 +1,16 @@
+{
+ "_note": "Monistrol de Montserrat, modéré, 1 h 30 : la boucle idéale décrite par Florent (5e comparaison, 26/10/2026) : le Passeig de la Canaleta, el Pont Vell, puis demi-tour au Monestir de Sant Benet. Points de passage seulement. Utilisées par nature_check.py --compare-refs.",
+ "start": "monistrol-de-montserrat",
+ "loops": [
+  {
+   "name": "Canaleta, Pont Vell, demi-tour à Sant Benet",
+   "source": "Florent, 26/10/2026",
+   "waypoints": [[1.8444, 41.60991], [1.85663, 41.64045], [1.8444, 41.60991], [1.8269726, 41.6093603]]
+  },
+  {
+   "name": "Canaleta, Pont Vell, Sant Benet (retour par l'autre rive si possible)",
+   "source": "Florent, 26/10/2026",
+   "waypoints": [[1.8444, 41.60991], [1.85663, 41.64045], [1.8269726, 41.6093603]]
+  }
+ ]
+}

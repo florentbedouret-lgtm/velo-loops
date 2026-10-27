@@ -181,7 +181,8 @@ def summary(loop):
             # relief (14/10/2026) : m/km et pénalité au-dessus de la cible de l'allure (RELIEF_LIMITS), en points
             "dpk": round(loop.dplus_per_km, 1), "relief_pen": relief_pen(loop),
             "detours": len(getattr(loop, "detours", []) or []), "remarkable": len(loop.remarkable or []),
-            "views": loop.views_passed}
+            "views": loop.views_passed,
+            **({"detail": g.score_detail(loop)} if hasattr(g, "score_detail") else {})}
 
 
 def relief_pen(loop) -> float:
@@ -1819,6 +1820,10 @@ def main() -> int:
         g.SCENIC_RETOUCH = True
     if "mer80" in args.trials.split(","):
         g.WATER_CITY_NEAR = True
+    if "g_req" in args.trials.split(","):                   # toutes les règles en essai (27/10/2026 : boucles de Florent)
+        for f_ in TRIAL_FLAGS:
+            if f_ != "repeat_plain":
+                setattr(g, f_.upper(), True)
     if args.retouch_prefilter is not None:
         g.RETOUCH_PREFILTER = args.retouch_prefilter
     g.RETOUCH_DEDUPE = args.retouch_dedupe or g.RETOUCH_DEDUPE
