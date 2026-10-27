@@ -344,10 +344,7 @@
     /* ce qui la rend agréable, à savoir, avis en un geste, comparaison (27/10/2026) ; l'argile reste au bouton GPX */
     .good { margin: 14px 0 4px; }
     .good-h, .know-h { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); margin: 0 0 6px; }
-    .good ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-    .good li { display: flex; gap: 10px; align-items: baseline; font-size: 15px; line-height: 1.35; padding: 4px 0; border-radius: 6px; }
-    .good li b { font-family: var(--font-mono); font-weight: var(--fw-medium); font-size: 14px; min-width: 64px; }
-    .good li.hl-on span { text-decoration: underline; text-underline-offset: 3px; }
+    .good .keys { margin: 0; }
     .know { margin: 14px 0 4px; }
     .know .keys { margin: 0; }
     .know .ok-note { font-size: 14px; color: var(--color-text-2); margin: 0; }
@@ -1752,9 +1749,9 @@
     function goodHtml(o) {
       const it = goodItems(o);
       if (!it.length) return '';
-      return '<section class="good" aria-labelledby="goodH"><p class="good-h" id="goodH">' + esc(t('good_h')) + '</p><ul>' +
-        it.map(([, fig, txt, hl]) => '<li' + (hl ? ' data-hl="' + hl + '" role="button" tabindex="0"' : '') + '><b>' + esc(fig) +
-          '</b><span>' + esc(txt) + '</span></li>').join('') + '</ul></section>';
+      // mêmes lignes que les points clés : un tronçon à surligner porte « sur la carte » (Florent, 27/10/2026)
+      return '<section class="good" aria-labelledby="goodH"><p class="good-h" id="goodH">' + esc(t('good_h')) + '</p>' +
+        keyRowsHtml(it.map(([, fig, txt, hl]) => [fig, txt, hl])) + '</section>';
     }
     const VOTE_WHY = { no: ['detour', 'city', 'ar', 'rep', 'main', 'dirt', 'lights', 'nature'],
                        meh: ['detour', 'city', 'ar', 'rep', 'main', 'dirt', 'lights', 'nature'],
