@@ -2016,10 +2016,42 @@ WATER_HUG = False
 FOOT_NO_BIKE = False
 FOOT_NO_BIKE_PRIORITY = [{"if": "(road_class == FOOTWAY || road_class == PEDESTRIAN || road_class == STEPS) && "
                                 "bike_road_access != YES && bike_road_access != DESIGNATED", "multiply_by": "0.05"}]
+# … sauf au bord de la mer (Florent, 27/10/2026 : « attention à ce que ça ne pénalise pas de longer la mer dans
+# Barcelone ») : dans OSM, le Passeig Marítim (Nova Icària, Bogatell, Mar Bella) est surtout noté chemin piéton sans
+# mention du vélo, alors qu'on y roule. Zone exemptée : la mer élargie de FOOT_NO_BIKE_SEA_DEG (~200 m), découpée
+# autour des points de la requête (FOOT_NO_BIKE_BOX_DEG) pour garder la requête légère.
+FOOT_NO_BIKE_SEA_DEG = 0.0025
+FOOT_NO_BIKE_BOX_DEG = 0.15
+_SEA_ZONE: list = []
 
 
 def foot_no_bike() -> bool:
     return bool(getattr(_TL, "foot_no_bike", FOOT_NO_BIKE))
+
+
+def foot_no_bike_rules(points) -> tuple:
+    """(règles de priorité, zone « mer » ou None) de FOOT_NO_BIKE pour une requête passant par points."""
+    from shapely.geometry import box, mapping
+    if not _SEA_ZONE:
+        zone = None
+        tr_ = LANDSCAPE.trees.get("sea") if LANDSCAPE is not None else None
+        if tr_ is not None and len(tr_.geometries):
+            import shapely
+            zone = shapely.union_all([g_.buffer(FOOT_NO_BIKE_SEA_DEG) for g_ in tr_.geometries]).simplify(0.0003)
+        _SEA_ZONE.append(zone)
+    zone = _SEA_ZONE[0]
+    if zone is not None and points:
+        xs, ys = [p[0] for p in points], [p[1] for p in points]
+        zone = zone.intersection(box(min(xs) - FOOT_NO_BIKE_BOX_DEG, min(ys) - FOOT_NO_BIKE_BOX_DEG,
+                                     max(xs) + FOOT_NO_BIKE_BOX_DEG, max(ys) + FOOT_NO_BIKE_BOX_DEG))
+        if zone.is_empty:
+            zone = None
+    if zone is None:
+        return FOOT_NO_BIKE_PRIORITY, None
+    rule = dict(FOOT_NO_BIKE_PRIORITY[0])
+    rule["else_if"] = rule.pop("if")
+    return [{"if": "in_bordmer", "multiply_by": "1"}, rule], {"type": "Feature", "id": "bordmer", "properties": {},
+                                                               "geometry": mapping(zone)}
 
 
 WATER_HUG_PRIORITY = [{"if": "road_class == PEDESTRIAN && (bike_road_access == YES || bike_road_access == DESIGNATED)",
@@ -3764,10 +3796,14 @@ class GraphHopper:
             body = {**body, "profile": body["profile"] + "_scenic"}
         if small_model() or track_grade() or water_hug() or foot_no_bike():   # petites routes, pistes, eau, piétons
             cm = dict(body.get("custom_model") or {})
+            foot_, sea_ = foot_no_bike_rules(body.get("points") or []) if foot_no_bike() else ([], None)
             cm["priority"] = (list(cm.get("priority") or []) + (SMALL_MODEL_PRIORITY if small_model() else [])
                               + (TRACK_GRADE_PRIORITY if track_grade() else [])
-                              + (WATER_HUG_PRIORITY if water_hug() else [])
-                              + (FOOT_NO_BIKE_PRIORITY if foot_no_bike() else []))
+                              + (WATER_HUG_PRIORITY if water_hug() else []) + foot_)
+            if sea_ is not None:                             # bord de mer exempté (FOOT_NO_BIKE)
+                areas_ = dict(cm.get("areas") or {"type": "FeatureCollection", "features": []})
+                areas_["features"] = list(areas_.get("features") or []) + [sea_]
+                cm["areas"] = areas_
             body = {**body, "custom_model": cm, "ch.disable": True}
         key = json.dumps(body, sort_keys=True)
         self.calls += 1
