@@ -1368,6 +1368,12 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
         if t is not None and water_ar():                     # aller-retour agréable voulu : sa répétition est le but
             t.pleasant_ar = True
+            # son demi-tour est voulu (27/10/2026 : un « éperon » de 150 à 375 m au bout coûtait ~20 points et le laissait
+            # juste derrière la boucle, 70,3 contre 70,4) : pas d'éperon ni de détour compté à moins de 500 m du demi-tour
+            tip = c[cut]
+            near_tip = lambda x_: haversine(x_[0], x_[1], tip[0], tip[1]) < 500.0  # noqa: E731
+            t.spurs = [s_ for s_ in (t.spurs or []) if s_.get("lon") is None or not near_tip((s_["lon"], s_["lat"]))]
+            t.detours = [d_ for d_ in (t.detours or []) if not near_tip(t.coords[d_["a"]])]
             t.score = score(t)
         ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
               and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
