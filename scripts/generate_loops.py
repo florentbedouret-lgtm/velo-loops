@@ -1348,11 +1348,23 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         p = share(ks)
         if p < PLEASANT_AR_MIN or p - p_all < PLEASANT_AR_GAP:
             continue
-        seg = c[:t_ + 1] if half == "aller" else c[t_:][::-1]
-        sc = _cum(seg)
-        seg = seg[:next((i for i, m in enumerate(sc) if m >= cum[-1] / 2.0), len(seg) - 1) + 1]   # même durée
-        way = [w[:2] for w in route_waypoints(seg, step_m=500.0)]
-        path = gh.via(way + way[-2::-1], l.profile, pass_through=True)
+        from shapely.geometry import LineString, mapping
+        orig = {"points": {"coordinates": c}, "details": l.gh_details, "ascend": l.ascend_gh_m}
+        if half == "aller":                                  # l'aller jusqu'à mi-durée, puis retour par le même chemin
+            cut = next((i for i in range(t_ + 1) if cum[i] >= cum[-1] / 2.0), t_)
+            corridor, ends = c[:cut + 1], [[c[cut][0], c[cut][1]], [c[-1][0], c[-1][1]]]
+        else:                                                # le retour de la boucle, parcouru aussi à l'aller
+            cut = next((i for i in range(t_, len(c)) if cum[-1] - cum[i] <= cum[-1] / 2.0), t_)
+            corridor, ends = c[cut:], [[c[0][0], c[0][1]], [c[cut][0], c[cut][1]]]
+        seg = corridor if half == "aller" else corridor[::-1]
+        zone = LineString([(p_[0], p_[1]) for p_ in corridor]).buffer(PLEASANT_AR_CORRIDOR_DEG).simplify(0.0002)
+        cm = {"priority": [{"if": "in_aller", "multiply_by": "1"}, {"else": "", "multiply_by": str(PLEASANT_AR_OUTSIDE)}],
+              "areas": {"type": "FeatureCollection",
+                        "features": [{"type": "Feature", "id": "aller", "properties": {}, "geometry": mapping(zone)}]}}
+        leg = gh.via(ends, l.profile, custom_model=cm) if l.gh_details is not None and len(corridor) > 1 else None
+        path = None
+        if leg is not None and len(leg["points"]["coordinates"]) > 1:
+            path = splice_path(orig, cut, len(c) - 1, leg) if half == "aller" else splice_path(orig, 0, cut, leg)
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
         ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
               and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
@@ -2047,6 +2059,13 @@ VILLAGE_VIA_TOP = 3
 PLEASANT_AR = False
 PLEASANT_AR_MIN = 0.6
 PLEASANT_AR_GAP = 0.15
+# 2e construction (27/10/2026, détail des notes : les allers-retours fabriqués notaient 0 à 23 contre 44 à 77 pour la
+# boucle, avec 2 à 5 éperons et détours de 150 à 600 m : le retour recalculé par des points tous les 500 m ne reprenait
+# pas le même chemin, d'un côté de l'avenue à l'autre). L'aller est gardé tel quel (tracé de la boucle jusqu'à mi-durée)
+# et le retour est demandé d'un trait, GraphHopper restant dans le couloir de l'aller (PLEASANT_AR_CORRIDOR_DEG ; ailleurs
+# priorité multipliée par PLEASANT_AR_OUTSIDE) : le même chemin à l'envers, là où c'est permis.
+PLEASANT_AR_CORRIDOR_DEG = 0.0007
+PLEASANT_AR_OUTSIDE = 0.1
 # WATER_AR (26/10/2026, 5e comparaison : « le retour devrait longer la côte en reprenant la même route plutôt que de
 # chercher à l'éviter en passant par la ville. Cette remarque revient souvent », Florent ; Ciutat Vella 1 h 30 et 3 h,
 # Cornellà 1 h 30, Castelldefels 3 h). Les allers-retours au bord de l'eau fabriqués (PLEASANT_AR) ne gagnaient jamais :
