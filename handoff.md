@@ -106,6 +106,24 @@ Le POC tourne en ligne et est plus avancé que ce document ne le disait : recher
 ### État au 04/10/2026
 Générateur **v15** en cours de calcul complet (série `full` lancée le 03/10 vers 22 h, fin estimée lundi 05/10 après-midi ; 387 départs sur 863 en v15 le 04/10 à 15 h, les autres en v13 / v14). Interface **UX v3** en ligne avec les retours de Florent. Claude suit et lance lui-même les runs avec GitHub CLI (`gh`) : diagnostics librement, runs qui publient sur accord de Florent (D40).
 
+### État au 27/10/2026
+**Comparaisons 3, 4 et 5 à l'aveugle** (`revue-locale/`, hors dépôt) : 12 / 6, puis 10 / 8, puis 8 / 8 pour la nouvelle
+version ; pas de progrès net depuis la 4e. Florent répète les mêmes remarques : **revenir le long de la mer par la même
+route plutôt que par la ville**, **détours qui quittent une route pour la reprendre** (la Bonanova au lieu de Via
+Augusta, Llobregós, Montcada), **tronçons repassés et sous-boucles** (Sant Cugat, Avinguda del Mar), trop de ville,
+grandes routes, **centre des jolis villages** (Ripoll 6 h). Sa consigne : corriger et vérifier ces cas sur les tracés
+avant toute nouvelle comparaison, et afficher pour chaque boucle % ville, feux / km, % nature, grands axes, répétition.
+Corrigé depuis (mesures à l'appui) : faux éperons dans les lacets d'une montée (Folgueroles 6 h retrouve sa boucle,
+98,9), montée sans but gardée comme aller-retour nature (Monistrol 1 h 30), grande route en nature moins favorisée
+(1,6 → 1,4), allers-retours cumulés (Ripoll 6 h retrouve sa boucle). **En cours de vérification** (règles en essai,
+éteintes) : raccourcis (crochets d'abord, 30 coudes, « tout droit » sans fuir les avenues), répétitions recalculées en
+évitant le 1er passage, aller-retour agréable (2e construction : retour d'un trait dans le couloir de l'aller ; avant,
+2 à 5 faux éperons l'écrasaient), répétition au bord de l'eau pesée 0,5, chemins piétons sans vélo évités (Can Dragó),
+sous-boucles, villages par leur centre, destinations à la main (`scripts/manual_places.json` : Sant Benet). Chaque
+retouche est notée dans un journal (`clean.journal` des diagnostics) avec la raison d'un refus. Mesures : parties
+ry1 à ry3 (12 départs des comparaisons), rz1 (Ciutat Vella, Castelldefels). Page de la prochaine comparaison prête
+(tableau de données par boucle). Script d'activation (hors dépôt) à jour de toutes les règles.
+
 ### État au 24/10/2026
 **Deux comparaisons à l'aveugle** (A / B sur la carte, `revue-locale/`, hors dépôt) : 20 puis 24 cas jugés par Florent.
 Retenues pour la v19 : **le paquet** (nettoyage des boucles publiées, allers-retours sans but, détours sans excuse,
@@ -362,6 +380,16 @@ répétition par couloir (O-47). Soirée du 08/10 : retours de Florent sur des b
   (patrimoine protégé, centre historique OSM, article Wikipédia fourni), à vérifier sur des villages qu'il connaît.
 - [ ] **O-93 — Bord de mer en Tranquille** (Ciutat Vella 45 min : aucun aller-retour le long de la mer parmi 30
   candidats ; la promenade de la Barceloneta n'étant pas une piste, l'aller-retour était rejeté) : `WATER_HUG` en mesure.
+  27/10 : `PLEASANT_AR` (2e construction) et `WATER_AR` en mesure (rz1) ; Florent : « cette remarque revient souvent ».
+- [ ] **O-94 — Remarques récurrentes de Florent (comparaisons 4 et 5)** à vérifier cas par cas sur les nouveaux tracés
+  avant la comparaison 6 : `SHORTCUT` 3e version (Les Corts 3 h, Horta 3 h, Sant Martí 3 h, Sants-Montjuïc 3 h),
+  `REPEAT_FIX` (Horta 3 h, Castelldefels 1 h, Collbató 45 min), `LOOP_SHAPE` sous-boucles, `VILLAGE_VIA` (Ripoll 6 h),
+  `FOOT_NO_BIKE` (Can Dragó), `AR_SUM`. Puis activation dans l'empreinte v19 (script prêt, accord de Florent) et relance
+  du calcul complet (+20 à 40 % de temps de calcul).
+- [ ] **O-95 — Monistrol 1 h 30, boucle idéale de Florent** (Passeig de la Canaleta, Pont Vell, demi-tour au Monestir de
+  Sant Benet) : la boucle retenue passe à 260 m du monastère mais fait demi-tour 2,9 km plus haut ; s'arrêter au
+  monastère raccourcit trop la sortie, il faudrait rallonger ailleurs (pas encore su). Florent peut ajouter Sant Benet
+  dans OSM (absent ; coordonnées données par lui, gardées dans `scripts/manual_places.json`).
 - **Proposition de contenu v19 : `docs/v19_proposition.md`** (effet mesuré, avis, étapes d'activation ; empreinte `V19_PARAMS` comptée seulement si une règle v19 est allumée) — à trancher par Florent après la v18.
 - **Outils de diagnostic corrigés le 09/10** : les tests avant / après tournaient sans la retouche (relief, terre, couloir, marge : à garder en tête) ; comparaisons de référence avec le sens du trajet (moins de demi-tours parasites) ; rapport des lieux : lieux écartés signalés ; tests automatiques avec les mêmes dépendances que le calcul (30 tests). Filet de la marge (`ordered_pool`) : une durée vidée est recalculée en plages strictes ; test v4 en cours (retouche comprise).
 - **Proposition de contenu v17 : `docs/v17_proposition.md`** (effet mesuré, avis, étapes d'activation) — à trancher par Florent.
@@ -429,4 +457,5 @@ Vent/météo pour orienter la boucle · type de séance (endurance, intervalles 
 | 15/10/2026 (après-midi et soir) | Analyste qualité, dev pipeline, UX | Revue de cohérence complète et comparaison v16 (O-70) ; causes racines codées éteintes et en mesure : tranches sans trou (O-71), allers-retours à pied (O-72), repli et relief (O-73) ; mise à jour automatique de l'app et coches (O-74) ; chaîne v18 relancée | Résultats des mesures O-71 à O-73 ; O-75 ; fin de la v18 puis activation de la v19 |
 | 16/10/2026 | Analyste qualité, dev pipeline, UX | v18 terminée et revue complète ; mesures et choix de Florent : départs voisins greffés et tronçon par tronçon à plusieurs boucles, tranches sans trou, longs allers-retours annoncés, repli et relief (25 m/km), allers-retours par des escaliers (D74 à D78, 20 règles v19, apply_v19 testé) ; bloc « Autres façons de rouler » refait et en ligne (O-76) ; boucles accrochées (O-77) | Mesure combinée v19, boucles accrochées 2e version, durées absentes (O-78), activation de la v19 |
 | 17-21/10/2026 | Analyste qualité, dev pipeline, UX | v19 relancée avec 4 règles de plus (O-80) ; relecture de l'Eixample : nettoyage des boucles publiées en 4 essais (O-82) ; chaîne coupée et corrigée (O-84) ; critère du cycliste omniscient (D81) ; revue à l'aveugle de 23 boucles (O-85), D80 remplacée (D82), demi-tours par un rond-point (O-87) | Bilan des mesures c8 / c9 / c0 ; décision de relancer la v19 avec elles ; note de « naturel » (O-88) |
+| 25-27/10/2026 | Analyste qualité, dev pipeline | Comparaisons 3 à 5 (12/6, 10/8, 8/8) ; corrections : lacets en montée, montée sans but, allers-retours cumulés, grande route en nature ; règles en essai pour les remarques récurrentes (raccourcis, répétitions, retour par la mer, sous-boucles, villages, chemins piétons) ; journal des retouches | Vérifier cas par cas (O-94), comparaison 6 avec données par boucle, activation v19 (accord de Florent) |
 | 22-24/10/2026 | Analyste qualité, dev pipeline | Note de « naturel » : les 43 jugements montrent la répétition (11 paires sur 12) et les petites routes ; deux comparaisons à l'aveugle (O-89) : paquet et répétition ×3 retenus (O-90) ; proposition v20 et 1er essai des buts ; six demandes de Florent codées (O-91), lacets (HAIRPINS) | Comparaison des mesures rx1 à rx4 ; activation dans la v19 et relance (accord de Florent) |
