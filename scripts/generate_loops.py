@@ -1197,6 +1197,22 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
     return None if best is l else best
 
 
+def score_detail(l) -> dict:
+    """Ce qui pèse dans la note d'une boucle (diagnostic des retouches, 27/10/2026)."""
+    parts = score_parts(l)[0]
+    lb = long_backtrack(l)
+    return {"parts": {k: round(v, 2) for k, v in parts.items()}, "rep": round(l.overlap, 2),
+            "rep_ordinaire": round(getattr(l, "rep_plain", 0.0), 2),
+            "rep_eau": round(getattr(l, "rep_water_plain", 0.0) + getattr(l, "rep_water_nice", 0.0), 2),
+            "eperons": [[s_.get("m"), [k for k in s_ if s_[k] is True]] for s_ in (l.spurs or [])],
+            "detours": len(l.detours or []), "accrochees": len(getattr(l, "appendices", None) or []),
+            "ar": [[b_["why"], b_["m"], bool(b_.get("water"))] for b_ in (getattr(l, "backtracks", None) or [])],
+            "long_ar": None if lb is None else round(lb[0], 2), "sans_but": getattr(l, "aimless_bt", 0),
+            "eau_sans_but": getattr(l, "water_bt", 0), "montee": getattr(l, "climb_mid_bt", 0),
+            "demi_tours": l.u_turns, "ends_cross": bool(getattr(l, "ends_cross", False)),
+            "sous_boucles": getattr(l, "sub_loops", 0), "defauts": len(defect_windows(l))}
+
+
 def _journal(what, best, t, at, ok, why, **extra):
     """Décision d'une retouche, gardée pour les diagnostics (clean_stats["journal"], 400 au plus)."""
     stats = getattr(_TL, "clean_stats", None)
@@ -1344,6 +1360,7 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
                 or (bounds is not None and not bounds[0] <= t.time_s <= bounds[1]) else "demi-tours"
                 if t.u_turns > MAX_UTURNS else "terre" if not dirt_ok(t) else "relief")
         _journal("aller-retour agréable", l, t, seg[-1], ok, why_, moitie=half, demi_tours=getattr(t, "u_turns", None),
+                 detail=None if t is None else score_detail(t), detail_base=score_detail(l),
                  agreable=round(p, 2), ensemble=round(p_all, 2),
                  rep_essai=None if t is None else round(t.overlap, 2))
         if stats is not None:
