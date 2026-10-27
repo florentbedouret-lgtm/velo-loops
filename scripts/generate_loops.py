@@ -1066,6 +1066,14 @@ SHORTCUT_HOOK_EXCESS_M = 150.0
 # un peu (au plus SHORTCUT_TOWN_SLACK) : une rue un peu plus calme n'est pas une vraie raison ; ailleurs, comme avant.
 SHORTCUT_HOOK_MAX_M = 5000.0
 SHORTCUT_TOWN_SLACK = 0.02
+# journal du 27/10/2026 : 3 637 essais sur 4 685 rendaient le même tracé (« pas plus court ») : entre les deux bouts d'un
+# crochet, les profils calm et sport préfèrent eux-mêmes la rue calme parallèle (la Bonanova plutôt que Via Augusta). Pour
+# un crochet ou un coude en ville, un 3e essai « tout droit » annule ces préférences (avenue, ville) et pèse la distance.
+SHORTCUT_DIRECT_MODEL = {"distance_influence": 200,
+                         "priority": [{"if": "urban_density == CITY", "multiply_by": "2.2"},
+                                      {"else_if": "urban_density == RESIDENTIAL", "multiply_by": "1.25"},
+                                      {"if": "road_class == PRIMARY", "multiply_by": "2.8"},
+                                      {"else_if": "road_class == SECONDARY", "multiply_by": "1.4"}]}
 
 
 def shortcut() -> bool:
@@ -1144,8 +1152,11 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
         for a, b, straight_ in wins:
             c = best.coords
             gain_ = -SHORTCUT_TOWN_SLACK if straight_ else SHORTCUT_GAIN   # crochet ou ville : tout droit (3e version)
-            for prof in dict.fromkeys([best.profile, "sport"]):
-                sub = gh.via([[c[a][0], c[a][1]], [c[b][0], c[b][1]]], prof)
+            tries_ = [(p_, None) for p_ in dict.fromkeys([best.profile, "sport"])]
+            if straight_:
+                tries_.append(("sport", SHORTCUT_DIRECT_MODEL))  # tout droit, même par l'avenue
+            for prof, cm_ in tries_:
+                sub = gh.via([[c[a][0], c[a][1]], [c[b][0], c[b][1]]], prof, custom_model=cm_)
                 if sub is None or len(sub["points"]["coordinates"]) < 2:
                     continue
                 path = splice_path({"points": {"coordinates": c}, "details": det0, "ascend": best.ascend_gh_m}, a, b, sub)
@@ -1156,7 +1167,7 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                 why = _why(t, best, duration_h, bounds, best.score + 100 * gain_,
                            axes_slack=0.03 if straight_ else 0.01, shorter=True)
                 ok = not why
-                _journal("raccourci", best, t, c[a], ok, why, crochet=straight_, profil=prof,
+                _journal("raccourci", best, t, c[a], ok, why, crochet=straight_, profil=prof + ("+droit" if cm_ else ""),
                          m=round(_cum(c[a:b + 1])[-1]))
                 if stats is not None:
                     k_ = "raccourci " + ("ok" if ok else "refusé")
@@ -1180,7 +1191,7 @@ def _journal(what, best, t, at, ok, why, **extra):
     if stats is None:
         return
     j = stats.setdefault("journal", [])
-    if len(j) < 400:
+    if len(j) < 4000:
         j.append({"quoi": what, "lat": round(at[1], 5), "lon": round(at[0], 5), "ok": ok, "pourquoi": why,
                   "note": round(best.score, 1), "note_essai": None if t is None else round(t.score, 1),
                   "km": round(best.distance_m / 1000.0, 1),
@@ -1317,7 +1328,10 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
         ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
               and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
-        _journal("aller-retour agréable", l, t, seg[-1], ok, "" if ok else "filtres", moitie=half,
+        why_ = ("" if ok else "sans itinéraire" if t is None else "durée" if not time_ok(t.time_s, duration_h)
+                or (bounds is not None and not bounds[0] <= t.time_s <= bounds[1]) else "demi-tours"
+                if t.u_turns > MAX_UTURNS else "terre" if not dirt_ok(t) else "relief")
+        _journal("aller-retour agréable", l, t, seg[-1], ok, why_, moitie=half, demi_tours=getattr(t, "u_turns", None),
                  agreable=round(p, 2), ensemble=round(p_all, 2),
                  rep_essai=None if t is None else round(t.overlap, 2))
         if stats is not None:
@@ -1340,6 +1354,7 @@ REPEAT_FIX_MIN_M = 300.0
 REPEAT_FIX_MARGIN_M = 300.0
 REPEAT_FIX_TOP = 3
 REPEAT_FIX_SLACK = 0.01
+REPEAT_FIX_AVOID = 0.03          # journal du 27/10 : à 0,15, 110 essais sur 180 repassaient au même endroit
 
 
 def repeat_fix() -> bool:
@@ -1392,7 +1407,7 @@ def repeat_fix_loop(gh, l, level, duration_h, bounds=None):
                     .difference(shapely.Point(c[b2][0], c[b2][1]).buffer(free)))
             if zone.is_empty:
                 continue
-            cm = {"priority": [{"if": "in_deja", "multiply_by": str(GOAL_AVOID_PRIORITY)}],
+            cm = {"priority": [{"if": "in_deja", "multiply_by": str(REPEAT_FIX_AVOID)}],
                   "areas": {"type": "FeatureCollection",
                             "features": [{"type": "Feature", "id": "deja", "properties": {},
                                           "geometry": mapping(zone.simplify(0.0002))}]}}
