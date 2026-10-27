@@ -1150,12 +1150,14 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                     continue
                 path = splice_path({"points": {"coordinates": c}, "details": det0, "ascend": best.ascend_gh_m}, a, b, sub)
                 t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
-                ok = (t is not None and time_ok(t.time_s, duration_h) and overlap_ok(t) and t.u_turns <= MAX_UTURNS
-                      and dirt_ok(t) and relief_ok(t) and len(defect_windows(t)) <= len(defect_windows(best))
-                      # pas par une grande route (26/10/2026 : le raccourci « sport » prenait les grands axes)
-                      and t.shares["main_roads"] <= best.shares["main_roads"] + 0.01
-                      and t.score >= best.score + 100 * gain_
-                      and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+                # un raccourci raccourcit (27/10/2026 : le même tracé recalculé était « accepté » avec la tolérance de
+                # la 3e version, et bloquait l'essai des autres coudes) ; pas par une grande route (26/10/2026 : le
+                # raccourci « sport » prenait les grands axes), sauf en ville où rester sur Via Augusta est voulu
+                why = _why(t, best, duration_h, bounds, best.score + 100 * gain_,
+                           axes_slack=0.03 if straight_ else 0.01, shorter=True)
+                ok = not why
+                _journal("raccourci", best, t, c[a], ok, why, crochet=straight_, profil=prof,
+                         m=round(_cum(c[a:b + 1])[-1]))
                 if stats is not None:
                     k_ = "raccourci " + ("ok" if ok else "refusé")
                     stats[k_] = stats.get(k_, 0) + 1
@@ -1170,6 +1172,46 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                 setattr(gained, attr, getattr(best, attr))
         best = gained
     return None if best is l else best
+
+
+def _journal(what, best, t, at, ok, why, **extra):
+    """Décision d'une retouche, gardée pour les diagnostics (clean_stats["journal"], 400 au plus)."""
+    stats = getattr(_TL, "clean_stats", None)
+    if stats is None:
+        return
+    j = stats.setdefault("journal", [])
+    if len(j) < 400:
+        j.append({"quoi": what, "lat": round(at[1], 5), "lon": round(at[0], 5), "ok": ok, "pourquoi": why,
+                  "note": round(best.score, 1), "note_essai": None if t is None else round(t.score, 1),
+                  "km": round(best.distance_m / 1000.0, 1),
+                  "km_essai": None if t is None else round(t.distance_m / 1000.0, 2), **extra})
+
+
+def _why(t, best, duration_h, bounds, min_score, axes_slack=0.01, shorter=False, less_rep=False) -> str:
+    """Pourquoi une retouche t de la boucle best est refusée ('' : acceptée)."""
+    if t is None:
+        return "sans itinéraire"
+    if shorter and t.distance_m > best.distance_m - 0.5 * SHORTCUT_HOOK_EXCESS_M:
+        return "pas plus court"
+    if less_rep and t.overlap >= best.overlap - 0.005:
+        return "répétition pas moindre"
+    if not time_ok(t.time_s, duration_h) or (bounds is not None and not bounds[0] <= t.time_s <= bounds[1]):
+        return "durée"
+    if not overlap_ok(t):
+        return "répétition"
+    if t.u_turns > MAX_UTURNS:
+        return "demi-tours"
+    if not dirt_ok(t):
+        return "terre"
+    if not relief_ok(t):
+        return "relief"
+    if len(defect_windows(t)) > len(defect_windows(best)):
+        return "défauts"
+    if t.shares["main_roads"] > best.shares["main_roads"] + axes_slack:
+        return "grands axes"
+    if t.score < min_score:
+        return "note"
+    return ""
 
 
 def _cum(coords) -> list:
@@ -1275,6 +1317,9 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
         ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
               and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+        _journal("aller-retour agréable", l, t, seg[-1], ok, "" if ok else "filtres", moitie=half,
+                 agreable=round(p, 2), ensemble=round(p_all, 2),
+                 rep_essai=None if t is None else round(t.overlap, 2))
         if stats is not None:
             k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
             stats[k_] = stats.get(k_, 0) + 1
@@ -1357,12 +1402,10 @@ def repeat_fix_loop(gh, l, level, duration_h, bounds=None):
             path = splice_path({"points": {"coordinates": c}, "details": best.gh_details, "ascend": best.ascend_gh_m},
                                a2, b2, sub)
             t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
-            ok = (t is not None and t.overlap < best.overlap - 0.005 and time_ok(t.time_s, duration_h)
-                  and overlap_ok(t) and t.u_turns <= MAX_UTURNS and dirt_ok(t) and relief_ok(t)
-                  and len(defect_windows(t)) <= len(defect_windows(best))
-                  and t.shares["main_roads"] <= best.shares["main_roads"] + 0.01
-                  and t.score >= best.score - 100 * REPEAT_FIX_SLACK
-                  and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
+            why = _why(t, best, duration_h, bounds, best.score - 100 * REPEAT_FIX_SLACK, less_rep=True)
+            ok = not why
+            _journal("répétition", best, t, c[(a + b) // 2], ok, why, rep=round(best.overlap, 3),
+                     rep_essai=None if t is None else round(t.overlap, 3), m=round(cum[b] - cum[a]))
             if stats is not None:
                 k_ = "répétition " + ("ok" if ok else "refusé")
                 stats[k_] = stats.get(k_, 0) + 1
