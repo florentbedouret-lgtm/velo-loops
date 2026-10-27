@@ -2077,6 +2077,10 @@ LOOP_SHAPE_TURNS_MAX = 0.05
 LOOP_SHAPE_SUB = 0.03
 LOOP_SHAPE_SUB_MIN_M = 1500.0
 LOOP_SHAPE_SUB_MAX = 0.06
+# 27/10/2026 (boucle idéale de Florent à Monistrol : elle repasse par le village entre la Canaleta et Sant Benet, et
+# perdait 6 points de « forme ») : repasser près du départ, à moins de LOOP_SHAPE_HOME_M à vol d'oiseau, n'est ni une
+# sous-boucle ni un croisement du début et de la fin (dans une vallée, le village est le passage obligé)
+LOOP_SHAPE_HOME_M = 800.0
 # VILLAGE_PLUS (Florent, 24/10/2026, 92 villages retenus sur une liste proposée par les données ouvertes : lectures de la
 # page Wikipédia et densité de restaurants et cafés) : un joli village n'est pas un but (« passer dans un village à vélo
 # est très rapide »), mais y passer est un plus : par son centre ancien (à moins de VILLAGE_CORE_M du point OSM du
@@ -2124,10 +2128,17 @@ PLEASANT_AR_OUTSIDE = 0.1
 # ville perd en calme et en feux. La nature reste comme avant (FLOW_V2_NICE : Folgueroles, 3e comparaison).
 WATER_AR = False
 WATER_AR_WEIGHT = 0.5
+WATER_AR_SHARE = 0.4
 
 
 def water_ar() -> bool:
     return _flag("water_ar", WATER_AR)
+
+
+def water_out_and_back(l) -> bool:
+    """Aller-retour surtout au bord de l'eau (WATER_AR) : au moins WATER_AR_SHARE repassé, dont la moitié au bord de l'eau."""
+    return (water_ar() and l.overlap >= WATER_AR_SHARE
+            and getattr(l, "rep_water_plain", 0.0) + getattr(l, "rep_water_nice", 0.0) >= 0.5 * l.overlap)
 
 
 def water_close(coords, cum, step=100.0) -> list:
@@ -2213,7 +2224,8 @@ def sub_loops(coords, cum) -> int:
     count, skip_to = 0, -1
     for k in range(len(pts)):
         d = 20.0 * k
-        if skip_to < k and LOOP_SHAPE_END_M <= d <= total - LOOP_SHAPE_END_M:
+        if (skip_to < k and LOOP_SHAPE_END_M <= d <= total - LOOP_SHAPE_END_M
+                and haversine(pts[k][0], pts[k][1], coords[0][0], coords[0][1]) > LOOP_SHAPE_HOME_M):
             js = [j for j in near(k, 25.0) if LOOP_SHAPE_SUB_MIN_M <= 20.0 * (k - j) <= total / 2
                   and 20.0 * j >= LOOP_SHAPE_END_M]
             if js:
@@ -2235,7 +2247,7 @@ def shape_measures(coords, cum) -> tuple:
     tail = [c[:2] for c, m in zip(coords, cum) if total - m <= LOOP_SHAPE_END_M]
     cross = False
     if len(head) > 2 and len(tail) > 2:
-        home = Point(coords[0][0], coords[0][1]).buffer(150.0 / 111000.0)
+        home = Point(coords[0][0], coords[0][1]).buffer(LOOP_SHAPE_HOME_M / 111000.0)
         hit = LineString(head).intersection(LineString(tail)).difference(home)
         cross = not hit.is_empty
     pts = [coords[0]]
@@ -4409,7 +4421,9 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         # la côte en reprenant la même route plutôt que de passer par la ville ») : la répétition n'y coûte rien, seuls
         # le calme, les feux, les grands axes et le paysage départagent ; il n'est fabriqué que si sa moitié est nettement
         # plus agréable que la boucle
-        "flow": (1.0 - min(1.0, 0.15 * l.u_turns)) if getattr(l, "pleasant_ar", False) else
+        # même règle pour tout aller-retour dont la répétition est surtout au bord de l'eau (27/10/2026 : l'aller-retour
+        # par la côte décrit par Florent à Ciutat Vella, noté comme une boucle ordinaire, payait toute sa répétition)
+        "flow": (1.0 - min(1.0, 0.15 * l.u_turns)) if (getattr(l, "pleasant_ar", False) or water_out_and_back(l)) else
                 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
                           + (((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0)
                               + (FLOW_V2_NICE - FLOW_OVERLAP_FACTOR) * max(0.0, l.overlap - getattr(l, "rep_plain", 0.0)))

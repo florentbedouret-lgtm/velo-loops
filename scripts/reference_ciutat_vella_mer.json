@@ -1,16 +1,98 @@
 {
- "_note": "Ciutat Vella, modéré, 1 h 30 : l'itinéraire décrit par Florent (5e comparaison, 26/10/2026) : Via Laietana, Moll de la Barceloneta, Carrer de l'Escar, Carrer de la Drassana, Passeig Marítim, puis retour le long de la côte par le même chemin. Points de passage seulement. Utilisées par nature_check.py --compare-refs.",
+ "_note": "Ciutat Vella, modéré, 1 h 30 : l'itinéraire décrit par Florent (5e comparaison, 26/10/2026) : Via Laietana, Moll de la Barceloneta, Carrer de l'Escar, Carrer de la Drassana, Passeig Marítim, puis retour le long de la côte par le même chemin. Points de passage seulement. Utilisées par nature_check.py --compare-refs. 27/10/2026 : points des petites rues (Escar, Drassana) retirés, ils créaient des éperons ; GraphHopper passe par là entre le Moll de la Barceloneta et le Passeig Marítim.",
  "start": "ciutat-vella",
  "loops": [
   {
    "name": "Barceloneta puis la côte jusqu'au Fòrum, retour par la côte",
    "source": "Florent, 26/10/2026",
-   "waypoints": [[2.1772, 41.385], [2.18687, 41.37877], [2.18799, 41.37557], [2.18968, 41.37563], [2.1925, 41.3775], [2.2010, 41.3880], [2.2120, 41.3990], [2.2275, 41.4115], [2.2120, 41.3990], [2.2010, 41.3880], [2.1925, 41.3775]]
+   "waypoints": [
+    [
+     2.1772,
+     41.385
+    ],
+    [
+     2.18687,
+     41.37877
+    ],
+    [
+     2.1925,
+     41.3775
+    ],
+    [
+     2.201,
+     41.388
+    ],
+    [
+     2.212,
+     41.399
+    ],
+    [
+     2.2275,
+     41.4115
+    ],
+    [
+     2.212,
+     41.399
+    ],
+    [
+     2.201,
+     41.388
+    ],
+    [
+     2.1925,
+     41.3775
+    ]
+   ]
   },
   {
    "name": "Barceloneta puis la côte jusqu'à Badalona, retour par la côte",
    "source": "Florent, 26/10/2026",
-   "waypoints": [[2.1772, 41.385], [2.18687, 41.37877], [2.18799, 41.37557], [2.18968, 41.37563], [2.1925, 41.3775], [2.2010, 41.3880], [2.2120, 41.3990], [2.2275, 41.4115], [2.2468, 41.4434], [2.2275, 41.4115], [2.2120, 41.3990], [2.2010, 41.3880], [2.1925, 41.3775]]
+   "waypoints": [
+    [
+     2.1772,
+     41.385
+    ],
+    [
+     2.18687,
+     41.37877
+    ],
+    [
+     2.1925,
+     41.3775
+    ],
+    [
+     2.201,
+     41.388
+    ],
+    [
+     2.212,
+     41.399
+    ],
+    [
+     2.2275,
+     41.4115
+    ],
+    [
+     2.2468,
+     41.4434
+    ],
+    [
+     2.2275,
+     41.4115
+    ],
+    [
+     2.212,
+     41.399
+    ],
+    [
+     2.201,
+     41.388
+    ],
+    [
+     2.1925,
+     41.3775
+    ]
+   ]
   }
  ]
 }
