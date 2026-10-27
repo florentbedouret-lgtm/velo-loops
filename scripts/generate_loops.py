@@ -1066,6 +1066,10 @@ SHORTCUT_HOOK_EXCESS_M = 150.0
 # un peu (au plus SHORTCUT_TOWN_SLACK) : une rue un peu plus calme n'est pas une vraie raison ; ailleurs, comme avant.
 SHORTCUT_HOOK_MAX_M = 5000.0
 SHORTCUT_TOWN_SLACK = 0.02
+# journal du 27/10/2026 (Les Corts 3 h : le retour par la Bonanova au lieu de Via Augusta n'a jamais été essayé) : la
+# recherche s'arrêtait dès que les SHORTCUT_WINDOWS premiers coudes ne donnaient rien, et réessayait les mêmes à chaque
+# tour. Maintenant : les coudes déjà essayés sont sautés, jusqu'à SHORTCUT_BUDGET coudes par boucle.
+SHORTCUT_BUDGET = 30
 # journal du 27/10/2026 : 3 637 essais sur 4 685 rendaient le même tracé (« pas plus court ») : entre les deux bouts d'un
 # crochet, les profils calm et sport préfèrent eux-mêmes la rue calme parallèle (la Bonanova plutôt que Via Augusta). Pour
 # un crochet ou un coude en ville, un 3e essai « tout droit » annule ces préférences (avenue, ville) et pèse la distance.
@@ -1141,16 +1145,23 @@ def bend_windows(coords, ways=None, urban=None) -> list:
 def shortcut_loop(gh, l, level, duration_h, bounds=None):
     """La boucle l sans ses coudes inutiles (SHORTCUT), ou None si aucun raccourci ne la rend meilleure."""
     best, stats = l, getattr(_TL, "clean_stats", None)
-    for _ in range(SHORTCUT_TOP):
+    tried, budget, accepted = set(), SHORTCUT_BUDGET, 0
+    wkey = lambda c_, a_, b_: (round(c_[a_][0], 4), round(c_[a_][1], 4), round(c_[b_][0], 4), round(c_[b_][1], 4))  # noqa: E731
+    while budget > 0 and accepted < SHORTCUT_TOP:
         det0 = getattr(best, "gh_details", None)
         wins = []
         if det0 is not None:
             n_ = len(best.coords) - 1
             urb_ = [u in ("city", "residential") for u in per_edge(det0.get("urban_density"), n_)]
-            wins = bend_windows(best.coords, per_edge(det0.get("osm_way_id"), n_), urb_)[:SHORTCUT_WINDOWS]
+            wins = [w for w in bend_windows(best.coords, per_edge(det0.get("osm_way_id"), n_), urb_)
+                    if wkey(best.coords, w[0], w[1]) not in tried][:SHORTCUT_WINDOWS]
+        if not wins:
+            break
         gained = None
         for a, b, straight_ in wins:
             c = best.coords
+            tried.add(wkey(c, a, b))
+            budget -= 1
             gain_ = -SHORTCUT_TOWN_SLACK if straight_ else SHORTCUT_GAIN   # crochet ou ville : tout droit (3e version)
             tries_ = [(p_, None) for p_ in dict.fromkeys([best.profile, "sport"])]
             if straight_:
@@ -1174,14 +1185,15 @@ def shortcut_loop(gh, l, level, duration_h, bounds=None):
                     stats[k_] = stats.get(k_, 0) + 1
                 if ok and (gained is None or t.score > gained.score):
                     gained = t
-            if gained is not None:
+            if gained is not None or budget <= 0:
                 break                                    # indices changés : coudes recherchés à nouveau
         if gained is None:
-            break
+            continue                                     # coudes suivants (pas encore essayés)
         for attr in ("relief_fallback", "unpaved_fallback", "cleaned_from", "cleaned_kind"):
             if getattr(best, attr, None):
                 setattr(gained, attr, getattr(best, attr))
         best = gained
+        accepted += 1
     return None if best is l else best
 
 
@@ -1378,9 +1390,13 @@ def repeat_runs(l) -> list:
             j += 1
         m = cum[min(j, len(cum) - 1)] - cum[i]
         k = int(cum[(i + j) // 2] // 100)
-        if m >= REPEAT_FIX_MIN_M and not (k < len(wclose) and wclose[k]):
-            mid = c[(i + j) // 2]
-            if any(haversine(mid[0], mid[1], p[0], p[1]) < 40.0 for p in c[:i:3]):   # le second passage
+        if m >= REPEAT_FIX_MIN_M and not (k < len(wclose) and wclose[k]) and i > 0:
+            # le second passage : un point du tronçon près du tracé d'avant, échantillonné tous les 20 m (27/10/2026 :
+            # avec les seuls sommets, espacés de 100 m à 1 km, le retour par la Bonanova n'était pas reconnu)
+            before = sample_points(c[:i + 1], cum[:i + 1], 20.0)
+            mid = sample_points(c[i:j + 1], [x - cum[i] for x in cum[i:j + 1]], 20.0)
+            mid = mid[len(mid) // 2]
+            if any(haversine(mid[0], mid[1], p[0], p[1]) < 40.0 for p in before):
                 runs.append((m, i, j))
         i = j
     return [(a, b) for _, a, b in sorted(runs, reverse=True)]
