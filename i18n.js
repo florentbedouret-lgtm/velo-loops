@@ -424,6 +424,8 @@ const I18N = {
   fr_surface: ['de revêtement non renseigné dans OpenStreetMap.', 'with surface not recorded in OpenStreetMap.',
     'con firme sin datos en OpenStreetMap.', 'amb ferm sense dades a OpenStreetMap.'],
   fr_overlap: ['de tronçons empruntés deux fois.', 'of sections ridden twice.', 'de tramos recorridos dos veces.', 'de trams recorreguts dues vegades.'],
+  fr_overlap_km: ['parcourus deux fois (tronçons repassés et allers-retours).', 'ridden twice (repeated stretches and out-and-backs).',
+    'recorridos dos veces (tramos repetidos e idas y vueltas).', 'recorreguts dues vegades (trams repetits i anades i tornades).'],
   fr_uturns_one: ['demi-tour.', 'U-turn.', 'cambio de sentido.', 'mitja volta.'],
   fr_uturns_other: ['demi-tours.', 'U-turns.', 'cambios de sentido.', 'mitges voltes.'],
   pf_climbs_one: ['1 montée', '1 climb', '1 subida', '1 pujada'],
