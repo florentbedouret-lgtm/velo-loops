@@ -42,7 +42,8 @@ def test_reglages_v17():
     assert g.BACKTRACK_MAX_SHARE is None               # plafond des allers-retours utiles, en essai
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
-               "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "REPEAT_FIX"):
+               "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "REPEAT_FIX",
+               "FOOT_NO_BIKE"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai

@@ -2006,6 +2006,19 @@ WATER_HUG = False
 # highway=pedestrian, bicycle=yes) : le profil vélo ne favorisait que les chemins partagés (footway, path) et passait par
 # la piste de l'Avinguda del Litoral, derrière la plage. Avec WATER_HUG, une rue piétonne ouverte aux vélos est traitée
 # comme un chemin partagé (jamais là où le vélo n'est pas explicitement permis).
+# FOOT_NO_BIKE (27/10/2026, 5e comparaison, Sant Martí 3 h : « un détour en pratique impossible par Can Dragó » ; la boucle
+# faisait le tour de l'étang du parc par des chemins piétons (highway=footway sans bicycle=yes) : le profil vélo de
+# GraphHopper les accepte « à pied, vélo poussé ». En ville catalane, rouler sur un chemin piéton est interdit : ces
+# chemins (footway, pedestrian, steps) sans permission explicite du vélo sont fortement évités. False : comme avant.
+FOOT_NO_BIKE = False
+FOOT_NO_BIKE_PRIORITY = [{"if": "(road_class == FOOTWAY || road_class == PEDESTRIAN || road_class == STEPS) && "
+                                "bike_road_access != YES && bike_road_access != DESIGNATED", "multiply_by": "0.05"}]
+
+
+def foot_no_bike() -> bool:
+    return bool(getattr(_TL, "foot_no_bike", FOOT_NO_BIKE))
+
+
 WATER_HUG_PRIORITY = [{"if": "road_class == PEDESTRIAN && (bike_road_access == YES || bike_road_access == DESIGNATED)",
                        "multiply_by": "1.3"}]
 WATER_HUG_DEG = 0.0006          # ~50 m de la mer, d'une rivière ou d'un lac
@@ -3746,11 +3759,12 @@ class GraphHopper:
         import copy
         if scenic_areas() and body.get("profile") in SCENIC_PROFILES:   # zones agréables (SCENIC_AREAS)
             body = {**body, "profile": body["profile"] + "_scenic"}
-        if small_model() or track_grade() or water_hug():    # petites routes, pistes grade2+, bord de l'eau
+        if small_model() or track_grade() or water_hug() or foot_no_bike():   # petites routes, pistes, eau, piétons
             cm = dict(body.get("custom_model") or {})
             cm["priority"] = (list(cm.get("priority") or []) + (SMALL_MODEL_PRIORITY if small_model() else [])
                               + (TRACK_GRADE_PRIORITY if track_grade() else [])
-                              + (WATER_HUG_PRIORITY if water_hug() else []))
+                              + (WATER_HUG_PRIORITY if water_hug() else [])
+                              + (FOOT_NO_BIKE_PRIORITY if foot_no_bike() else []))
             body = {**body, "custom_model": cm, "ch.disable": True}
         key = json.dumps(body, sort_keys=True)
         self.calls += 1
