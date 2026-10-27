@@ -64,6 +64,38 @@ function fbRate(btn, n) {
   });
 }
 
+// avis en un geste, sans avoir roulé (27/10/2026) : « Tu ferais cette boucle ? » oui / bof / non, motifs, un mot
+async function sendVote(o, v) {
+  const s = startData.start;
+  const lvl = t('lvl_' + o.level);
+  const dur = o.duration_target_min == null ? '' : hm(o.duration_target_min);
+  const body = {
+    access_key: FB_ACCESS_KEY,
+    subject: 'Oyan : avis (' + v.v + ') sur ' + s.name + ', ' + lvl + ', ' + dur,
+    from_name: 'Oyan',
+    botcheck: false,
+    'Boucle': location.href,
+    'Départ': s.name + ' (' + s.id + ')',
+    'Allure et durée': lvl + ', ' + dur + ', option « ' + optName(o) + ' »',
+    'Prévu': o.distance_km + ' km, ' + Math.round(o.ascend_m) + ' m de D+, ' + hm(o.time_est_min),
+    'Ferait cette boucle': v.v,
+    'Motifs': (v.why || []).join(', '),
+    'Commentaire': (v.txt || '').trim(),
+    'Langue': LANG,
+    'Tracé': o.route_key || ''
+  };
+  try {
+    const r = await fetch(FB_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return r.ok && (await r.json()).success === true;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function saveFeedback() {
   const o = shown[current];
   const val = id => document.getElementById(id).value;

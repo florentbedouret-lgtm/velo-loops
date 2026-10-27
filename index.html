@@ -340,6 +340,42 @@
     .notes { display: block; margin-top: 16px; }
     #legal { padding: 8px 0 0; font-size: 12px; color: var(--color-text-2); }
     #legal a { color: var(--color-text-2); }
+
+    /* ce qui la rend agréable, à savoir, avis en un geste, comparaison (27/10/2026) ; l'argile reste au bouton GPX */
+    .good { margin: 14px 0 4px; }
+    .good-h, .know-h { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); margin: 0 0 6px; }
+    .good ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    .good li { display: flex; gap: 10px; align-items: baseline; font-size: 15px; line-height: 1.35; padding: 4px 0; border-radius: 6px; }
+    .good li b { font-family: var(--font-mono); font-weight: var(--fw-medium); font-size: 14px; min-width: 64px; }
+    .good li.hl-on span { text-decoration: underline; text-underline-offset: 3px; }
+    .know { margin: 14px 0 4px; }
+    .know .keys { margin: 0; }
+    .know .ok-note { font-size: 14px; color: var(--color-text-2); margin: 0; }
+    .vote { margin: 16px 0 6px; }
+    .vote-q { font-size: 15px; font-weight: var(--fw-medium); margin: 0 0 8px; }
+    .vote-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .vote-btns button, .chips button, .vote-send button { font: inherit; color: var(--color-text); background: var(--color-surface);
+      border: 1px solid var(--color-border); touch-action: manipulation; cursor: pointer; user-select: none; -webkit-user-select: none; }
+    .vote-btns button { min-height: 44px; border-radius: var(--radius-sm); font-size: 15px; }
+    .vote-btns button[aria-pressed=true] { background: var(--color-text); color: var(--color-bg); border-color: var(--color-text); }
+    .vote-btns button:active, .chips button:active, .vote-send button:active { transform: scale(.97); }
+    .vote-why { margin-top: 10px; }
+    .vote-why p { font-size: 13px; color: var(--color-text-2); margin: 0 0 6px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chips button { min-height: 36px; padding: 0 12px; border-radius: 18px; font-size: 14px; }
+    .chips button[aria-pressed=true] { border-color: var(--color-text); background: var(--color-bg); font-weight: var(--fw-medium); }
+    .vote-send { margin-top: 10px; display: flex; gap: 8px; align-items: center; }
+    .vote-send input { flex: 1; min-width: 0; min-height: 44px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);
+      padding: 0 10px; font: inherit; font-size: 16px; background: var(--color-surface); color: var(--color-text); }
+    .vote-send button { min-height: 44px; padding: 0 16px; border-radius: var(--radius-sm); border-color: var(--color-text); }
+    .vote-done { font-size: 14px; color: var(--color-text-2); margin-top: 8px; }
+    .alt-row .cmp { display: block; font-size: 13px; color: var(--color-text-2); margin-top: 2px; }
+    details.cmp summary { cursor: pointer; padding: 10px 0; font-size: 14px; }
+    .cmp-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+    .cmp-table th, .cmp-table td { padding: 6px 8px; border-bottom: 1px solid var(--color-border); text-align: right; }
+    .cmp-table th:first-child, .cmp-table td:first-child { text-align: left; color: var(--color-text-2); font-weight: normal; }
+    .cmp-table thead th { font-weight: var(--fw-medium); }
+    .cmp-table .cur { font-weight: var(--fw-medium); }
   </style>
 </head>
 <body>
@@ -421,10 +457,10 @@
     </div>
   </div>
   <script src="vendor/maplibre-gl-5.24.0/maplibre-gl.js"></script>
-  <script src="i18n.js"></script>
-  <script src="gpx.js"></script>
-  <script src="profile.js"></script>
-  <script src="feedback.js"></script>
+  <script src="i18n.js?v=__OYAN_BUILD__"></script>
+  <script src="gpx.js?v=__OYAN_BUILD__"></script>
+  <script src="profile.js?v=__OYAN_BUILD__"></script>
+  <script src="feedback.js?v=__OYAN_BUILD__"></script>
   <script>
     const optLabel = l => I18N['opt_' + l] ? t('opt_' + l) : l;   // nom d'une option (équilibrée, variante…)
     // brief v2 : jamais « Variante » seul. Nom = différence mesurée la plus nette avec la boucle principale (plus de relief,
@@ -1639,6 +1675,154 @@
           '</span><b>' + pc(lc[k]) + '</b></div>').join('') + '</div>';
     }
 
+
+    // ---------- 27/10/2026 (maquette validée par Florent) : ce qui la rend agréable, à savoir sur ce parcours, avis en un
+    // geste, comparaison des options. Tronçons repassés mesurés ici sur le tracé (second passage, au moins 200 m).
+    function repeatRanges(o) {
+      if (repeatRanges.cache && repeatRanges.cache.o === o) return repeatRanges.cache.r;
+      const p = profileData(o.coords, o.distance_km), step = 0.02, pts = [];
+      for (let d = 0; d <= o.distance_km; d += step) pts.push(profilePoint(o.coords, p.dist, d));
+      const kx = 111320 * Math.cos(o.coords[0][1] * Math.PI / 180), ky = 110540, cell = 0.0005, grid = new Map();
+      const rep = new Array(pts.length).fill(false);
+      pts.forEach((q, k) => {
+        const gx = Math.floor(q[0] / cell), gy = Math.floor(q[1] / cell);
+        outer: for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+          for (const j of grid.get((gx + dx) + ':' + (gy + dy)) || []) {
+            if (k - j < 30) continue;                     // au moins 600 m plus tôt
+            if (Math.hypot((pts[j][0] - q[0]) * kx, (pts[j][1] - q[1]) * ky) < 25) { rep[k] = true; break outer; }
+          }
+        }
+        const kk = gx + ':' + gy;
+        if (!grid.has(kk)) grid.set(kk, []);
+        grid.get(kk).push(k);
+      });
+      const out = [];
+      for (let k = 0; k < rep.length; k++) {
+        if (!rep[k]) continue;
+        let j = k; while (j + 1 < rep.length && rep[j + 1]) j++;
+        if ((j - k) * step >= 0.2) out.push([k * step, j * step]);
+        k = j;
+      }
+      repeatRanges.cache = { o, r: out };
+      return out;
+    }
+    const AR_WHY = { lieu: 'ar_lieu', 'belvédère': 'ar_view', relief: 'ar_relief', nature: 'ar_nature', piste: 'ar_track', 'montée': 'ar_climb' };
+    const arList = o => (o.backtracks || []).filter(b => b.m >= 300 && b.from_km != null && b.to_km != null);
+    const inAr = (o, a, b) => arList(o).some(x => a >= x.from_km - 0.2 && b <= x.to_km + 0.2);
+    const repOutsideAr = o => repeatRanges(o).filter(([a, b]) => !inAr(o, a, b));
+    function knowHtml(o) {
+      const rows = arList(o).map((b, k) => [km1(b.m / 2000) + ' km', t('know_ar', { why: t(AR_WHY[b.why] || 'ar_other') }), 'ar:' + k]);
+      const rr = repOutsideAr(o), tot = rr.reduce((s2, [a, b]) => s2 + b - a, 0);
+      if (rr.length) rows.push([km1(tot) + ' km', tn('know_rep', rr.length), 'rep', tot >= 1.5]);
+      return '<section class="know" aria-labelledby="knowH"><p class="know-h" id="knowH">' + esc(t('know_h')) + '</p>' +
+        (rows.length ? keyRowsHtml(rows) : '<p class="ok-note">' + esc(t('know_ok')) + '</p>') + '</section>';
+    }
+    function uturnMarks(o) {                               // demi-tours des allers-retours, toujours visibles sur la carte
+      if (!map.getSource('uturns')) {
+        map.addSource('uturns', { type: 'geojson', data: EMPTY });
+        map.addLayer({ id: 'uturns', type: 'circle', source: 'uturns', paint: { 'circle-radius': 7, 'circle-color': ROUTE.casing,
+          'circle-stroke-color': ROUTE.color, 'circle-stroke-width': 2.5 } });
+        map.addLayer({ id: 'uturns-t', type: 'symbol', source: 'uturns', layout: { 'text-field': '↺', 'text-size': 12,
+          'text-allow-overlap': true, 'text-font': ['Noto Sans Regular'] }, paint: { 'text-color': ROUTE.color } });
+      }
+      map.getSource('uturns').setData({ type: 'FeatureCollection', features: arList(o)
+        .map(b => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [b.lon, b.lat] } })) });
+    }
+    function goodItems(o) {
+      const it = [], sc = o.scenery || {}, lc = LANDCOVER_OK && sc.landcover, D = o.distance_km;
+      const waterKm = (lc ? lc.water : sc.water || 0) * D;
+      if (waterKm >= 3) it.push([10 + waterKm, km1(waterKm) + ' km', t('good_water'), sc.landcover_seq ? 'water' : null]);
+      (o.remarkable || []).slice(0, 2).forEach(x => it.push([30, '', t('good_place', { n: x.n }), x.km != null ? 'places' : null]));
+      const cl = (o.terrain.climbs || []).map((c, k) => [c, k]).sort((a, b) => b[0].gain_m - a[0].gain_m)[0];
+      if (cl && cl[0].gain_m >= 80) it.push([12 + cl[0].gain_m / 20, '+' + Math.round(cl[0].gain_m) + ' m',
+        (cl[0].name ? t('good_climb', { n: cl[0].name }) : t('good_climb_anon')) + (cl[0].category ? t('good_cat', { c: cl[0].category }) : ''),
+        'climb:' + cl[1]]);
+      const parkKm = (sc.protected || 0) * D;
+      if (parkKm >= 3) it.push([8 + parkKm, km1(parkKm) + ' km', t('good_park'), sc.protected_seq ? 'park' : null]);
+      const forestKm = (lc ? lc.forest : sc.forest || 0) * D;
+      if (forestKm >= 3) it.push([8 + forestKm, km1(forestKm) + ' km', t('good_forest'), sc.landcover_seq ? 'forest' : null]);
+      const views = o.views_passed || sc.viewpoints || 0;
+      if (views >= 2) it.push([9, String(views), t('good_views'), null]);
+      if (o.shares.dedicated_cycleway >= 0.4) it.push([7 + 10 * o.shares.dedicated_cycleway, pc(o.shares.dedicated_cycleway),
+        t('good_cycle'), o.road_seq ? 'cycle' : null]);
+      if (o.traffic_lights_per_km != null && o.traffic_lights_per_km < 0.3 && D >= 10)
+        it.push([7, String(o.traffic_lights || 0), t('good_fewlights'), null]);
+      return it.sort((a, b) => b[0] - a[0]).slice(0, 3);
+    }
+    function goodHtml(o) {
+      const it = goodItems(o);
+      if (!it.length) return '';
+      return '<section class="good" aria-labelledby="goodH"><p class="good-h" id="goodH">' + esc(t('good_h')) + '</p><ul>' +
+        it.map(([, fig, txt, hl]) => '<li' + (hl ? ' data-hl="' + hl + '" role="button" tabindex="0"' : '') + '><b>' + esc(fig) +
+          '</b><span>' + esc(txt) + '</span></li>').join('') + '</ul></section>';
+    }
+    const VOTE_WHY = { no: ['detour', 'city', 'ar', 'rep', 'main', 'dirt', 'lights', 'nature'],
+                       meh: ['detour', 'city', 'ar', 'rep', 'main', 'dirt', 'lights', 'nature'],
+                       yes: ['small', 'nature', 'sea', 'loop', 'village', 'climb'] };
+    const VOTES = {};                                       // avis de cette visite (rien n'est gardé sur l'appareil)
+    function voteHtml(o) {
+      const v = VOTES[o.id] || {}, pre = v.v === 'yes' ? 'vp_' : 'vn_';
+      const why = v.v ? '<div class="vote-why"><p>' + esc(t(v.v === 'yes' ? 'vote_why_pos' : 'vote_why_neg')) + '</p><div class="chips">' +
+        VOTE_WHY[v.v].map(c => '<button type="button" data-chip="' + c + '" aria-pressed="' + (v.why || []).includes(c) + '">' +
+          esc(t(pre + c)) + '</button>').join('') + '</div>' +
+        '<div class="vote-send"><input type="text" id="voteTxt" maxlength="300" enterkeyhint="send" placeholder="' + esc(t('vote_txt_ph')) +
+        '" aria-label="' + esc(t('vote_txt_ph')) + '" value="' + esc(v.txt || '') + '"><button type="button" id="voteSend"' +
+        (v.busy ? ' disabled' : '') + '>' + esc(t('vote_send')) + '</button></div>' +
+        '<div class="vote-done" role="status" aria-live="polite">' + (v.sent ? esc(t('vote_thanks')) : v.fail ? esc(t('fb_fail')) : '') + '</div></div>' : '';
+      return '<section class="vote" aria-label="' + esc(t('vote_aria')) + '"><p class="vote-q">' + esc(t('vote_q')) + '</p>' +
+        '<div class="vote-btns" role="group" aria-label="' + esc(t('vote_q')) + '">' + [['yes', 'vote_yes'], ['meh', 'vote_meh'], ['no', 'vote_no']]
+          .map(([k, l]) => '<button type="button" data-vote="' + k + '" aria-pressed="' + (v.v === k) + '">' + esc(t(l)) + '</button>').join('') +
+        '</div>' + why + '</section>';
+    }
+    function bindVote(o) {
+      const box = sheetBody.querySelector('.vote');
+      if (!box) return;
+      const cur = () => (VOTES[o.id] = VOTES[o.id] || {});
+      const redraw = focus => { box.outerHTML = voteHtml(o); bindVote(o); if (focus) { const el = sheetBody.querySelector(focus); if (el) el.focus(); } };
+      box.querySelectorAll('[data-vote]').forEach(b => b.onclick = () => { const c = cur();
+        if (c.v !== b.dataset.vote) { c.v = b.dataset.vote; c.why = []; c.sent = c.fail = false; } redraw('[data-vote="' + b.dataset.vote + '"]'); });
+      box.querySelectorAll('[data-chip]').forEach(b => b.onclick = () => { const c = cur(), x = b.dataset.chip;
+        c.why = c.why.includes(x) ? c.why.filter(y => y !== x) : c.why.concat([x]); c.sent = false; redraw('[data-chip="' + x + '"]'); });
+      const txt = box.querySelector('#voteTxt');
+      if (txt) txt.oninput = () => { cur().txt = txt.value; };
+      const send = box.querySelector('#voteSend');
+      if (send) send.onclick = async () => {
+        const c = cur(); c.txt = txt ? txt.value : ''; c.busy = true; redraw();
+        const ok = await sendVote(o, { v: { yes: 'oui', meh: 'bof', no: 'non' }[c.v], why: c.why.map(x => (c.v === 'yes' ? 'vp_' : 'vn_') + x), txt: c.txt });
+        c.busy = false; c.sent = ok; c.fail = !ok; redraw();
+      };
+    }
+    function metrics(x) {
+      const sc = x.scenery || {}, lc = LANDCOVER_OK && sc.landcover;
+      return { city: cityShare(x), nature: lc ? (lc.forest || 0) + (lc.countryside || 0) : (sc.forest || 0),
+               waterKm: (lc ? lc.water : sc.water || 0) * x.distance_km, lights: x.traffic_lights_per_km,
+               main: x.shares.main_roads, rep: x.overlap || 0 };
+    }
+    function compareLine(x, o) {                           // les 3 écarts qui comptent le plus, sous chaque autre boucle
+      const a = metrics(x), b = metrics(o), out = [], P = v => Math.round(v * 100);
+      if (Math.abs(P(a.city) - P(b.city)) >= 5) out.push([Math.abs(a.city - b.city), t(a.city < b.city ? 'cd_city_less' : 'cd_city_more', { p: pc(a.city) })]);
+      if (Math.abs(P(a.nature) - P(b.nature)) >= 5) out.push([Math.abs(a.nature - b.nature), t(a.nature > b.nature ? 'cd_nat_more' : 'cd_nat_less', { p: pc(a.nature) })]);
+      if (Math.abs(a.waterKm - b.waterKm) >= 2) out.push([Math.abs(a.waterKm - b.waterKm) / 20,
+        t(a.waterKm > b.waterKm ? 'cd_water_more' : 'cd_water_less', { km: km1(Math.abs(a.waterKm - b.waterKm)) })]);
+      if (a.lights != null && b.lights != null && Math.abs(a.lights - b.lights) >= 0.3)
+        out.push([Math.abs(a.lights - b.lights) / 3, t(a.lights < b.lights ? 'cd_lights_less' : 'cd_lights_more', { x: dec(a.lights.toFixed(1)) })]);
+      if (Math.abs(P(a.main) - P(b.main)) >= 5) out.push([Math.abs(a.main - b.main), t(a.main < b.main ? 'cd_main_less' : 'cd_main_more')]);
+      if (Math.abs(P(a.rep) - P(b.rep)) >= 5) out.push([Math.abs(a.rep - b.rep), t(a.rep < b.rep ? 'cd_rep_less' : 'cd_rep_more')]);
+      return out.sort((p, q) => q[0] - p[0]).slice(0, 3).map(z => z[1]).join(' · ');
+    }
+    function compareTable(o) {
+      if (shown.length < 2) return '';
+      const M = shown.map(metrics), cur = k => (k === current ? ' class="cur"' : '');
+      const rows = [['cmp_dist', shown.map(x => km1(x.distance_km) + ' km')], ['cmp_dplus', shown.map(x => Math.round(x.ascend_m) + ' m')],
+        ['cmp_city', M.map(m => pc(m.city))], ['cmp_nature', M.map(m => pc(m.nature))], ['cmp_water', M.map(m => km1(m.waterKm) + ' km')],
+        ['cmp_lights', M.map(m => (m.lights == null ? '–' : dec(m.lights.toFixed(1))))], ['cmp_main', M.map(m => pc(m.main))],
+        ['cmp_rep', M.map(m => pc(m.rep))]];
+      return '<details class="cmp"><summary>' + esc(t('cmp_title', { n: shown.length })) + '</summary><table class="cmp-table"><thead><tr><th></th>' +
+        shown.map((x, k) => '<th scope="col"' + cur(k) + '>' + esc(optName(x)) + '</th>').join('') + '</tr></thead><tbody>' +
+        rows.map(([lab, vals]) => '<tr><th scope="row">' + esc(t(lab)) + '</th>' + vals.map((v, k) => '<td' + cur(k) + '>' + esc(v) + '</td>').join('') +
+          '</tr>').join('') + '</tbody></table></details>';
+    }
+
     // écarts d'une autre boucle par rapport à la boucle affichée : « +3,4 km · −85 m · +11 min »
     function deltas(x, o) {
       const sg = (v, t) => (v > 0 ? '+' : v < 0 ? '−' : '±') + t;
@@ -1663,7 +1847,8 @@
       }
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       // autres boucles de la même durée : lignes compactes (les chiffres absolus sont dans les pastilles de l'en-tête)
-      const others = shown.map((x, k) => k === current ? '' : altRow('data-act="opt" data-i="' + k + '"', esc(optName(x)), '',
+      const others = shown.map((x, k) => k === current ? '' : altRow('data-act="opt" data-i="' + k + '"', esc(optName(x)),
+        compareLine(x, o) ? '<span class="cmp">' + esc(compareLine(x, o)) + '</span>' : '',
         deltas(x, o), '', optName(x) + ', ' + km(x.distance_km) + ' km, ' + t('dplus_inline', { m: Math.round(x.ascend_m) }) +
         ', ' + hm(x.time_est_min))).join('');
       const sugg = longer + natureNeighbour(o) + trainStart(o);
@@ -1671,12 +1856,15 @@
       const why = (natureNeighbour.last || trainStart.last) && (ex0 == null || ex0 > 5)
         ? '<p class="alts-why">' + esc(ex0 == null ? t('alts_why_stays') : t('alts_why_km', { km: km(ex0) })) + '</p>' : '';
       const alts = sugg || others ? '<section class="alts" aria-labelledby="altsH"><h3 class="alts-h" id="altsH">' +
-        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + why + sugg + others + '</section>' : '';
+        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + why + sugg + others + compareTable(o) + '</section>' : '';
       const pf = profileSvg(o);
 
       return `
         ${lc ? terrainBar(o) : '<div class="sub">' + esc(t('city_pct', { p: pctStr(Math.round(cityShare(o) * 100)) })) + '</div>'}
+        ${goodHtml(o)}
         ${keysHtml(o)}
+        ${knowHtml(o)}
+        ${voteHtml(o)}
         ${pf ? '<div class="pf-block"><div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead">' + (o.terrain.climbs && o.terrain.climbs.length ? esc(tn('pf_climbs', o.terrain.climbs.length)) : '') + '</span></div>' + pf + '</div>' : ''}
         <div class="rows">
           <details><summary>${esc(t('all_figures'))}</summary>
@@ -1750,6 +1938,8 @@
         }))
         .sort((a, b) => a.properties.selected - b.properties.selected);
       map.getSource('routes').setData({ type: 'FeatureCollection', features });
+      uturnMarks(o);
+      bindVote(o);
       altLabels();
       poiMarkers(o);
       fitRoute();
@@ -1827,6 +2017,11 @@
       if (kind === 'city') return [[0, o.distance_km]];
       if (kind === 'places') return (o.remarkable || []).filter(x => x.km != null)     // 500 m autour de chaque lieu
         .map(x => [Math.max(0, x.km - 0.25), Math.min(o.distance_km, x.km + 0.25)]);
+      if (kind === 'rep') return repOutsideAr(o);
+      if (kind.startsWith('ar:')) {
+        const b = arList(o)[Number(kind.slice(3))];
+        return b ? [[b.from_km, b.to_km]] : [];
+      }
       if (kind.startsWith('climb:')) {
         const c = (o.terrain.climbs || [])[Number(kind.slice(6))];
         return c ? [[c.start_km, c.start_km + c.length_km]] : [];
