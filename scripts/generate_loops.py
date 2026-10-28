@@ -1350,39 +1350,32 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
             continue
         from shapely.geometry import LineString, mapping
         orig = {"points": {"coordinates": c}, "details": l.gh_details, "ascend": l.ascend_gh_m}
-        if half == "aller":                                  # l'aller jusqu'à mi-durée, puis retour par le même chemin
-            cut = next((i for i in range(len(c)) if cum[i] >= cum[-1] / 2.0), t_)   # mi-durée (27/10 : trop court)
-            corridor, ends = c[:cut + 1], [[c[cut][0], c[cut][1]], [c[-1][0], c[-1][1]]]
-        else:                                                # le retour de la boucle, parcouru aussi à l'aller
-            cut = next((i for i in range(len(c)) if cum[-1] - cum[i] <= cum[-1] / 2.0), t_)
-            corridor, ends = c[cut:], [[c[0][0], c[0][1]], [c[cut][0], c[cut][1]]]
-        seg = corridor if half == "aller" else corridor[::-1]
-        zone = LineString([(p_[0], p_[1]) for p_ in corridor]).buffer(PLEASANT_AR_CORRIDOR_DEG).simplify(0.0002)
-        cm = {"priority": [{"if": "in_aller", "multiply_by": "1"}, {"else": "", "multiply_by": str(PLEASANT_AR_OUTSIDE)}],
-              "areas": {"type": "FeatureCollection",
-                        "features": [{"type": "Feature", "id": "aller", "properties": {}, "geometry": mapping(zone)}]}}
-        leg = gh.via(ends, l.profile, custom_model=cm) if l.gh_details is not None and len(corridor) > 1 else None
-        path = None
-        if leg is not None and len(leg["points"]["coordinates"]) > 1:
-            path = splice_path(orig, cut, len(c) - 1, leg) if half == "aller" else splice_path(orig, 0, cut, leg)
-        t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
-        if t is not None and water_ar():                     # aller-retour agréable voulu : sa répétition est le but
-            t.pleasant_ar = True
-            # son demi-tour est voulu (27/10/2026 : un « éperon » de 150 à 375 m au bout coûtait ~20 points et le laissait
-            # juste derrière la boucle, 70,3 contre 70,4) : pas d'éperon ni de détour compté à moins de 500 m du demi-tour
-            tip = c[cut]
-            near_tip = lambda x_: haversine(x_[0], x_[1], tip[0], tip[1]) < 500.0  # noqa: E731
-            t.spurs = [s_ for s_ in (t.spurs or []) if s_.get("lon") is None or not near_tip((s_["lon"], s_["lat"]))]
-            t.detours = [d_ for d_ in (t.detours or []) if not near_tip(t.coords[d_["a"]])]
-            t.score = score(t)
-        ok = (t is not None and time_ok(t.time_s, duration_h) and t.u_turns <= MAX_UTURNS and dirt_ok(t)
-              and relief_ok(t) and (bounds is None or bounds[0] <= t.time_s <= bounds[1]))
-        why_ = ("" if ok else "sans itinéraire" if t is None else "durée" if not time_ok(t.time_s, duration_h)
-                or (bounds is not None and not bounds[0] <= t.time_s <= bounds[1]) else "demi-tours"
-                if t.u_turns > MAX_UTURNS else "terre" if not dirt_ok(t) else "relief")
+        for f_ in PLEASANT_AR_CUTS:
+            if half == "aller":                              # l'aller jusqu'à la coupe, puis retour par le même chemin
+                cut = next((i for i in range(len(c)) if cum[i] >= cum[-1] * f_), t_)
+                corridor, ends = c[:cut + 1], [[c[cut][0], c[cut][1]], [c[-1][0], c[-1][1]]]
+            else:                                            # le retour de la boucle, parcouru aussi à l'aller
+                cut = next((i for i in range(len(c)) if cum[-1] - cum[i] <= cum[-1] * f_), t_)
+                corridor, ends = c[cut:], [[c[0][0], c[0][1]], [c[cut][0], c[cut][1]]]
+            seg = corridor if half == "aller" else corridor[::-1]
+            zone = LineString([(p_[0], p_[1]) for p_ in corridor]).buffer(PLEASANT_AR_CORRIDOR_DEG).simplify(0.0002)
+            cm = {"priority": [{"if": "in_aller", "multiply_by": "1"},
+                               {"else": "", "multiply_by": str(PLEASANT_AR_OUTSIDE)}],
+                  "areas": {"type": "FeatureCollection",
+                            "features": [{"type": "Feature", "id": "aller", "properties": {}, "geometry": mapping(zone)}]}}
+            leg = gh.via(ends, l.profile, custom_model=cm) if l.gh_details is not None and len(corridor) > 1 else None
+            path = None
+            if leg is not None and len(leg["points"]["coordinates"]) > 1:
+                path = splice_path(orig, cut, len(c) - 1, leg) if half == "aller" else splice_path(orig, 0, cut, leg)
+            t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+            if t is not None and water_ar():                 # aller-retour agréable voulu : sa répétition est le but
+                _mark_pleasant_ar(t, c[cut])
+            ok, why_ = _ar_ok(t, duration_h, bounds)
+            if why_ != "durée":                              # une autre coupe ne change que la durée
+                break
         _journal("aller-retour agréable", l, t, seg[-1], ok, why_, moitie=half, demi_tours=getattr(t, "u_turns", None),
                  detail=None if t is None else score_detail(t), detail_base=score_detail(l),
-                 agreable=round(p, 2), ensemble=round(p_all, 2),
+                 agreable=round(p, 2), ensemble=round(p_all, 2), coupe=f_,
                  rep_essai=None if t is None else round(t.overlap, 2))
         if stats is not None:
             k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
@@ -1390,7 +1383,102 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
         if ok:
             _keep_attrs(l, t)
             out.append(t)
-    return out
+    return out + pleasant_run_candidates(gh, l, level, duration_h, bounds, mask)
+
+
+def _mark_pleasant_ar(t, tip):
+    """Aller-retour agréable voulu (PLEASANT_AR) : sa répétition est le but (pas de coût de fluidité) et son demi-tour
+    aussi (27/10/2026 : un « éperon » de 150 à 375 m au bout coûtait ~20 points et le laissait juste derrière la boucle,
+    70,3 contre 70,4) : pas d'éperon ni de détour compté à moins de 500 m du demi-tour tip (None : pas de demi-tour)."""
+    t.pleasant_ar, t.ar_tip = True, tip
+    if tip is not None:
+        near_tip = lambda x_: haversine(x_[0], x_[1], tip[0], tip[1]) < 500.0  # noqa: E731
+        t.spurs = [s_ for s_ in (t.spurs or []) if s_.get("lon") is None or not near_tip((s_["lon"], s_["lat"]))]
+        t.detours = [d_ for d_ in (t.detours or []) if not near_tip(t.coords[d_["a"]])]
+    t.score = score(t)
+
+
+def _ar_ok(t, duration_h, bounds):
+    """(valide ?, pourquoi) pour un aller-retour agréable fabriqué (la répétition n'est pas un motif de refus)."""
+    if t is None:
+        return False, "sans itinéraire"
+    if not time_ok(t.time_s, duration_h) or (bounds is not None and not bounds[0] <= t.time_s <= bounds[1]):
+        return False, "durée"
+    if t.u_turns > MAX_UTURNS:
+        return False, "demi-tours"
+    if not dirt_ok(t):
+        return False, "terre"
+    if not relief_ok(t):
+        return False, "relief"
+    return True, ""
+
+
+def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
+    """La boucle l reprenant son plus long tronçon agréable dans l'autre sens (PLEASANT_RUN_*) : [Loop] (0 ou 1)."""
+    from shapely.geometry import LineString, mapping
+    c, cum = l.coords, _cum(l.coords)
+    if l.gh_details is None or len(c) < 3:
+        return []
+    runs, k, n = [], 0, len(mask)
+    while k < n:                                             # tronçons agréables (trous de 100 m tolérés)
+        if not mask[k]:
+            k += 1
+            continue
+        j = k
+        while j < n and (mask[j] or (j + 1 < n and mask[j + 1])):
+            j += 1
+        if (j - k) * 100.0 >= PLEASANT_RUN_MIN_M:
+            runs.append((j - k, k, j))
+        k = j
+    if not runs:
+        return []
+    _, k0, k1 = max(runs)
+    at = lambda d: next((i for i in range(len(c)) if cum[i] >= d), len(c) - 1)  # noqa: E731
+    ra, rb = at(k0 * 100.0), at(k1 * 100.0)
+    marks = sorted({at(d * 100.0) for d in range(int(cum[-1] // 100) + 1)})
+    outbound = cum[ra] + cum[rb] < cum[-1]                   # tronçon à l'aller : repris au retour (et inversement)
+    best = None
+    for j in marks:
+        if outbound and not (j > rb and cum[j] >= cum[-1] / 2.0):
+            continue
+        if not outbound and not (j < ra and cum[j] <= cum[-1] / 2.0):
+            continue
+        for k in (m for m in marks if ra <= m <= rb):
+            d = haversine(c[j][0], c[j][1], c[k][0], c[k][1])
+            gain = (cum[k] - cum[ra]) if outbound else (cum[rb] - cum[k])
+            if d <= PLEASANT_RUN_NEAR_M and gain >= PLEASANT_RUN_MIN_M and (best is None or gain - 3 * d > best[0]):
+                best = (gain - 3 * d, j, k)
+    if best is None:
+        return []
+    _, j, k = best
+    corridor = c[:k + 1] if outbound else c[k:]
+    zone = LineString([(p_[0], p_[1]) for p_ in corridor]).buffer(PLEASANT_AR_CORRIDOR_DEG).simplify(0.0002)
+    cm = {"priority": [{"if": "in_reprise", "multiply_by": "1"}, {"else": "", "multiply_by": str(PLEASANT_RUN_OUTSIDE)}],
+          "areas": {"type": "FeatureCollection",
+                    "features": [{"type": "Feature", "id": "reprise", "properties": {}, "geometry": mapping(zone)}]}}
+    pts = ([[c[j][0], c[j][1]], [c[k][0], c[k][1]], [c[-1][0], c[-1][1]]] if outbound
+           else [[c[0][0], c[0][1]], [c[k][0], c[k][1]], [c[j][0], c[j][1]]])
+    leg = gh.via(pts, l.profile, custom_model=cm)
+    t = None
+    if leg is not None and len(leg["points"]["coordinates"]) > 1:
+        orig = {"points": {"coordinates": c}, "details": l.gh_details, "ascend": l.ascend_gh_m}
+        path = splice_path(orig, j, len(c) - 1, leg) if outbound else splice_path(orig, 0, j, leg)
+        t = analyse(path, level, l.profile, duration_h, l.seed, l.heading)
+    if t is not None and water_ar():
+        _mark_pleasant_ar(t, None)
+    ok, why_ = _ar_ok(t, duration_h, bounds)
+    _journal("aller-retour agréable", l, t, c[k], ok, why_, moitie="tronçon", demi_tours=getattr(t, "u_turns", None),
+             detail=None if t is None else score_detail(t), detail_base=score_detail(l),
+             m=round((cum[k] - cum[ra]) if outbound else (cum[rb] - cum[k])),
+             rep_essai=None if t is None else round(t.overlap, 2))
+    stats = getattr(_TL, "clean_stats", None)
+    if stats is not None:
+        k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
+        stats[k_] = stats.get(k_, 0) + 1
+    if not ok:
+        return []
+    _keep_attrs(l, t)
+    return [t]
 
 
 # REPEAT_FIX (26/10/2026, 5e comparaison : la répétition inutile dans Sant Cugat (Horta 3 h), l'Avinguda del Mar
@@ -1418,6 +1506,9 @@ def repeat_runs(l) -> list:
         return []
     c, cum = l.coords, _cum(l.coords)
     wclose = water_close(c, cum) if water_ar() else []
+    # aller-retour agréable (28/10/2026, Castelldefels 1 h : l'aller-retour par le bord de mer repassait aussi
+    # l'Avinguda del Mar) : seuls ses tronçons repassés surtout hors de la partie agréable sont à recalculer
+    pm = pleasant_mask(l) if getattr(l, "pleasant_ar", False) else None
     runs, i = [], 0
     while i < len(mask):
         if not mask[i]:
@@ -1428,7 +1519,9 @@ def repeat_runs(l) -> list:
             j += 1
         m = cum[min(j, len(cum) - 1)] - cum[i]
         k = int(cum[(i + j) // 2] // 100)
-        if m >= REPEAT_FIX_MIN_M and not (k < len(wclose) and wclose[k]) and i > 0:
+        nice_ = pm is not None and sum(1 for x in range(int(cum[i] // 100), int(cum[min(j, len(cum) - 1)] // 100) + 1)
+                                       if x < len(pm) and pm[x]) >= 0.5 * (m / 100.0 + 1)
+        if m >= REPEAT_FIX_MIN_M and not (k < len(wclose) and wclose[k]) and not nice_ and i > 0:
             # le second passage : un point du tronçon près du tracé d'avant, échantillonné tous les 20 m (27/10/2026 :
             # avec les seuls sommets, espacés de 100 m à 1 km, le retour par la Bonanova n'était pas reconnu)
             before = sample_points(c[:i + 1], cum[:i + 1], 20.0)
@@ -1471,6 +1564,8 @@ def repeat_fix_loop(gh, l, level, duration_h, bounds=None):
             path = splice_path({"points": {"coordinates": c}, "details": best.gh_details, "ascend": best.ascend_gh_m},
                                a2, b2, sub)
             t = analyse(path, level, best.profile, duration_h, best.seed, best.heading)
+            if t is not None and getattr(best, "pleasant_ar", False):
+                _mark_pleasant_ar(t, getattr(best, "ar_tip", None))
             why = _why(t, best, duration_h, bounds, best.score - 100 * REPEAT_FIX_SLACK, less_rep=True)
             ok = not why
             _journal("répétition", best, t, c[(a + b) // 2], ok, why, rep=round(best.overlap, 3),
@@ -2124,6 +2219,17 @@ PLEASANT_AR_GAP = 0.15
 # priorité multipliée par PLEASANT_AR_OUTSIDE) : le même chemin à l'envers, là où c'est permis.
 PLEASANT_AR_CORRIDOR_DEG = 0.0007
 PLEASANT_AR_OUTSIDE = 0.1
+# 28/10/2026 (vérification des remarques : des allers-retours mieux notés refusés pour la durée, Sant Martí 73 contre 50,
+# Granollers 89 contre 79 : le retour d'un trait est plus direct que l'aller, coupé à mi-parcours il tombe trop court) :
+# coupes essayées dans l'ordre, en part de la boucle, jusqu'à la première de la bonne durée
+PLEASANT_AR_CUTS = (0.5, 0.6, 0.7, 0.4)
+# 28/10/2026 (Ciutat Vella 3 h : la boucle longe la mer plusieurs km à l'aller puis rentre par la ville ; aucune moitié
+# n'est assez agréable pour un aller-retour) : le plus long tronçon agréable d'au moins PLEASANT_RUN_MIN_M est repris
+# dans l'autre sens, rejoint depuis le point de la boucle le plus proche (au plus PLEASANT_RUN_NEAR_M) ; le reste du
+# chemin suit la boucle d'origine à l'envers (hors de ce couloir, priorité multipliée par PLEASANT_RUN_OUTSIDE)
+PLEASANT_RUN_MIN_M = 2000.0
+PLEASANT_RUN_NEAR_M = 2000.0
+PLEASANT_RUN_OUTSIDE = 0.3
 # WATER_AR (26/10/2026, 5e comparaison : « le retour devrait longer la côte en reprenant la même route plutôt que de
 # chercher à l'éviter en passant par la ville. Cette remarque revient souvent », Florent ; Ciutat Vella 1 h 30 et 3 h,
 # Cornellà 1 h 30, Castelldefels 3 h). Les allers-retours au bord de l'eau fabriqués (PLEASANT_AR) ne gagnaient jamais :
@@ -6006,6 +6112,8 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
                 pool = [t if x is l else x for x in pool]
     if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)
         extra = [t for _, l in pick_options(pool, prior) for t in pleasant_ar_candidates(gh, l, level, duration_h, bounds)]
+        if repeat_fix():                                     # sans ses tronçons repassés hors de la partie agréable
+            extra = [repeat_fix_loop(gh, t, level, duration_h, bounds) or t for t in extra]
         log(f"    aller-retour agréable : {len(extra)} candidate(s)")
         pool = list(pool) + extra
     if village_via() and village_plus() and pool:            # par le centre des jolis villages (VILLAGE_VIA)
