@@ -1456,8 +1456,11 @@ def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
     cm = {"priority": [{"if": "in_reprise", "multiply_by": "1"}, {"else": "", "multiply_by": str(PLEASANT_RUN_OUTSIDE)}],
           "areas": {"type": "FeatureCollection",
                     "features": [{"type": "Feature", "id": "reprise", "properties": {}, "geometry": mapping(zone)}]}}
-    pts = ([[c[j][0], c[j][1]], [c[k][0], c[k][1]], [c[-1][0], c[-1][1]]] if outbound
-           else [[c[0][0], c[0][1]], [c[k][0], c[k][1]], [c[j][0], c[j][1]]])
+    # 28/10/2026 (Ciutat Vella 1 h 30 : le retour par la côte tombait de 58,5 à 27,9) : le point k imposé tombait sur
+    # l'autre chaussée de l'Avinguda d'Eduard Maristany, d'où un demi-tour de 300 m compté comme éperon ; le couloir
+    # (priorité) suffit à faire reprendre le tronçon, sans point de passage imposé
+    pts = ([[c[j][0], c[j][1]], [c[-1][0], c[-1][1]]] if outbound
+           else [[c[0][0], c[0][1]], [c[j][0], c[j][1]]])
     leg = gh.via(pts, l.profile, custom_model=cm)
     t = None
     if leg is not None and len(leg["points"]["coordinates"]) > 1:
