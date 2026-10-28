@@ -2235,6 +2235,11 @@ PLEASANT_RUN_OUTSIDE = 0.3
 # (l'accès en ville) compte de nouveau, pesée PLEASANT_AR_PLAIN fois (1 : comme une boucle avant FLOW_V2) ; le reste
 # (bord de l'eau, forêt, piste hors de la ville) ne coûte toujours rien
 PLEASANT_AR_PLAIN = 1.0
+# ordre voulu par Florent (28/10/2026) : « retour agréable différent > retour agréable identique > retour différent non
+# agréable > retour identique non agréable » : la répétition agréable (bord de l'eau, forêt, piste hors de la ville) d'un
+# aller-retour agréable coûte PLEASANT_AR_NICE (comme le bord de l'eau dans une boucle, WATER_AR_WEIGHT) : à agrément égal,
+# une vraie boucle (aller le long de la mer, retour par la forêt) passe devant
+PLEASANT_AR_NICE = 0.5
 # WATER_AR (26/10/2026, 5e comparaison : « le retour devrait longer la côte en reprenant la même route plutôt que de
 # chercher à l'éviter en passant par la ville. Cette remarque revient souvent », Florent ; Ciutat Vella 1 h 30 et 3 h,
 # Cornellà 1 h 30, Castelldefels 3 h). Les allers-retours au bord de l'eau fabriqués (PLEASANT_AR) ne gagnaient jamais :
@@ -4520,6 +4525,11 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     return loop
 
 
+def _ar_plain(l) -> float:
+    """Part repassée sur routes ordinaires hors du bord de l'eau (l'accès en ville d'un aller-retour agréable)."""
+    return max(0.0, getattr(l, "rep_plain", 0.0) - getattr(l, "rep_water_plain", 0.0))
+
+
 def score_parts(l: Loop) -> tuple[dict, dict]:
     """Sous-scores (0 à 1) et poids utilisés par score() : exposés pour les diagnostics (nature_check.py)."""
     s = l.shares
@@ -4540,8 +4550,8 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         # plus agréable que la boucle
         # même règle pour tout aller-retour dont la répétition est surtout au bord de l'eau (27/10/2026 : l'aller-retour
         # par la côte décrit par Florent à Ciutat Vella, noté comme une boucle ordinaire, payait toute sa répétition)
-        "flow": (1.0 - min(1.0, 0.15 * l.u_turns + PLEASANT_AR_PLAIN * max(
-                     0.0, getattr(l, "rep_plain", 0.0) - getattr(l, "rep_water_plain", 0.0))))
+        "flow": (1.0 - min(1.0, 0.15 * l.u_turns
+                               + PLEASANT_AR_PLAIN * _ar_plain(l) + PLEASANT_AR_NICE * max(0.0, l.overlap - _ar_plain(l))))
                 if (getattr(l, "pleasant_ar", False) or water_out_and_back(l)) else
                 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
                           + (((FLOW_V2_FACTOR - FLOW_OVERLAP_FACTOR) * getattr(l, "rep_plain", 0.0)
