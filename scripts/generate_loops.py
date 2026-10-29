@@ -1370,13 +1370,18 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
             t = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
             if t is not None and water_ar():                 # aller-retour agréable voulu : sa répétition est le but
                 _mark_pleasant_ar(t, c[cut])
+            ordre = None
+            if t is not None:                                # partie remplacée : après la coupe (aller) ou avant (retour)
+                ct = _cum(t.coords)
+                ordre = (_order_bonus(l, t, (cum[cut], cum[-1]), (cum[cut], ct[-1]), mask) if half == "aller" else
+                         _order_bonus(l, t, (0.0, cum[cut]), (0.0, ct[-1] - (cum[-1] - cum[cut])), mask))
             ok, why_ = _ar_ok(t, duration_h, bounds)
             if why_ != "durée":                              # une autre coupe ne change que la durée
                 break
         _journal("aller-retour agréable", l, t, seg[-1], ok, why_, moitie=half, demi_tours=getattr(t, "u_turns", None),
                  detail=None if t is None else score_detail(t), detail_base=score_detail(l),
                  agreable=round(p, 2), ensemble=round(p_all, 2), coupe=f_,
-                 rep_essai=None if t is None else round(t.overlap, 2))
+                 rep_essai=None if t is None else round(t.overlap, 2), ordre=ordre)
         if stats is not None:
             k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
             stats[k_] = stats.get(k_, 0) + 1
@@ -1469,11 +1474,16 @@ def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
         t = analyse(path, level, l.profile, duration_h, l.seed, l.heading)
     if t is not None and water_ar():
         _mark_pleasant_ar(t, None)
+    ordre = None
+    if t is not None:                                        # partie remplacée : après j (tronçon à l'aller) ou avant
+        ct = _cum(t.coords)
+        ordre = (_order_bonus(l, t, (cum[j], cum[-1]), (cum[j], ct[-1]), mask) if outbound else
+                 _order_bonus(l, t, (0.0, cum[j]), (0.0, ct[-1] - (cum[-1] - cum[j])), mask))
     ok, why_ = _ar_ok(t, duration_h, bounds)
     _journal("aller-retour agréable", l, t, c[k], ok, why_, moitie="tronçon", demi_tours=getattr(t, "u_turns", None),
              detail=None if t is None else score_detail(t), detail_base=score_detail(l),
              m=round((cum[k] - cum[ra]) if outbound else (cum[rb] - cum[k])),
-             rep_essai=None if t is None else round(t.overlap, 2))
+             rep_essai=None if t is None else round(t.overlap, 2), ordre=ordre)
     stats = getattr(_TL, "clean_stats", None)
     if stats is not None:
         k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
@@ -2259,6 +2269,40 @@ PLEASANT_AR_WATER = 0.25
 WATER_AR = False
 WATER_AR_WEIGHT = 0.5
 WATER_AR_SHARE = 0.4
+# PLEASANT_ORDER (29/10/2026, Ciutat Vella 1 h 30 : le retour par la côte notait 52,1 contre 58,5 pour le retour par
+# Taulat et le Poblenou, surtout pour les feux de la piste du front de mer retraversés ; Florent : « Taulat reste moins
+# agréable que la côte ») : ordre voulu « retour agréable identique > retour différent non agréable ». Quand la partie
+# remplacée de la boucle est peu agréable (moins de PLEASANT_AR_MIN) et celle de l'aller-retour agréable l'est (au moins
+# PLEASANT_AR_MIN, et PLEASANT_AR_GAP de plus), l'aller-retour reçoit de quoi passer juste devant la boucle, s'il n'est
+# pas derrière de plus de PLEASANT_ORDER_TOL points. False : comme avant.
+PLEASANT_ORDER = False
+PLEASANT_ORDER_TOL = 8.0
+
+
+def pleasant_order() -> bool:
+    return _flag("pleasant_order", PLEASANT_ORDER)
+
+
+def _pleasant_share(l, a_m, b_m, mask=None) -> float:
+    """Part agréable (pleasant_mask) de la boucle l entre a_m et b_m mètres."""
+    mask = pleasant_mask(l) if mask is None else mask
+    ks = range(max(0, int(a_m // 100)), min(len(mask), int(b_m // 100) + 1))
+    return sum(1 for k in ks if mask[k]) / max(1, len(ks))
+
+
+def _order_bonus(l, t, base_ab, trial_ab, mask=None):
+    """PLEASANT_ORDER : bonus de l'aller-retour agréable t face à la boucle l dont il remplace la partie base_ab (m) par
+    trial_ab (m) ; renvoie (part agréable remplacée, part agréable nouvelle) pour le journal."""
+    if t is None or not pleasant_order():
+        return None
+    p_l = _pleasant_share(l, *base_ab, mask=mask)
+    p_t = _pleasant_share(t, *trial_ab)
+    t.order_bonus = 0.0
+    if (p_l < PLEASANT_AR_MIN and p_t >= PLEASANT_AR_MIN and p_t - p_l >= PLEASANT_AR_GAP
+            and l.score - PLEASANT_ORDER_TOL <= t.score < l.score):
+        t.order_bonus = (l.score - t.score + 0.1) / 100.0
+        t.score = score(t)
+    return [round(p_l, 2), round(p_t, 2)]
 
 
 def water_ar() -> bool:
@@ -4643,6 +4687,7 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
             total -= min(BACKTRACK_LONG_MAX, BACKTRACK_LONG_PEN + BACKTRACK_LONG_PEN_PER * (ar_sum_share(l) - AR_SUM_SHARE))
     if getattr(l, "appendices", None):                    # petite boucle accrochée sans but : 3 points, une seule fois
         total -= APPENDIX_PENALTY
+    total += getattr(l, "order_bonus", 0.0)               # retour agréable identique avant différent (PLEASANT_ORDER)
     if l.spurs:                                           # éperons injustifiés (SPUR_FIX)
         total -= min(SPUR_MAX_PENALTY, sum(SPUR_PENALTY + SPUR_PENALTY_PER_100M * s["m"] / 100.0 for s in l.spurs))
     if village_plus():                                    # jolis villages traversés (VILLAGE_PLUS)
