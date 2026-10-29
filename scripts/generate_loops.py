@@ -1447,8 +1447,15 @@ def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
     # cyclable de Taulat, 7 km d'un trait, et la variante reprenait Taulat en abandonnant la côte, coupée par l'Avinguda
     # d'Eduard Maristany) : on essaie aussi le plus long tronçon au bord de l'eau ou en nature (pleasant_mask strict),
     # coupures de PLEASANT_RUN_GAP_M au plus tolérées
+    # 30/10/2026 (même cas) : le plus long tronçon strict était l'aller-retour déjà fait jusqu'à Badalona ; seuls comptent
+    # les tranches parcourues une seule fois (la côte de l'aller, que le retour quitte pour Taulat)
     if pleasant_order():
-        strong = _pleasant_runs(pleasant_mask(l, strong=True), int(PLEASANT_RUN_GAP_M // 100))
+        once = pleasant_mask(l, strong=True)
+        for i, m_ in enumerate(corridor_repeats(c, cum)):
+            if m_ > 0:
+                for k_ in range(int(cum[i] // 100), min(len(once), int(cum[i + 1] // 100) + 1)):
+                    once[k_] = False
+        strong = _pleasant_runs(once, int(PLEASANT_RUN_GAP_M // 100))
         if strong and max(strong)[1:] not in [p_[1:] for p_ in picks]:
             picks.append(max(strong))
     out = []
