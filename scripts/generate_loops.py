@@ -1306,8 +1306,10 @@ def village_via_loop(gh, l, level, duration_h, bounds=None):
     return None if best is l else best
 
 
-def pleasant_mask(l) -> list:
-    """Par tranche de 100 m : agréable ? (nature ou forêt, piste cyclable hors de la ville, bord de l'eau ; PLEASANT_AR)"""
+def pleasant_mask(l, strong=False) -> list:
+    """Par tranche de 100 m : agréable ? (nature ou forêt, piste cyclable hors de la ville, bord de l'eau ; PLEASANT_AR)
+    strong : bord de l'eau, nature ou forêt seulement (PLEASANT_ORDER : une piste cyclable en ville, Taulat, ne vaut pas
+    la côte)"""
     import numpy as np
     import shapely
     cum = _cum(l.coords)
@@ -1328,7 +1330,7 @@ def pleasant_mask(l) -> list:
     out = []
     for k in range(n):
         nice = (water[k] or (k < len(lc_) and lc_[k] in "ef")
-                or (k < len(road_) and road_[k] == "c" and (k >= len(lc_) or lc_[k] != "v")))
+                or (not strong and k < len(road_) and road_[k] == "c" and (k >= len(lc_) or lc_[k] != "v")))
         out.append(bool(nice and (water[k] or not (nz_ and k < len(nz_) and nz_[k]))))
     return out
 
@@ -1373,8 +1375,8 @@ def pleasant_ar_candidates(gh, l, level, duration_h, bounds=None) -> list:
             ordre = None
             if t is not None:                                # partie remplacée : après la coupe (aller) ou avant (retour)
                 ct = _cum(t.coords)
-                ordre = (_order_bonus(l, t, (cum[cut], cum[-1]), (cum[cut], ct[-1]), mask) if half == "aller" else
-                         _order_bonus(l, t, (0.0, cum[cut]), (0.0, ct[-1] - (cum[-1] - cum[cut])), mask))
+                ordre = (_order_bonus(l, t, (cum[cut], cum[-1]), (cum[cut], ct[-1])) if half == "aller" else
+                         _order_bonus(l, t, (0.0, cum[cut]), (0.0, ct[-1] - (cum[-1] - cum[cut]))))
             ok, why_ = _ar_ok(t, duration_h, bounds)
             if why_ != "durée":                              # une autre coupe ne change que la durée
                 break
@@ -1418,26 +1420,48 @@ def _ar_ok(t, duration_h, bounds):
     return True, ""
 
 
-def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
-    """La boucle l reprenant son plus long tronçon agréable dans l'autre sens (PLEASANT_RUN_*) : [Loop] (0 ou 1)."""
-    from shapely.geometry import LineString, mapping
-    c, cum = l.coords, _cum(l.coords)
-    if l.gh_details is None or len(c) < 3:
-        return []
+def _pleasant_runs(mask, gap_bins=1) -> list:
+    """Tronçons agréables d'au moins PLEASANT_RUN_MIN_M (trous de gap_bins × 100 m tolérés) : [(longueur, k0, k1)]."""
     runs, k, n = [], 0, len(mask)
-    while k < n:                                             # tronçons agréables (trous de 100 m tolérés)
+    while k < n:
         if not mask[k]:
             k += 1
             continue
         j = k
-        while j < n and (mask[j] or (j + 1 < n and mask[j + 1])):
+        while j < n and (mask[j] or any(mask[j + 1:j + 1 + gap_bins])):
             j += 1
         if (j - k) * 100.0 >= PLEASANT_RUN_MIN_M:
             runs.append((j - k, k, j))
         k = j
-    if not runs:
+    return runs
+
+
+def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
+    """La boucle l reprenant son plus long tronçon agréable dans l'autre sens (PLEASANT_RUN_*) : [Loop] (0 à 2)."""
+    c, cum = l.coords, _cum(l.coords)
+    if l.gh_details is None or len(c) < 3:
         return []
-    _, k0, k1 = max(runs)
+    runs = _pleasant_runs(mask)
+    picks = [max(runs)] if runs else []
+    # PLEASANT_ORDER, 2e version (29/10/2026, Ciutat Vella 1 h 30 : le plus long tronçon « agréable » était la piste
+    # cyclable de Taulat, 7 km d'un trait, et la variante reprenait Taulat en abandonnant la côte, coupée par l'Avinguda
+    # d'Eduard Maristany) : on essaie aussi le plus long tronçon au bord de l'eau ou en nature (pleasant_mask strict),
+    # coupures de PLEASANT_RUN_GAP_M au plus tolérées
+    if pleasant_order():
+        strong = _pleasant_runs(pleasant_mask(l, strong=True), int(PLEASANT_RUN_GAP_M // 100))
+        if strong and max(strong)[1:] not in [p_[1:] for p_ in picks]:
+            picks.append(max(strong))
+    out = []
+    for _, k0, k1 in picks:
+        t = _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1)
+        if t is not None:
+            out.append(t)
+    return out
+
+
+def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
+    """La boucle l reprenant le tronçon k0..k1 (tranches de 100 m) dans l'autre sens, ou None."""
+    from shapely.geometry import LineString, mapping
     at = lambda d: next((i for i in range(len(c)) if cum[i] >= d), len(c) - 1)  # noqa: E731
     ra, rb = at(k0 * 100.0), at(k1 * 100.0)
     marks = sorted({at(d * 100.0) for d in range(int(cum[-1] // 100) + 1)})
@@ -1454,7 +1478,7 @@ def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
             if d <= PLEASANT_RUN_NEAR_M and gain >= PLEASANT_RUN_MIN_M and (best is None or gain - 3 * d > best[0]):
                 best = (gain - 3 * d, j, k)
     if best is None:
-        return []
+        return None
     _, j, k = best
     corridor = c[:k + 1] if outbound else c[k:]
     zone = LineString([(p_[0], p_[1]) for p_ in corridor]).buffer(PLEASANT_AR_CORRIDOR_DEG).simplify(0.0002)
@@ -1477,8 +1501,8 @@ def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
     ordre = None
     if t is not None:                                        # partie remplacée : après j (tronçon à l'aller) ou avant
         ct = _cum(t.coords)
-        ordre = (_order_bonus(l, t, (cum[j], cum[-1]), (cum[j], ct[-1]), mask) if outbound else
-                 _order_bonus(l, t, (0.0, cum[j]), (0.0, ct[-1] - (cum[-1] - cum[j])), mask))
+        ordre = (_order_bonus(l, t, (cum[j], cum[-1]), (cum[j], ct[-1])) if outbound else
+                 _order_bonus(l, t, (0.0, cum[j]), (0.0, ct[-1] - (cum[-1] - cum[j]))))
     ok, why_ = _ar_ok(t, duration_h, bounds)
     _journal("aller-retour agréable", l, t, c[k], ok, why_, moitie="tronçon", demi_tours=getattr(t, "u_turns", None),
              detail=None if t is None else score_detail(t), detail_base=score_detail(l),
@@ -1489,9 +1513,9 @@ def pleasant_run_candidates(gh, l, level, duration_h, bounds, mask) -> list:
         k_ = "aller-retour agréable " + ("ok" if ok else "refusé")
         stats[k_] = stats.get(k_, 0) + 1
     if not ok:
-        return []
+        return None
     _keep_attrs(l, t)
-    return [t]
+    return t
 
 
 # REPEAT_FIX (26/10/2026, 5e comparaison : la répétition inutile dans Sant Cugat (Horta 3 h), l'Avinguda del Mar
@@ -2277,25 +2301,28 @@ WATER_AR_SHARE = 0.4
 # pas derrière de plus de PLEASANT_ORDER_TOL points. False : comme avant.
 PLEASANT_ORDER = False
 PLEASANT_ORDER_TOL = 8.0
+PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
 
 def pleasant_order() -> bool:
     return _flag("pleasant_order", PLEASANT_ORDER)
 
 
-def _pleasant_share(l, a_m, b_m, mask=None) -> float:
-    """Part agréable (pleasant_mask) de la boucle l entre a_m et b_m mètres."""
-    mask = pleasant_mask(l) if mask is None else mask
+def _pleasant_share(l, a_m, b_m) -> float:
+    """Part au bord de l'eau ou en nature (pleasant_mask strict) de la boucle l entre a_m et b_m mètres."""
+    mask = getattr(l, "_strong_mask", None)
+    if mask is None:
+        mask = l._strong_mask = pleasant_mask(l, strong=True)
     ks = range(max(0, int(a_m // 100)), min(len(mask), int(b_m // 100) + 1))
     return sum(1 for k in ks if mask[k]) / max(1, len(ks))
 
 
-def _order_bonus(l, t, base_ab, trial_ab, mask=None):
+def _order_bonus(l, t, base_ab, trial_ab):
     """PLEASANT_ORDER : bonus de l'aller-retour agréable t face à la boucle l dont il remplace la partie base_ab (m) par
     trial_ab (m) ; renvoie (part agréable remplacée, part agréable nouvelle) pour le journal."""
     if t is None or not pleasant_order():
         return None
-    p_l = _pleasant_share(l, *base_ab, mask=mask)
+    p_l = _pleasant_share(l, *base_ab)
     p_t = _pleasant_share(t, *trial_ab)
     t.order_bonus = 0.0
     if (p_l < PLEASANT_AR_MIN and p_t >= PLEASANT_AR_MIN and p_t - p_l >= PLEASANT_AR_GAP
