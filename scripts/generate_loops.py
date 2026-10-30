@@ -1522,7 +1522,27 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     if not ok:
         return None
     _keep_attrs(l, t)
-    return t
+    return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
+
+
+def _trim_run(gh, l, t, level, duration_h, bounds):
+    """La variante t sans ses détours (PLEASANT_ORDER ; 30/10/2026, Ciutat Vella 1 h 30 : le crochet de 229 m du Parc del
+    Fòrum, hérité de la boucle l : trim_detours passe avant les variantes et refuserait leur répétition) ; sinon t."""
+    way = route_waypoints(t.coords, skip=[(d["a"], d["b"]) for d in t.detours])
+    path = gh.via(way, t.profile, pass_through=True)
+    n = analyse(path, level, t.profile, duration_h, t.seed, t.heading) if path else None
+    if n is not None and water_ar():
+        _mark_pleasant_ar(n, None)
+    if n is not None:
+        n.order_bonus = getattr(t, "order_bonus", 0.0)
+        n.score = score(n)
+    ok, why_ = _ar_ok(n, duration_h, bounds)
+    ok = ok and len(n.detours) < len(t.detours) and n.score >= t.score - 1.0
+    _journal("variante sans détour", t, n, t.coords[t.detours[0]["a"]], ok, why_)
+    if not ok:
+        return t
+    _keep_attrs(l, n)
+    return n
 
 
 # REPEAT_FIX (26/10/2026, 5e comparaison : la répétition inutile dans Sant Cugat (Horta 3 h), l'Avinguda del Mar
