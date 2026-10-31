@@ -932,12 +932,19 @@ def along_sea(coords, a: int, b: int) -> bool:
     return float(close.mean()) >= WATER_ALONG_SHARE
 
 
+def near_sea(p) -> bool:
+    """Le point p est-il près de la côte (DEAD_END_SEA_DEG) ?"""
+    import shapely
+    tr_ = LANDSCAPE.trees.get("sea") if LANDSCAPE is not None else None
+    return tr_ is not None and len(tr_.query(shapely.Point(p[0], p[1]), predicate="dwithin", distance=DEAD_END_SEA_DEG)) > 0
+
+
 def retraced(coords, a: int, b: int) -> bool:
-    """coords[a..b] repart-il par où il est venu (RETRACE_R_M, RETRACE_SHARE du chemin) ? Un lacet, lui, ne repasse pas au
-    même endroit."""
+    """coords[a..b], court (RETRACE_MAX_M), repart-il par où il est venu (RETRACE_R_M, RETRACE_SHARE du chemin) ? Un lacet,
+    lui, ne repasse pas au même endroit."""
     seg = coords[a:b + 1]
     cum = _cum(seg)
-    if cum[-1] <= 0.0:
+    if not 0.0 < cum[-1] <= RETRACE_MAX_M:
         return False
     pts = sample_points(seg, cum, 10.0)
     tip = max(range(len(pts)), key=lambda i: haversine(pts[0][0], pts[0][1], pts[i][0], pts[i][1]))
@@ -2362,9 +2369,11 @@ PLEASANT_ORDER_TOL = 8.0
 # DEAD_END_LOOP_SHARE de la distance) ; une fenêtre qui repart par où elle est venue n'est jamais un lacet.
 DEAD_END = False
 DEAD_END_MIN_M = 1000.0
-DEAD_END_LOOP_SHARE = 0.4
+DEAD_END_LOOP_SHARE = 0.2
+DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
+RETRACE_MAX_M = 500.0             # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
 
@@ -4433,12 +4442,13 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             else:
                 keep.append(w)
         useful = keep
-    if dead_end() and useful:                            # cul-de-sac sans destination (DEAD_END)
+    if dead_end() and useful:                            # cul-de-sac le long d'une rivière, sans destination (DEAD_END)
         keep = []
         for w in useful:
             m_ = cum[min(w[1], len(cum) - 1)] - cum[w[0]]
             if (w[3] in ("nature", "piste") and DEAD_END_MIN_M <= m_ < DEAD_END_LOOP_SHARE * total
-                    and not destination_tip(coords[w[2]]) and not along_sea(coords, w[0], w[1])):
+                    and along_water(coords, w[0], w[1]) and not destination_tip(coords[w[2]])
+                    and not near_sea(coords[w[2]]) and not along_sea(coords, w[0], w[1])):
                 demoted.append((w, "aimless"))
             else:
                 keep.append(w)
