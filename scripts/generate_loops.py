@@ -1566,6 +1566,28 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
+def trim_retrace(gh, l, level, duration_h, bounds):
+    """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
+    les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
+    if not getattr(l, "retrace_windows", None):
+        return None
+    way = route_waypoints(l.coords, skip=l.retrace_windows)
+    path = gh.via(way, l.profile, pass_through=True)
+    n = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+    if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
+        _mark_pleasant_ar(n, None)
+    if n is not None:
+        n.order_bonus = getattr(l, "order_bonus", 0.0)
+        n.score = score(n)
+    ok, why_ = _ar_ok(n, duration_h, bounds)
+    ok = ok and len(n.retrace_windows) < len(l.retrace_windows) and n.score >= l.score - 1.0
+    _journal("sans demi-tour", l, n, l.coords[l.retrace_windows[0][0]], ok, why_)
+    if not ok:
+        return None
+    _keep_attrs(l, n)
+    return n
+
+
 def _trim_run(gh, l, t, level, duration_h, bounds):
     """La variante t sans ses détours (PLEASANT_ORDER ; 30/10/2026, Ciutat Vella 1 h 30 : le crochet de 229 m du Parc del
     Fòrum, hérité de la boucle l : trim_detours passe avant les variantes et refuserait leur répétition) ; sinon t."""
@@ -4593,9 +4615,11 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                          and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])
                          and along_water(coords, a_, b_)) if backtrack_dest() else 0)     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
+    loop.retrace_windows = []
     if loop.detours and hairpins():                      # lacets : la route elle-même (HAIRPINS)
-        loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])
-                        or (dead_end() and retraced(coords, d["a"], d["b"]))]
+        loop.retrace_windows = ([(d["a"], d["b"]) for d in loop.detours if smooth_window(coords, d["a"], d["b"])
+                                 and retraced(coords, d["a"], d["b"])] if dead_end() else [])
+        loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])]
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours
                         if (backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) or "")
@@ -6316,7 +6340,12 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             log(f"    villages : note {l.score:.1f} -> " + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:
                 pool = [t if x is l else x for x in pool]
-    if dead_end():                                           # cul-de-sac le long d'une rivière (DEAD_END)
+    if dead_end() and pool:                                  # demi-tours sur place, cul-de-sac de rivière (DEAD_END)
+        pool = list(pool)
+        for _, l in pick_options(pool, prior):
+            t = trim_retrace(gh, l, level, duration_h, bounds)
+            if t is not None:
+                pool = [t if x is l else x for x in pool]
         for l in pool:
             if getattr(l, "dead_end", False):
                 l.score -= DEAD_END_PEN
