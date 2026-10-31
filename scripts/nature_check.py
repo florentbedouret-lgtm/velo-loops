@@ -464,7 +464,7 @@ def report_prev_check(results, out_json, out_md, t0, steps=("2000", "500", "300"
 TRIAL_FLAGS = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
                "detour_dest", "defect_strict", "flow_v2", "hairpins", "small_model", "water_hug", "dest_heritage",
                "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "repeat_plain", "ar_sum", "village_via", "pleasant_ar",
-               "water_ar", "repeat_fix", "foot_no_bike", "pleasant_order")
+               "water_ar", "repeat_fix", "foot_no_bike", "pleasant_order", "dead_end")
 
 
 def ablation(path, level, profile, d) -> dict:
@@ -767,7 +767,7 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
         v191 = ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest", "spur_turn_window",
                 "detour_dest", "defect_strict", "flow_v2", "hairpins")
         flags = {"g_v191": v191,
-                 "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "ar_sum", "village_via", "pleasant_ar", "water_ar", "repeat_fix", "foot_no_bike", "pleasant_order"),
+                 "g_req": v191 + ("small_model", "water_hug", "dest_heritage", "towns_pen", "loop_shape", "village_plus", "shortcut", "track_grade", "ar_sum", "village_via", "pleasant_ar", "water_ar", "repeat_fix", "foot_no_bike", "pleasant_order", "dead_end"),
                  "g_goal": ("goal_return",), "g_flow": ("flow_v2",), "g_small": ("small_roads",), "g_final": ("clean_picks", "forced_detours", "city_backtrack", "nested_backtrack", "backtrack_dest",
                              "spur_turn_window", "detour_dest", "defect_strict"),
                  "g_clean": ("clean_picks", "forced_detours"),

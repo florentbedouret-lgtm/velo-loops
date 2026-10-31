@@ -918,6 +918,33 @@ def along_water(coords, a: int, b: int) -> bool:
     return float(close.mean()) >= WATER_ALONG_SHARE
 
 
+def along_sea(coords, a: int, b: int) -> bool:
+    """Comme along_water, mais la mer seulement (DEAD_END)."""
+    tr_ = LANDSCAPE.trees.get("sea") if LANDSCAPE is not None else None
+    if tr_ is None or b - a < 2:
+        return False
+    import numpy as np
+    import shapely
+    seg = coords[a:b + 1]
+    pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 40)]]))
+    close = np.zeros(len(pts), dtype=bool)
+    close[np.unique(tr_.query(pts, predicate="dwithin", distance=WATER_ALONG_SEA_DEG)[0])] = True
+    return float(close.mean()) >= WATER_ALONG_SHARE
+
+
+def retraced(coords, a: int, b: int) -> bool:
+    """coords[a..b] repart-il par où il est venu (RETRACE_R_M, RETRACE_SHARE du chemin) ? Un lacet, lui, ne repasse pas au
+    même endroit."""
+    seg = coords[a:b + 1]
+    cum = _cum(seg)
+    if cum[-1] <= 0.0:
+        return False
+    pts = sample_points(seg, cum, 10.0)
+    tip = max(range(len(pts)), key=lambda i: haversine(pts[0][0], pts[0][1], pts[i][0], pts[i][1]))
+    near = sum(1 for p in pts[:tip] if any(haversine(p[0], p[1], q[0], q[1]) < RETRACE_R_M for q in pts[tip + 1:]))
+    return tip > 0 and near / tip >= RETRACE_SHARE
+
+
 def clean_picks() -> bool:
     """Nettoyage des boucles publiées (CLEAN_PICKS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "clean_picks", CLEAN_PICKS))
@@ -2328,6 +2355,16 @@ WATER_AR_SHARE = 0.4
 # pas derrière de plus de PLEASANT_ORDER_TOL points. False : comme avant.
 PLEASANT_ORDER = False
 PLEASANT_ORDER_TOL = 8.0
+# DEAD_END (31/10/2026, Florent : « les 2 cas sont gênants et doivent être éliminés ») : Ciutat Vella 3 h Modéré, 6 km de
+# cul-de-sac le long d'une rivière vers Cerdanyola, sans destination, accepté comme « nature » ; Ciutat Vella 1 h 30, demi-tour
+# de 230 m à la Plaça del Fòrum, pris pour un lacet (HAIRPINS). Un aller-retour « nature » ou « piste » d'au moins
+# DEAD_END_MIN_M sans destination au bout n'est plus utile, sauf le long de la mer ou s'il fait la boucle elle-même (au moins
+# DEAD_END_LOOP_SHARE de la distance) ; une fenêtre qui repart par où elle est venue n'est jamais un lacet.
+DEAD_END = False
+DEAD_END_MIN_M = 1000.0
+DEAD_END_LOOP_SHARE = 0.4
+RETRACE_R_M = 25.0
+RETRACE_SHARE = 0.7
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
 
@@ -2357,6 +2394,10 @@ def _order_bonus(l, t, base_ab, trial_ab):
         t.order_bonus = (l.score - t.score + 0.1) / 100.0
         t.score = score(t)
     return [round(p_l, 2), round(p_t, 2)]
+
+
+def dead_end() -> bool:
+    return _flag("dead_end", DEAD_END)
 
 
 def water_ar() -> bool:
@@ -4392,6 +4433,16 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             else:
                 keep.append(w)
         useful = keep
+    if dead_end() and useful:                            # cul-de-sac sans destination (DEAD_END)
+        keep = []
+        for w in useful:
+            m_ = cum[min(w[1], len(cum) - 1)] - cum[w[0]]
+            if (w[3] in ("nature", "piste") and DEAD_END_MIN_M <= m_ < DEAD_END_LOOP_SHARE * total
+                    and not destination_tip(coords[w[2]]) and not along_sea(coords, w[0], w[1])):
+                demoted.append((w, "aimless"))
+            else:
+                keep.append(w)
+        useful = keep
     for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
@@ -4532,7 +4583,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                          and along_water(coords, a_, b_)) if backtrack_dest() else 0)     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
     if loop.detours and hairpins():                      # lacets : la route elle-même (HAIRPINS)
-        loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])]
+        loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])
+                        or (dead_end() and retraced(coords, d["a"], d["b"]))]
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours
                         if (backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) or "")
