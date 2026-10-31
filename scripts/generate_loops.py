@@ -932,6 +932,13 @@ def along_sea(coords, a: int, b: int) -> bool:
     return float(close.mean()) >= WATER_ALONG_SHARE
 
 
+def place_tip(p) -> bool:
+    """Un lieu remarquable au bout de l'aller-retour (DEAD_END) ? Un plan d'eau ou un point de vue n'y suffit pas."""
+    import shapely
+    return bool(POIS and "lieu" in POIS and len(POIS["lieu"][0].query(shapely.Point(p[0], p[1]), predicate="dwithin",
+                                                                      distance=REMARKABLE_NEAR_DEG)))
+
+
 def near_sea(p) -> bool:
     """Le point p est-il près de la côte (DEAD_END_SEA_DEG) ?"""
     import shapely
@@ -2370,6 +2377,7 @@ PLEASANT_ORDER_TOL = 8.0
 DEAD_END = False
 DEAD_END_MIN_M = 1000.0
 DEAD_END_LOOP_SHARE = 0.2
+DEAD_END_PEN = 10.0               # points retirés au dernier choix : avant, ils écartaient de bonnes boucles à reprendre
 DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
@@ -4442,17 +4450,6 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
             else:
                 keep.append(w)
         useful = keep
-    if dead_end() and useful:                            # cul-de-sac le long d'une rivière, sans destination (DEAD_END)
-        keep = []
-        for w in useful:
-            m_ = cum[min(w[1], len(cum) - 1)] - cum[w[0]]
-            if (w[3] in ("nature", "piste") and DEAD_END_MIN_M <= m_ < DEAD_END_LOOP_SHARE * total
-                    and along_water(coords, w[0], w[1]) and not destination_tip(coords[w[2]])
-                    and not near_sea(coords[w[2]]) and not along_sea(coords, w[0], w[1])):
-                demoted.append((w, "aimless"))
-            else:
-                keep.append(w)
-        useful = keep
     for a_, b_, _, _ in useful:                      # aller-retour utile (BACKTRACK_RULES) : répétition comptée pour moitié
         for i in range(a_, min(b_, len(rep_m))):
             rep_m[i] *= BACKTRACK_REPEAT_WEIGHT
@@ -4584,6 +4581,10 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.aimless_bt = (sum(1 for (a_, b_, t_, w_) in useful if w_ in ("nature", "piste")
                            and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
                            and not (backtrack_dest() and along_water(coords, a_, b_))) if turn_rules() else 0)
+    loop.dead_end = dead_end() and any(                  # cul-de-sac le long d'une rivière : pénalisé au dernier choix
+        w_ in ("nature", "piste") and DEAD_END_MIN_M <= cum[min(b_, len(cum) - 1)] - cum[a_] < DEAD_END_LOOP_SHARE * total
+        and along_water(coords, a_, b_) and not place_tip(coords[t_]) and not near_sea(coords[t_])
+        and not along_sea(coords, a_, b_) for a_, b_, t_, w_ in useful)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
     loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ in ("nature", "montée")
                              and not destination_tip(coords[t_])]
@@ -6315,6 +6316,11 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             log(f"    villages : note {l.score:.1f} -> " + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:
                 pool = [t if x is l else x for x in pool]
+    if dead_end():                                           # cul-de-sac le long d'une rivière (DEAD_END)
+        for l in pool:
+            if getattr(l, "dead_end", False):
+                l.score -= DEAD_END_PEN
+                l.dead_end = False
     picks = pick_options(pool, prior)
     if lights_late() and picks:                              # feux en fin de boucle (LIGHTS_LATE)
         picks = lights_late_swap(gh, level, duration_h, picks, log)
