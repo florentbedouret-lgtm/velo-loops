@@ -6327,6 +6327,12 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             log(f"    répétition : {l.overlap:.0%} -> " + ("inchangée" if t is None else f"{t.overlap:.0%}, note {t.score:.1f}"))
             if t is not None:
                 pool = [t if x is l else x for x in pool]
+    if dead_end() and pool:                                  # avant les variantes, qui héritent des demi-tours (DEAD_END)
+        pool = list(pool)
+        for _, l in pick_options(pool, prior):
+            t = trim_retrace(gh, l, level, duration_h, bounds)
+            if t is not None:
+                pool = [t if x is l else x for x in pool]
     if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)
         extra = [t for _, l in pick_options(pool, prior) for t in pleasant_ar_candidates(gh, l, level, duration_h, bounds)]
         if repeat_fix():                                     # sans ses tronçons repassés hors de la partie agréable
