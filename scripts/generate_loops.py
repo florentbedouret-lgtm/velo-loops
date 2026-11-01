@@ -1566,14 +1566,21 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
-def trim_retrace(gh, l, level, duration_h, bounds):
+def trim_retrace(l, level, duration_h, bounds):
     """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
     les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
     if not getattr(l, "retrace_windows", None):
         return None
-    way = route_waypoints(l.coords, skip=l.retrace_windows)
-    path = gh.via(way, l.profile, pass_through=True)
-    n = analyse(path, level, l.profile, duration_h, l.seed, l.heading) if path else None
+    path = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}
+    for a, b in sorted(l.retrace_windows, reverse=True):     # par la fin : les indices d'avant restent bons
+        c, cut = path["points"]["coordinates"], None         # coupé sur place : recalculer l'itinéraire le dégradait
+        for i in range(a, b):                                # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
+            j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
+            if j is not None and (cut is None or j - i > cut[1] - cut[0]):
+                cut = (i, j)
+        if cut is not None:
+            path = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
+    n = analyse(path, level, l.profile, duration_h, l.seed, l.heading)
     if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
         _mark_pleasant_ar(n, None)
     if n is not None:
@@ -6330,7 +6337,7 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
     if dead_end() and pool:                                  # avant les variantes, qui héritent des demi-tours (DEAD_END)
         pool = list(pool)
         for _, l in pick_options(pool, prior):
-            t = trim_retrace(gh, l, level, duration_h, bounds)
+            t = trim_retrace(l, level, duration_h, bounds)
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)
@@ -6349,7 +6356,7 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
     if dead_end() and pool:                                  # demi-tours sur place, cul-de-sac de rivière (DEAD_END)
         pool = list(pool)
         for _, l in pick_options(pool, prior):
-            t = trim_retrace(gh, l, level, duration_h, bounds)
+            t = trim_retrace(l, level, duration_h, bounds)
             if t is not None:
                 pool = [t if x is l else x for x in pool]
         for l in pool:
