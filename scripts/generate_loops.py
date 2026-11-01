@@ -1586,7 +1586,11 @@ def trim_retrace(l, level, duration_h, bounds):
     if n is not None:
         n.order_bonus = getattr(l, "order_bonus", 0.0)
         n.score = score(n)
+    if n is not None:                                        # quelques centaines de mètres en moins : la durée ne refuse pas
+        t_, n.time_s = n.time_s, l.time_s                    # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, note de 64 à 66)
     ok, why_ = _ar_ok(n, duration_h, bounds)
+    if n is not None:
+        n.time_s = t_
     ok = ok and len(n.retrace_windows) < len(l.retrace_windows) and n.score >= l.score - 1.0
     _journal("sans demi-tour", l, n, l.coords[l.retrace_windows[0][0]], ok, why_)
     if not ok:
