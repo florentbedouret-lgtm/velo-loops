@@ -1626,6 +1626,34 @@ def trim_retrace(l, level, duration_h, bounds):
     return best
 
 
+def _shore_trim(path, n_out, n_back):
+    """path sans les petits allers-retours laissés par les points de passage et les raccords de shore_loop (Ciutat Vella
+    3 h Modéré, 03/11/2026 : refusée pour « demi-tours ») ; seuls le début et la fin refaits sont touchés."""
+    i = 0
+    while i < n_out + SHORE_TRIM_PTS:
+        c = path["points"]["coordinates"]
+        cum = _cum(c)
+        if i >= len(c) - 2:
+            break
+        hi = bisect.bisect_right(cum, cum[i] + RETRACE_MAX_M) - 1
+        j = next((j for j in range(hi, i + 1, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_SAME_M), None)
+        if j is not None:
+            path = splice_path(path, i, j, {"points": {"coordinates": [c[i]]}})
+            n_out -= min(j - i, max(0, n_out - i))
+        i += 1
+    i = max(0, len(path["points"]["coordinates"]) - n_back - SHORE_TRIM_PTS)
+    while True:
+        c = path["points"]["coordinates"]
+        if i >= len(c) - 2:
+            return path
+        cum = _cum(c)
+        hi = bisect.bisect_right(cum, cum[i] + RETRACE_MAX_M) - 1
+        j = next((j for j in range(hi, i + 1, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_SAME_M), None)
+        if j is not None:
+            path = splice_path(path, i, j, {"points": {"coordinates": [c[i]]}})
+        i += 1
+
+
 def shore_loop(gh, l, level, duration_h, bounds):
     """La boucle l sans son cul-de-sac, la longueur reprise au ras de la plage de la Barceloneta, à l'aller et au retour
     (DEAD_END ; Florent, 02/11/2026, Ciutat Vella 3 h Modéré : sans le cul-de-sac, trop courte pour la plage de durée).
@@ -1653,6 +1681,7 @@ def shore_loop(gh, l, level, duration_h, bounds):
     path = splice_path(path, j, len(c) - 1, back)            # par la fin : les indices d'avant restent bons
     path = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
     path = splice_path(path, 0, i, out)
+    path = _shore_trim(path, len(out["points"]["coordinates"]), len(back["points"]["coordinates"]))
     n = analyse(path, level, l.profile, duration_h, l.seed, l.heading)
     if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
         _mark_pleasant_ar(n, None)
@@ -1661,7 +1690,9 @@ def shore_loop(gh, l, level, duration_h, bounds):
         n.score = score(n)
     ok, why_ = _ar_ok(n, duration_h, bounds)
     ok = ok and not n.dead_end and n.score > l.score - DEAD_END_PEN
-    _journal("bord de mer", l, n, c[i], ok, why_)
+    _journal("bord de mer", l, n, c[i], ok, why_, **({} if n is None else {
+        "points_demi_tour": [[round(u[1], 5), round(u[0], 5), round(u[2])] for u in uturn_points(n.coords)],
+        "avant": score_detail(l), "apres": score_detail(n)}))
     if not ok:
         return None
     _keep_attrs(l, n)
@@ -2486,6 +2517,7 @@ SHORE_JOIN = (2.1996, 41.3886)   # rejoint la piste vers le Port Olímpic
 SHORE_START_M = 2500.0
 SHORE_HEAD_M = 5000.0
 SHORE_NEAR_M = 200.0
+SHORE_TRIM_PTS = 40
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
 RETRACE_MAX_M = 500.0            # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
