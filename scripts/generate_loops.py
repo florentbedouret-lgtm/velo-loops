@@ -939,11 +939,11 @@ def place_tip(p) -> bool:
                                                                       distance=REMARKABLE_NEAR_DEG)))
 
 
-def near_sea(p) -> bool:
-    """Le point p est-il près de la côte (DEAD_END_SEA_DEG) ?"""
+def near_sea(p, deg=None) -> bool:
+    """Le point p est-il près de la côte (à deg degrés, DEAD_END_SEA_DEG par défaut) ?"""
     import shapely
     tr_ = LANDSCAPE.trees.get("sea") if LANDSCAPE is not None else None
-    return tr_ is not None and len(tr_.query(shapely.Point(p[0], p[1]), predicate="dwithin", distance=DEAD_END_SEA_DEG)) > 0
+    return tr_ is not None and len(tr_.query(shapely.Point(p[0], p[1]), predicate="dwithin", distance=deg or DEAD_END_SEA_DEG)) > 0
 
 
 def retraced(coords, a: int, b: int) -> bool:
@@ -1578,7 +1578,7 @@ def spike_windows(coords) -> list:
                 continue
             d = [haversine(coords[i][0], coords[i][1], coords[t][0], coords[t][1]) for t in range(i, j + 1)]
             tip = coords[i + d.index(max(d))]
-            if max(d) >= RETRACE_TIP_SHARE * m and not place_tip(tip) and not near_sea(tip):
+            if max(d) >= RETRACE_TIP_SHARE * m and not place_tip(tip) and not near_sea(tip, RETRACE_SEA_DEG):
                 cut = j
                 break
         if cut is not None:
@@ -1595,32 +1595,34 @@ def trim_retrace(l, level, duration_h, bounds):
     wins += [w for w in spike_windows(l.coords) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     if not wins:
         return None
-    path = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}
-    for a, b in sorted(wins, reverse=True):     # par la fin : les indices d'avant restent bons
+    path, best = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}, l
+    for a, b in sorted(wins, reverse=True):                  # par la fin : les indices d'avant restent bons
         c, cut = path["points"]["coordinates"], None         # coupé sur place : recalculer l'itinéraire le dégradait
         for i in range(a, b):                                # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
             j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
             if j is not None and (cut is None or j - i > cut[1] - cut[0]):
                 cut = (i, j)
-        if cut is not None:
-            path = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
-    n = analyse(path, level, l.profile, duration_h, l.seed, l.heading)
-    if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
-        _mark_pleasant_ar(n, None)
-    if n is not None:
-        n.order_bonus = getattr(l, "order_bonus", 0.0)
-        n.score = score(n)
-    if n is not None:                                        # quelques centaines de mètres en moins : la durée ne refuse pas
-        t_, n.time_s = n.time_s, l.time_s                    # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, note de 64 à 66)
-    ok, why_ = _ar_ok(n, duration_h, bounds)
-    if n is not None:
-        n.time_s = t_
-    ok = ok and len(n.retrace_windows) + len(spike_windows(n.coords)) < len(wins) and n.score >= l.score - 1.0
-    _journal("sans demi-tour", l, n, l.coords[wins[0][0]], ok, why_)
-    if not ok:
+        if cut is None:
+            continue
+        p_ = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
+        n = analyse(p_, level, l.profile, duration_h, l.seed, l.heading)
+        if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
+            _mark_pleasant_ar(n, None)
+        if n is not None:
+            n.order_bonus = getattr(l, "order_bonus", 0.0)
+            n.score = score(n)
+            t_, n.time_s = n.time_s, l.time_s                # quelques centaines de mètres en moins : la durée ne refuse pas
+        ok, why_ = _ar_ok(n, duration_h, bounds)             # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
+        if n is not None:
+            n.time_s = t_
+        ok = ok and n.score >= l.score - 1.0                 # une à une : une coupe qui nuit n'empêche pas les autres
+        _journal("sans demi-tour", l, n, c[cut[0]], ok, why_)
+        if ok:
+            path, best = p_, n
+    if best is l:
         return None
-    _keep_attrs(l, n)
-    return n
+    _keep_attrs(l, best)
+    return best
 
 
 def _trim_run(gh, l, t, level, duration_h, bounds):
@@ -2438,10 +2440,11 @@ DEAD_END_PEN = 10.0               # points retirés au dernier choix : avant, il
 DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
-RETRACE_MAX_M = 500.0
+RETRACE_MAX_M = 500.0            # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
 RETRACE_MIN_M = 60.0
 RETRACE_SAME_M = 5.0
-RETRACE_TIP_SHARE = 0.42             # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
+RETRACE_SEA_DEG = 0.001          # au bord même de l'eau : la pointe de Sant Martí 2 h, à 1 km de la mer, n'en est pas une
+RETRACE_TIP_SHARE = 0.42
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
 
