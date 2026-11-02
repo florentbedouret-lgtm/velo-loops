@@ -1616,7 +1616,8 @@ def trim_retrace(l, level, duration_h, bounds):
         if n is not None:
             n.time_s = t_
         ok = ok and n.score >= l.score - 1.0                 # une à une : une coupe qui nuit n'empêche pas les autres
-        _journal("sans demi-tour", l, n, c[cut[0]], ok, why_)
+        _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,   # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
+                 **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
         if ok:
             path, best = p_, n
     if best is l:
