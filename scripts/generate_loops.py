@@ -1625,6 +1625,48 @@ def trim_retrace(l, level, duration_h, bounds):
     return best
 
 
+def shore_loop(gh, l, level, duration_h, bounds):
+    """La boucle l sans son cul-de-sac, la longueur reprise au ras de la plage de la Barceloneta, à l'aller et au retour
+    (DEAD_END ; Florent, 02/11/2026, Ciutat Vella 3 h Modéré : sans le cul-de-sac, trop courte pour la plage de durée).
+    None si elle ne passe pas par là, ou si elle n'est pas valide."""
+    c, cum = l.coords, _cum(l.coords)
+    if (not getattr(l, "dead_windows", None) or len(l.dead_windows) > 1
+            or haversine(c[0][0], c[0][1], SHORE_VIA[0][0], SHORE_VIA[0][1]) > SHORE_START_M):
+        return None
+    d_ = lambda k: haversine(c[k][0], c[k][1], SHORE_JOIN[0], SHORE_JOIN[1])  # noqa: E731
+    i = min((k for k in range(len(c)) if cum[k] <= SHORE_HEAD_M), key=d_)
+    j = min((k for k in range(len(c)) if cum[-1] - cum[k] <= SHORE_HEAD_M), key=d_)
+    a, b = l.dead_windows[0]
+    if d_(i) > SHORE_NEAR_M or d_(j) > SHORE_NEAR_M or not i < a < b < j:
+        return None
+    cut = None
+    for x in range(a, b):
+        y = next((y for y in range(b, x, -1) if haversine(c[x][0], c[x][1], c[y][0], c[y][1]) < RETRACE_R_M), None)
+        if y is not None and (cut is None or y - x > cut[1] - cut[0]):
+            cut = (x, y)
+    out = gh.via([c[0], *SHORE_VIA, c[i]], l.profile, pass_through=True)
+    back = gh.via([c[j], *SHORE_VIA[::-1], c[-1]], l.profile, pass_through=True)
+    if cut is None or out is None or back is None:
+        return None
+    path = {"points": {"coordinates": c}, "details": l.gh_details, "ascend": l.ascend_gh_m}
+    path = splice_path(path, j, len(c) - 1, back)            # par la fin : les indices d'avant restent bons
+    path = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
+    path = splice_path(path, 0, i, out)
+    n = analyse(path, level, l.profile, duration_h, l.seed, l.heading)
+    if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
+        _mark_pleasant_ar(n, None)
+    if n is not None:
+        n.order_bonus = getattr(l, "order_bonus", 0.0)
+        n.score = score(n)
+    ok, why_ = _ar_ok(n, duration_h, bounds)
+    ok = ok and not n.dead_end and n.score > l.score - DEAD_END_PEN
+    _journal("bord de mer", l, n, c[i], ok, why_)
+    if not ok:
+        return None
+    _keep_attrs(l, n)
+    return n
+
+
 def _trim_run(gh, l, t, level, duration_h, bounds):
     """La variante t sans ses détours (PLEASANT_ORDER ; 30/10/2026, Ciutat Vella 1 h 30 : le crochet de 229 m du Parc del
     Fòrum, hérité de la boucle l : trim_detours passe avant les variantes et refuserait leur répétition) ; sinon t."""
@@ -2438,6 +2480,11 @@ DEAD_END_MIN_M = 1000.0
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_PEN = 10.0               # points retirés au dernier choix : avant, ils écartaient de bonnes boucles à reprendre
 DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
+SHORE_VIA = [(2.1895, 41.3727), (2.1930, 41.3790), (2.1962, 41.3845)]  # la plage de la Barceloneta, du sud au nord
+SHORE_JOIN = (2.1996, 41.3886)   # rejoint la piste vers le Port Olímpic
+SHORE_START_M = 2500.0
+SHORE_HEAD_M = 5000.0
+SHORE_NEAR_M = 200.0
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
 RETRACE_MAX_M = 500.0            # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
@@ -4644,10 +4691,12 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.aimless_bt = (sum(1 for (a_, b_, t_, w_) in useful if w_ in ("nature", "piste")
                            and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
                            and not (backtrack_dest() and along_water(coords, a_, b_))) if turn_rules() else 0)
-    loop.dead_end = dead_end() and any(                  # cul-de-sac le long d'une rivière : pénalisé au dernier choix
-        w_ in ("nature", "piste") and DEAD_END_MIN_M <= cum[min(b_, len(cum) - 1)] - cum[a_] < DEAD_END_LOOP_SHARE * total
-        and along_water(coords, a_, b_) and not place_tip(coords[t_]) and not near_sea(coords[t_])
-        and not along_sea(coords, a_, b_) for a_, b_, t_, w_ in useful)
+    loop.dead_windows = [(a_, b_) for a_, b_, t_, w_ in useful   # cul-de-sac le long d'une rivière : pénalisé au dernier choix
+                         if dead_end() and w_ in ("nature", "piste")
+                         and DEAD_END_MIN_M <= cum[min(b_, len(cum) - 1)] - cum[a_] < DEAD_END_LOOP_SHARE * total
+                         and along_water(coords, a_, b_) and not place_tip(coords[t_]) and not near_sea(coords[t_])
+                         and not along_sea(coords, a_, b_)]
+    loop.dead_end = bool(loop.dead_windows)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
     loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ in ("nature", "montée")
                              and not destination_tip(coords[t_])]
@@ -6391,6 +6440,10 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
         pool = list(pool)
         for _, l in pick_options(pool, prior):
             t = trim_retrace(l, level, duration_h, bounds)
+            if t is not None:
+                pool = [t if x is l else x for x in pool]
+        for _, l in pick_options(pool, prior):
+            t = shore_loop(gh, l, level, duration_h, bounds)
             if t is not None:
                 pool = [t if x is l else x for x in pool]
         for l in pool:
