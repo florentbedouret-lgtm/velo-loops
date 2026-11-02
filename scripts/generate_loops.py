@@ -1566,13 +1566,37 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
+def spike_windows(coords) -> list:
+    """Pointes (DEAD_END) : la trace repasse au même point après un aller et retour de moins de RETRACE_MAX_M, sans lieu ni mer
+    au bout (Sant Martí 2 h, pont de Cristòfol de Moura, 194 m : block_detours ne les voit pas). Indices [(a, b)]."""
+    cum, out, i = _cum(coords), [], 0
+    while i < len(coords) - 2:
+        cut = None
+        for j in range(bisect.bisect_right(cum, cum[i] + RETRACE_MAX_M) - 1, i + 1, -1):
+            m = cum[j] - cum[i]
+            if m < RETRACE_MIN_M or haversine(coords[i][0], coords[i][1], coords[j][0], coords[j][1]) >= RETRACE_SAME_M:
+                continue
+            d = [haversine(coords[i][0], coords[i][1], coords[t][0], coords[t][1]) for t in range(i, j + 1)]
+            tip = coords[i + d.index(max(d))]
+            if max(d) >= RETRACE_TIP_SHARE * m and not place_tip(tip) and not near_sea(tip):
+                cut = j
+                break
+        if cut is not None:
+            out.append((i, cut))
+            i = cut
+        i += 1
+    return out
+
+
 def trim_retrace(l, level, duration_h, bounds):
     """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
     les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
-    if not getattr(l, "retrace_windows", None):
+    wins = sorted(getattr(l, "retrace_windows", None) or [])
+    wins += [w for w in spike_windows(l.coords) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
+    if not wins:
         return None
     path = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}
-    for a, b in sorted(l.retrace_windows, reverse=True):     # par la fin : les indices d'avant restent bons
+    for a, b in sorted(wins, reverse=True):     # par la fin : les indices d'avant restent bons
         c, cut = path["points"]["coordinates"], None         # coupé sur place : recalculer l'itinéraire le dégradait
         for i in range(a, b):                                # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
             j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
@@ -1591,8 +1615,8 @@ def trim_retrace(l, level, duration_h, bounds):
     ok, why_ = _ar_ok(n, duration_h, bounds)
     if n is not None:
         n.time_s = t_
-    ok = ok and len(n.retrace_windows) < len(l.retrace_windows) and n.score >= l.score - 1.0
-    _journal("sans demi-tour", l, n, l.coords[l.retrace_windows[0][0]], ok, why_)
+    ok = ok and len(n.retrace_windows) + len(spike_windows(n.coords)) < len(wins) and n.score >= l.score - 1.0
+    _journal("sans demi-tour", l, n, l.coords[wins[0][0]], ok, why_)
     if not ok:
         return None
     _keep_attrs(l, n)
@@ -2414,7 +2438,10 @@ DEAD_END_PEN = 10.0               # points retirés au dernier choix : avant, il
 DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
-RETRACE_MAX_M = 500.0             # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
+RETRACE_MAX_M = 500.0
+RETRACE_MIN_M = 60.0
+RETRACE_SAME_M = 5.0
+RETRACE_TIP_SHARE = 0.42             # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
 
