@@ -1566,9 +1566,10 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
-def spike_windows(coords, max_m=RETRACE_MAX_M) -> list:
+def spike_windows(coords, max_m=None) -> list:
     """Pointes (DEAD_END) : la trace repasse au même point après un aller et retour de moins de max_m, sans lieu ni mer
     au bout (Sant Martí 2 h, pont de Cristòfol de Moura, 194 m : block_detours ne les voit pas). Indices [(a, b)]."""
+    max_m = RETRACE_MAX_M if max_m is None else max_m
     cum, out, i = _cum(coords), [], 0
     while i < len(coords) - 2:
         cut = None
