@@ -118,7 +118,8 @@ function profileSvg(o) {
 }
 
 // relie le profil à la carte : onMove([lon, lat]) quand le doigt ou la souris bouge, onMove(null) quand elle sort ;
-// readout (facultatif) : élément où écrire « km 6,9 · 30 m » à la place de l'étiquette dessinée dans le profil
+// readout (facultatif) : élément où écrire « km 6,9 · 30 m » à la place de l'étiquette dessinée dans le profil ;
+// renvoie { near(lon, lat), hide() } : la souris sur la carte place aussi le curseur du profil (vue ordinateur, 03/11/2026)
 function bindProfile(svg, onMove, readout) {
   const g = pfLast;
   const cur = svg.querySelector('.pf-cursor');
@@ -126,7 +127,9 @@ function bindProfile(svg, onMove, readout) {
   const show = e => {
     const r = svg.getBoundingClientRect();
     const vx = (e.clientX - r.left) / r.width * g.W;               // position dans le repère du dessin
-    const d = Math.min(1, Math.max(0, (vx - g.mL) / (g.W - g.mL - g.mR))) * g.p.total;
+    at(Math.min(1, Math.max(0, (vx - g.mL) / (g.W - g.mL - g.mR))) * g.p.total);
+  };
+  const at = d => {
     const a = g.p.alt[Math.min(g.p.alt.length - 1, Math.round(d / g.p.step))];
     const cx = g.x(d);
     line.setAttribute('x1', cx); line.setAttribute('x2', cx);
@@ -145,4 +148,16 @@ function bindProfile(svg, onMove, readout) {
   svg.addEventListener('pointermove', show);
   // au doigt, le point reste affiché après avoir levé le doigt ; à la souris, il disparaît en sortant du profil
   svg.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') hide(); });
+  return {
+    near(lon, lat) {                                       // point de la boucle le plus proche de [lon, lat]
+      const k = Math.cos(lat * Math.PI / 180);
+      let best = 0, bd = Infinity;
+      g.coords.forEach((c, j) => {
+        const dx = (c[0] - lon) * k, dy = c[1] - lat, q = dx * dx + dy * dy;
+        if (q < bd) { bd = q; best = j; }
+      });
+      at(g.p.dist[best]);
+    },
+    hide
+  };
 }

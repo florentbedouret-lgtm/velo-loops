@@ -58,6 +58,8 @@
     @media (hover: hover) and (pointer: fine) {
       .btn:hover, .stepper button:not(:disabled):hover, .share:hover, .alt-row:hover, #me:hover { border-color: var(--color-text-2); }
       .seg button:not([aria-pressed=true]):hover, .optseg .alt:not([aria-pressed=true]):hover { color: var(--color-text); }
+      .optseg .alt.map-hover { color: var(--color-text); border-color: var(--color-border); }   /* sa boucle survolée sur la carte */
+      .optseg .alt.map-hover .sw { border-top-style: solid; }
       .btn-accent:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
       .suggest button:hover, .rows summary:hover, #history summary:hover, .keys div[data-hl]:hover { background: var(--color-bg); }
       #change:hover { text-decoration-thickness: 2px; }
@@ -732,6 +734,14 @@
     let startData = null;
     let shown = [];
     let current = 0;
+    let pfCtl = null;                                       // curseur du profil d'altitude, piloté aussi depuis la carte
+    const FINE = window.matchMedia('(hover: hover) and (pointer: fine)');   // souris : survols et raccourcis utiles
+    // autre boucle k mise en avant (survol) ; -1 : aucune
+    function preview(k) {
+      if (!map.getLayer('routes-preview')) return;
+      map.setFilter('routes-preview', ['==', ['get', 'k'], k === current ? -1 : k]);
+      sheetHead.querySelectorAll('.optseg .alt').forEach(b => b.classList.toggle('map-hover', Number(b.dataset.i) === k && k !== current));
+    }
     let marker = null;
     let indexData = null;
 
@@ -993,6 +1003,9 @@
         paint: { 'line-color': ROUTE.casing, 'line-width': 6 } }, beforeId);
       map.addLayer({ id: 'routes-other', type: 'line', source: 'routes', filter: ['!', isSel], layout: { 'line-join': 'round' },
         paint: { 'line-color': ROUTE.other, 'line-width': ROUTE.otherWidth, 'line-dasharray': [2, 1.7] } }, beforeId);
+      // autre boucle survolée (dans le panneau ou sur la carte, à la souris) : pointillé remplacé par un trait plein
+      map.addLayer({ id: 'routes-preview', type: 'line', source: 'routes', filter: ['==', ['get', 'k'], -1], layout: lineLayout,
+        paint: { 'line-color': ROUTE.other, 'line-width': 4.5 } }, beforeId);
       map.addLayer({ id: 'routes-casing', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
         paint: { 'line-color': ROUTE.casing, 'line-width': ROUTE.casingWidth } }, beforeId);
       map.addLayer({ id: 'routes', type: 'line', source: 'routes', filter: isSel, layout: lineLayout,
@@ -1079,6 +1092,27 @@
         const h = e.target.closest('[data-hl]');             // point clé ou montée : surligner le tronçon
         if (h) toggleHighlight(h);
       });
+      // clavier (vue ordinateur, 03/11/2026) : Échap referme ce qui est ouvert ; ← et → passent d'une boucle proposée à l'autre
+      document.addEventListener('keydown', e => {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
+        const el = e.target, typing = el.closest && el.closest('input, textarea, select, [contenteditable], #map');
+        const menu = document.getElementById('langMenu');
+        if (e.key === 'Escape') {
+          if (!menu.hidden) { document.getElementById('langBtn').click(); document.getElementById('langBtn').focus(); }
+          else if (typing && el.id === 'addr') return;          // effacer la recherche : comportement du navigateur
+          else if (document.querySelector('.hl-on')) clearHighlight();
+          else if (topCard.classList.contains('open') && startData) setSettings(false);
+          else if (!isDesk() && !sheet.hidden && sheet.dataset.state !== 'low' && sheet.dataset.state !== 'peek') setSheet('low');
+          return;
+        }
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing && shown.length > 1 && !sheet.hidden) {
+          e.preventDefault();
+          const n = shown.length, k = (current + (e.key === 'ArrowRight' ? 1 : n - 1)) % n;
+          select(k);
+          const b = sheetHead.querySelector('.optseg .alt[data-i="' + k + '"]');
+          if (b && el.closest && el.closest('.optseg')) b.focus();   // le focus suit s'il était sur les boutons des boucles
+        }
+      });
       sheetBody.addEventListener('keydown', e => {
         const h = e.target.closest('[data-hl]');
         if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleHighlight(h); }
@@ -1130,7 +1164,26 @@
       map.on('mouseleave', 'starts-pts', () => { map.getCanvas().style.cursor = ''; });
       map.on('moveend', placeAltLabels);                  // étiquettes des autres boucles : recalculées après chaque déplacement
       map.on('mouseenter', 'routes-hit', () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', 'routes-hit', () => { map.getCanvas().style.cursor = ''; });
+      map.on('mouseleave', 'routes-hit', () => { map.getCanvas().style.cursor = ''; preview(-1); });
+      // souris (ordinateur, 03/11/2026) : l'autre boucle survolée sur la carte s'allume dans le panneau, et la boucle choisie
+      // survolée place le curseur du profil d'altitude ; au doigt, rien ne change
+      if (FINE.matches) {
+        map.on('mousemove', 'routes-hit', e => { if (e.features.length) preview(e.features[0].properties.k); });
+        map.on('mousemove', 'routes-casing', e => {
+          if (!pfCtl) return;
+          map.getCanvas().style.cursor = 'crosshair';
+          pfCtl.near(e.lngLat.lng, e.lngLat.lat);
+        });
+        map.on('mouseleave', 'routes-casing', () => { map.getCanvas().style.cursor = ''; if (pfCtl) pfCtl.hide(); });
+        const over = (e, on) => {
+          const b = e.target.closest('.optseg .alt[aria-pressed=false], .alt-row[data-act=opt]');
+          if (b && !(e.relatedTarget && b.contains(e.relatedTarget))) preview(on ? Number(b.dataset.i) : -1);
+        };
+        [sheetHead, sheetBody].forEach(el => {
+          el.addEventListener('mouseover', e => over(e, true));
+          el.addEventListener('mouseout', e => over(e, false));
+        });
+      }
       const b = coverageBox(0.02);
       map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 10, duration: 0 });
       showEmptySheet();
@@ -1847,7 +1900,7 @@
         ['cmp_city', M.map(m => pc(m.city))], ['cmp_nature', M.map(m => pc(m.nature))], ['cmp_water', M.map(m => km1(m.waterKm) + ' km')],
         ['cmp_lights', M.map(m => (m.lights == null ? '–' : dec(m.lights.toFixed(1))))], ['cmp_main', M.map(m => pc(m.main))],
         ['cmp_rep', M.map(m => pc(m.rep))]];
-      return '<details class="cmp"><summary>' + esc(t('cmp_title', { n: shown.length })) + '</summary><table class="cmp-table"><thead><tr><th></th>' +
+      return '<details class="cmp"' + (isDesk() ? ' open' : '') + '><summary>' + esc(t('cmp_title', { n: shown.length })) + '</summary><table class="cmp-table"><thead><tr><th></th>' +
         shown.map((x, k) => '<th scope="col"' + cur(k) + '>' + esc(optName(x)) + '</th>').join('') + '</tr></thead><tbody>' +
         rows.map(([lab, vals]) => '<tr><th scope="row">' + esc(t(lab)) + '</th>' + vals.map((v, k) => '<td' + cur(k) + '>' + esc(v) + '</td>').join('') +
           '</tr>').join('') + '</tbody></table></details>';
@@ -1920,7 +1973,7 @@
     }
     // en-tête du panneau : nom de la boucle, pastilles des autres boucles, chiffres (colonnes ou ligne selon la hauteur)
     function headHtml(o) {
-      const seg = shown.length > 1 ? '<div class="optseg" role="group" aria-label="' + esc(t('alts_group')) + '">' + shown.map((x, k) =>
+      const seg = shown.length > 1 ? '<div class="optseg" role="group" aria-keyshortcuts="ArrowLeft ArrowRight" aria-label="' + esc(t('alts_group')) + '">' + shown.map((x, k) =>
         '<button type="button" class="alt" data-i="' + k + '" aria-pressed="' + (k === current) + '"><span class="l1"><i class="sw' +
         (k === current ? ' on' : '') + '"></i><span>' + esc(optName(x)) + '</span></span>' +
         (k === current ? '' : '<small class="dlt">' + esc(segDelta(x, o)) + '</small>') + '</button>').join('') + '</div>' : '';
@@ -1955,9 +2008,10 @@
       }
       map.getSource('cursor').setData(EMPTY);
       const pf = sheetBody.querySelector('svg.pf');
-      if (pf) bindProfile(pf, pos => map.getSource('cursor').setData(pos
+      pfCtl = pf ? bindProfile(pf, pos => map.getSource('cursor').setData(pos
         ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY),
-        document.getElementById('pfRead'));
+        document.getElementById('pfRead')) : null;
+      preview(-1);
 
       const features = shown
         .map((x, k) => ({
