@@ -497,6 +497,9 @@ const I18N = {
   vp_village: ['Joli village', 'Pretty village', 'Pueblo bonito', 'Poble bonic'],
   vp_climb: ['Belle montée', 'Nice climb', 'Buena subida', 'Bona pujada'],
   cmp_title: ['Comparer les {n} boucles', 'Compare the {n} loops', 'Comparar las {n} rutas', 'Compara les {n} rutes'],
+  // deux boucles : nommées, pour qu'on sache lesquelles (Florent, 03/11/2026 : « les 2 boucles » après 3 propositions)
+  cmp_title2: ['Comparer {a} et {b}', 'Compare {a} and {b}', 'Comparar {a} y {b}', 'Compara {a} i {b}'],
+  cmp_title_n: ['Comparer les {n} boucles de ce départ', 'Compare the {n} loops from this start', 'Comparar las {n} rutas de esta salida', "Compara les {n} rutes d'aquesta sortida"],
   cmp_dist: ['Distance', 'Distance', 'Distancia', 'Distància'],
   cmp_dplus: ['Dénivelé', 'Climbing', 'Desnivel', 'Desnivell'],
   cmp_city: ['En ville', 'In town', 'En ciudad', 'A ciutat'],

@@ -313,6 +313,7 @@
     .alts { margin-top: 28px; }
     .alts-h { margin: 0; font-size: 16px; font-weight: var(--fw-medium); line-height: 1.35; }
     .alts-why { margin: 4px 0 0; font-size: 15px; line-height: 1.45; color: var(--color-text-2); }
+    .cmp + .alts-why, .alt-row + .alts-why, .cmp + .alt-row { margin-top: 20px; }   /* deux groupes : ce départ, puis les autres sorties */
     .alt-row { font: inherit; text-align: left; width: 100%; min-height: 56px; margin-top: 10px; padding: 12px 14px 12px 16px;
                border: 1px solid var(--color-control-off); border-radius: var(--radius-sm); background: var(--color-surface);
                color: var(--color-text); display: flex; align-items: center; gap: 12px; cursor: pointer; }
@@ -1946,7 +1947,8 @@
         ['cmp_city', M.map(m => pc(m.city))], ['cmp_nature', M.map(m => pc(m.nature))], ['cmp_water', M.map(m => km1(m.waterKm) + ' km')],
         ['cmp_lights', M.map(m => (m.lights == null ? '–' : dec(m.lights.toFixed(1))))], ['cmp_main', M.map(m => pc(m.main))],
         ['cmp_rep', M.map(m => pc(m.rep))]];
-      return '<details class="cmp"' + (isDesk() ? ' open' : '') + '><summary>' + esc(t('cmp_title', { n: shown.length })) + '</summary><table class="cmp-table"><thead><tr><th></th>' +
+      return '<details class="cmp"' + (isDesk() ? ' open' : '') + '><summary>' + esc(shown.length === 2 ? t('cmp_title2', { a: optName(shown[0]), b: optName(shown[1]) })
+        : t('cmp_title_n', { n: shown.length })) + '</summary><table class="cmp-table"><thead><tr><th></th>' +
         shown.map((x, k) => '<th scope="col"' + cur(k) + '>' + esc(optName(x)) + '</th>').join('') + '</tr></thead><tbody>' +
         rows.map(([lab, vals]) => '<tr><th scope="row">' + esc(t(lab)) + '</th>' + vals.map((v, k) => '<td' + cur(k) + '>' + esc(v) + '</td>').join('') +
           '</tr>').join('') + '</tbody></table></details>';
@@ -1988,7 +1990,9 @@
       const why = (natureNeighbour.last || trainStart.last) && (ex0 == null || ex0 > 5)
         ? '<p class="alts-why">' + esc(ex0 == null ? t('alts_why_stays') : t('alts_why_km', { km: km(ex0) })) + '</p>' : '';
       const alts = sugg || others ? '<section class="alts" aria-labelledby="altsH"><h3 class="alts-h" id="altsH">' +
-        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + why + sugg + others + (desk ? '' : compareTable(o)) + '</section>' : '';
+        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + others + (desk ? '' : compareTable(o)) + why + sugg + '</section>' : '';
+      // ordre (Florent, 03/11/2026) : d'abord les autres boucles de ce départ et leur comparaison, puis la phrase sur la ville
+      // et les départs voisins ou le train, qui sont d'autres sorties
       const pf = desk ? '' : profileSvg(o);                // ordinateur : le profil est dans le bandeau sous la carte
 
       return `
