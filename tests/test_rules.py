@@ -832,3 +832,65 @@ def test_sub_loops():
                 (6000, 6000), (0, 6000), (0, 0)])
     assert g.sub_loops(sub, cum(sub)) >= 1
 
+
+
+# ----------------------------------------------------------------------------- crochets en bout d'aller-retour (DEAD_END)
+def _trace(pts, step=10.0):
+    """Tracé [lon, lat] tous les ~step m le long des sommets pts en mètres (x vers l'est, y vers le nord), autour de 41,4° N."""
+    import math
+    kx = 111320.0 * math.cos(math.radians(41.4))
+    out = []
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        n = max(1, int(math.hypot(x1 - x0, y1 - y0) // step))
+        out += [[2.1 + (x0 + (x1 - x0) * k / n) / kx, 41.4 + (y0 + (y1 - y0) * k / n) / 110540.0] for k in range(n)]
+    out.append([2.1 + pts[-1][0] / kx, 41.4 + pts[-1][1] / 110540.0])
+    return out
+
+
+def test_lasso_windows_pont_molinet():
+    """Petit tour en bout d'aller-retour (03/11/2026, Sant Martí 45 min) : on monte au pont, on fait un tour de 800 m et on
+    revient au pont avant de refaire l'aller en sens inverse ; spike_windows ne le voit pas, lasso_windows si."""
+    tour = [(3000, 100), (3100, 100), (3100, 300), (2900, 300), (2900, 100), (3000, 100)]
+    c = _trace([(0, 0), (3000, 0)] + tour + [(3000, 0), (0, 0)])
+    wins = g.lasso_windows(c)
+    assert len(wins) == 1
+    cum = g._cum(c)
+    a, b = wins[0]
+    assert 780 <= cum[b] - cum[a] <= 1000 + 1               # le tour, avec au plus sa tige (100 m à l'aller et au retour)
+
+
+def test_lasso_windows_simple_aller_retour():
+    """Un aller-retour sans tour au bout (fait deux fois à l'identique) n'est pas un petit tour : c'est le travail
+    des règles d'aller-retour, pas de lasso_windows (113 boucles sur 516 touchées à tort sans ce critère)."""
+    c = _trace([(0, 0), (3000, 0), (3000, 600), (3000, 0), (0, 0)])
+    assert g.lasso_windows(c) == []
+
+
+def test_spike_windows_rampe():
+    """Rampe du pont del Molinet (268 m à l'aller et au retour, 536 m en tout) : la fenêtre par défaut (RETRACE_MAX_M) n'en
+    coupe qu'un morceau sans en atteindre le pied ; portée à 2 × RETRACE_MAX_M, elle la prend entière (03/11/2026)."""
+    c = _trace([(0, 0), (3000, 0), (3000, 268), (3000, 0), (6000, 0), (6000, 6000), (0, 6000), (0, 0)])
+    cum = g._cum(c)
+    court = g.spike_windows(c)
+    assert len(court) == 1 and cum[court[0][1]] - cum[court[0][0]] < 520
+    large = g.spike_windows(c, 2 * g.RETRACE_MAX_M)
+    assert len(large) == 1 and cum[large[0][1]] - cum[large[0][0]] >= 530
+
+
+def test_trim_pool_revoit(monkeypatch):
+    """_trim_pool (03/11/2026, Sant Martí 45 min) : une boucle coupée est revue au tour suivant (une coupe en découvre une
+    autre), et la jumelle qui passe devant après la coupe est vue aussi."""
+    a, b = SimpleNamespace(score=73.1, name="a"), SimpleNamespace(score=73.0, name="b")
+    a1, a2 = SimpleNamespace(score=60.0, name="a1"), SimpleNamespace(score=61.0, name="a2")
+    b1 = SimpleNamespace(score=59.0, name="b1")
+    cuts = {"a": a1, "a1": a2, "b": b1}
+    seen = []
+
+    def trim(l, *_):
+        seen.append(l.name)
+        return cuts.get(l.name)
+    monkeypatch.setattr(g, "trim_retrace", trim)
+    monkeypatch.setattr(g, "pick_options", lambda pool, prior=None: [("equilibre", max(pool, key=lambda l: l.score))])
+    pool = g._trim_pool([a, b], [], "modere", 0.75, None)
+    assert seen == ["a", "b", "a1", "a2"]                    # a coupée : b passe devant ; b coupée : a1 revue, coupée en a2
+    assert {l.name for l in pool} == {"a2", "b1"}
