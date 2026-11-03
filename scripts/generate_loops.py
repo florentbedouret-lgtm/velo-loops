@@ -1627,6 +1627,23 @@ def trim_retrace(l, level, duration_h, bounds):
     return best
 
 
+def _trim_pool(pool, prior, level, duration_h, bounds):
+    """pool avec ses boucles choisies coupées de leurs demi-tours, jusqu'à ce que chaque boucle choisie ait été vue : la coupe
+    baisse la note, et le choix retombait sur une jumelle restée avec son crochet (Sant Martí 45 min, 03/11/2026)."""
+    pool, seen = list(pool), set()
+    for _ in range(TRIM_ROUNDS):
+        todo = [l for _, l in pick_options(pool, prior) if id(l) not in seen]
+        if not todo:
+            break
+        for l in todo:
+            seen.add(id(l))
+            t = trim_retrace(l, level, duration_h, bounds)
+            if t is not None:
+                seen.add(id(t))
+                pool = [t if x is l else x for x in pool]
+    return pool
+
+
 def _shore_trim(path, n_out, n_back):
     """path sans les petits allers-retours laissés par les points de passage et les raccords de shore_loop (Ciutat Vella
     3 h Modéré, 03/11/2026 : refusée pour « demi-tours ») ; seuls le début et la fin refaits sont touchés."""
@@ -2534,6 +2551,7 @@ RETRACE_MIN_M = 60.0
 RETRACE_SAME_M = 5.0
 RETRACE_SEA_DEG = 0.001          # au bord même de l'eau : la pointe de Sant Martí 2 h, à 1 km de la mer, n'en est pas une
 RETRACE_TURN_PTS = 17.0
+TRIM_ROUNDS = 4                  # tours de coupe au plus : chaque tour ne revoit que les boucles choisies pas encore vues
 RETRACE_TIP_SHARE = 0.42
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
@@ -6461,11 +6479,7 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     if dead_end() and pool:                                  # avant les variantes, qui héritent des demi-tours (DEAD_END)
-        pool = list(pool)
-        for _, l in pick_options(pool, prior):
-            t = trim_retrace(l, level, duration_h, bounds)
-            if t is not None:
-                pool = [t if x is l else x for x in pool]
+        pool = _trim_pool(pool, prior, level, duration_h, bounds)
     if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)
         extra = [t for _, l in pick_options(pool, prior) for t in pleasant_ar_candidates(gh, l, level, duration_h, bounds)]
         if repeat_fix():                                     # sans ses tronçons repassés hors de la partie agréable
@@ -6480,11 +6494,7 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     if dead_end() and pool:                                  # demi-tours sur place, cul-de-sac de rivière (DEAD_END)
-        pool = list(pool)
-        for _, l in pick_options(pool, prior):
-            t = trim_retrace(l, level, duration_h, bounds)
-            if t is not None:
-                pool = [t if x is l else x for x in pool]
+        pool = _trim_pool(pool, prior, level, duration_h, bounds)
         for _, l in pick_options(pool, prior):
             t = shore_loop(gh, l, level, duration_h, bounds)
             if t is not None:
