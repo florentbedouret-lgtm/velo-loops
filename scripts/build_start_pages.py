@@ -37,7 +37,10 @@ T = {
         "lights": "{l} feux/km", "lights1": "{l} feu/km", "nolights": "aucun feu", "dirt": "{km} km de terre", "see": "Voir et télécharger",
         "near": "Départs voisins", "how": "Comment sont faites les boucles ?", "legal": "Mentions légales & confidentialité",
         "app": "← Ouvrir l'app", "langs": "Langues", "note": "Durées en mouvement, sans pauses. Parcours indicatifs, à vérifier avant de partir.",
-        "data": "Données : © contributeurs OpenStreetMap (ODbL), revêtement © ICGC (CC BY 4.0), calculs GraphHopper (Apache 2.0)."},
+        "data": "Données : © contributeurs OpenStreetMap (ODbL), revêtement © ICGC (CC BY 4.0), calculs GraphHopper (Apache 2.0).",
+        "all": "Tous les départs", "hub_title": "Boucles vélo autour de Barcelone : tous les départs · Oyan",
+        "hub_desc": "{n} départs de boucles à vélo autour de Barcelone, de 45 min à 6 h, avec trace GPX gratuite.",
+        "hub_lead": "{n} départs dans la province de Barcelone. Pour chacun, une boucle par durée et par allure, qui revient au point de départ."},
  "ca": {"lvl": {"facile": "Tranquil", "modere": "Moderat", "soutenu": "Esportiu"}, "station": "Estació", "station_phrase": "l'estació {r}",
         "dirs": {"nord": "nord", "sud": "sud", "est": "est", "ouest": "oest", "nord-est": "nord-est", "nord-ouest": "nord-oest",
                  "sud-est": "sud-est", "sud-ouest": "sud-oest"},
@@ -52,7 +55,10 @@ T = {
         "lights": "{l} semàfors/km", "nolights": "cap semàfor", "dirt": "{km} km de terra", "see": "Veure i descarregar",
         "near": "Sortides properes", "how": "Com es fan les rutes?", "legal": "Avís legal i privadesa",
         "app": "← Obre l'app", "langs": "Idiomes", "note": "Durades en moviment, sense pauses. Rutes orientatives: comprova-les abans de sortir.",
-        "data": "Dades: © col·laboradors d'OpenStreetMap (ODbL), ferm © ICGC (CC BY 4.0), càlcul GraphHopper (Apache 2.0)."},
+        "data": "Dades: © col·laboradors d'OpenStreetMap (ODbL), ferm © ICGC (CC BY 4.0), càlcul GraphHopper (Apache 2.0).",
+        "all": "Totes les sortides", "hub_title": "Rutes en bici a prop de Barcelona: totes les sortides · Oyan",
+        "hub_desc": "{n} sortides de rutes circulars en bici a prop de Barcelona, de 45 min a 6 h, amb traça GPX gratuïta.",
+        "hub_lead": "{n} sortides a la província de Barcelona. Per a cadascuna, una ruta circular per durada i per ritme."},
  "es": {"lvl": {"facile": "Tranquilo", "modere": "Moderado", "soutenu": "Deportivo"}, "station": "Estación", "station_phrase": "la estación {r}",
         "dirs": {"nord": "norte", "sud": "sur", "est": "este", "ouest": "oeste", "nord-est": "noreste", "nord-ouest": "noroeste",
                  "sud-est": "sureste", "sud-ouest": "suroeste"},
@@ -67,7 +73,10 @@ T = {
         "lights": "{l} semáforos/km", "nolights": "ningún semáforo", "dirt": "{km} km de tierra", "see": "Ver y descargar",
         "near": "Salidas cercanas", "how": "¿Cómo se hacen las rutas?", "legal": "Aviso legal y privacidad",
         "app": "← Abrir la app", "langs": "Idiomas", "note": "Tiempos en movimiento, sin pausas. Rutas orientativas: compruébalas antes de salir.",
-        "data": "Datos: © colaboradores de OpenStreetMap (ODbL), firme © ICGC (CC BY 4.0), cálculo GraphHopper (Apache 2.0)."},
+        "data": "Datos: © colaboradores de OpenStreetMap (ODbL), firme © ICGC (CC BY 4.0), cálculo GraphHopper (Apache 2.0).",
+        "all": "Todas las salidas", "hub_title": "Rutas en bici cerca de Barcelona: todas las salidas · Oyan",
+        "hub_desc": "{n} salidas de rutas circulares en bici cerca de Barcelona, de 45 min a 6 h, con track GPX gratis.",
+        "hub_lead": "{n} salidas en la provincia de Barcelona. Para cada una, una ruta circular por duración y por ritmo."},
  "en": {"lvl": {"facile": "Relaxed", "modere": "Moderate", "soutenu": "Sporty"}, "station": "Station", "station_phrase": "{r} station",
         "dirs": {"nord": "north", "sud": "south", "est": "east", "ouest": "west", "nord-est": "north-east", "nord-ouest": "north-west",
                  "sud-est": "south-east", "sud-ouest": "south-west"},
@@ -82,7 +91,10 @@ T = {
         "lights": "{l} lights/km", "nolights": "no traffic lights", "dirt": "{km} km unpaved", "see": "See and download",
         "near": "Nearby starts", "how": "How are the loops made?", "legal": "Legal notice & privacy",
         "app": "← Open the app", "langs": "Languages", "note": "Moving times, without breaks. Routes are indicative: check them before you ride.",
-        "data": "Data: © OpenStreetMap contributors (ODbL), surface © ICGC (CC BY 4.0), routing by GraphHopper (Apache 2.0)."},
+        "data": "Data: © OpenStreetMap contributors (ODbL), surface © ICGC (CC BY 4.0), routing by GraphHopper (Apache 2.0).",
+        "all": "All starts", "hub_title": "Bike loops around Barcelona: all starts · Oyan",
+        "hub_desc": "{n} starting points for bike loops around Barcelona, from 45 min to 6 h, with free GPX download.",
+        "hub_lead": "{n} starts across the province of Barcelona. For each one, a loop per duration and pace that ends where it starts."},
 }
 RELIEF = {'fr': ['plat', 'peu vallonné', 'vallonné', 'très vallonné'], 'ca': ['pla', 'poc ondulat', 'ondulat', 'molt ondulat'], 'es': ['llano', 'poco ondulado', 'ondulado', 'muy ondulado'], 'en': ['flat', 'gently rolling', 'hilly', 'very hilly']}   # mêmes seuils que relief_category() et l'app (D+ pour 100 km)
 e = html.escape
@@ -266,11 +278,73 @@ def page(s: dict, data: dict, lang: str, near: list):
   <footer>
     <p>{e(d["note"])}</p>
     <p>{e(d["data"])}</p>
-    <p><a href="{rel}{HOW[lang]}">{e(d["how"])}</a> · <a href="{rel}mentions.html">{e(d["legal"])}</a></p>
+    <p><a href="index.html">{e(d["all"])}</a> · <a href="{rel}{HOW[lang]}">{e(d["how"])}</a> · <a href="{rel}mentions.html">{e(d["legal"])}</a></p>
   </footer>
 </body>
 </html>
 '''
+
+
+def hub(starts: list, lang: str) -> str:
+    """Page « Tous les départs » d'une langue (référencement, 03/11/2026) : sans elle, seul le sitemap menait aux pages
+    par départ ; départs groupés par commune, dans l'ordre alphabétique."""
+    d, rel = T[lang], "../../"
+    groups = {}
+    for s in starts:
+        groups.setdefault(s.get("municipality") or s["name"], []).append(s)
+    body = "\n".join(f'  <h2>{e(m)}</h2>\n  <ul class="near">' + "".join(
+        f'<li><a href="{s["id"]}.html">{e(start_name(s, lang))}</a></li>' for s in sorted(g, key=lambda x: start_name(x, lang)))
+        + "</ul>" for m, g in sorted(groups.items(), key=lambda kv: kv[0].lower()))
+    alts = "\n".join(f'  <link rel="alternate" hreflang="{x}" href="{BASE}{DIRS[x]}/index.html">' for x in LANGS) + \
+        f'\n  <link rel="alternate" hreflang="x-default" href="{BASE}{DIRS["fr"]}/index.html">'
+    langs = " ".join(f'<a href="{rel}{DIRS[x]}/index.html" hreflang="{x}" lang="{x}"' +
+                     (' aria-current="page"' if x == lang else "") + f'>{x.upper()}</a>' for x in LANGS)
+    n = len(starts)
+    return f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{e(d["hub_title"])}</title>
+  <meta name="description" content="{e(d["hub_desc"].format(n=n))}">
+  <link rel="canonical" href="{BASE}{DIRS[lang]}/index.html">
+{alts}
+  <meta name="theme-color" content="#F6F4F0">
+  <link rel="icon" href="{rel}brand/svg/favicon.svg" type="image/svg+xml">
+  <link href="{rel}brand/oyan-tokens.css" rel="stylesheet">
+  <link href="{rel}fonts/oyan-fonts.css" rel="stylesheet">
+  <style>
+    body {{ max-width: 640px; margin: 0 auto; padding: 16px; font-family: var(--font-sans); line-height: 1.5;
+           background: var(--color-bg); color: var(--color-text); -webkit-text-size-adjust: 100%; }}
+    h1 {{ font-size: var(--fs-h1); font-weight: var(--fw-regular); margin: 8px 0 12px; text-wrap: balance; }}
+    h2 {{ font-size: var(--fs-h2); font-weight: var(--fw-medium); margin: 24px 0 4px; }}
+    a {{ color: var(--color-text); text-underline-offset: 3px; }}
+    :focus-visible {{ outline: 2px solid var(--color-text); outline-offset: 2px; }}
+    .top {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 44px; }}
+    .top nav a {{ font-size: 13px; font-weight: var(--fw-medium); margin-left: 12px; color: var(--color-text-2); }}
+    .top nav a[aria-current] {{ color: var(--color-text); text-decoration: none; }}
+    ul {{ list-style: none; margin: 0; padding: 0; }}
+    .near {{ display: flex; flex-wrap: wrap; gap: 8px 16px; }}
+    .near a {{ display: inline-block; padding: 6px 0; }}
+    footer {{ margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--color-border); font-size: 13px; color: var(--color-text-2); }}
+    footer a {{ color: var(--color-text-2); }}
+  </style>
+</head>
+<body>
+  <div class="top"><a href="{rel}index.html">{e(d["app"])}</a>
+    <nav aria-label="{e(d["langs"])}">{langs}</nav></div>
+  <main>
+  <h1>{e(d["hub_title"].split(" · ")[0])}</h1>
+  <p>{e(d["hub_lead"].format(n=n))}</p>
+{body}
+  </main>
+  <footer>
+    <p>{e(d["data"])}</p>
+    <p><a href="{rel}{HOW[lang]}">{e(d["how"])}</a> · <a href="{rel}mentions.html">{e(d["legal"])}</a></p>
+  </footer>
+</body>
+</html>
+"""
 
 
 def main() -> int:
@@ -302,10 +376,17 @@ def main() -> int:
         if wrote:
             done.append(s["id"])
             lastmod[s["id"]] = (s.get("computed_at") or idx.get("generated_at") or "")[:10]
-    # sitemap : pages fixes + pages des départs (avec leurs équivalents dans les autres langues)
+    listed = [s for s in starts if s["id"] in set(done)]
+    for lang in LANGS:                                       # « Tous les départs », une page par langue
+        (out / DIRS[lang]).mkdir(parents=True, exist_ok=True)
+        (out / DIRS[lang] / "index.html").write_text(hub(listed, lang), encoding="utf-8")
+    # sitemap : pages fixes, « Tous les départs », pages des départs (avec leurs équivalents dans les autres langues)
     today = (idx.get("generated_at") or "")[:10]
     rows = [f"  <url><loc>{BASE}{p}</loc>{f'<lastmod>{today}</lastmod>' if today else ''}<priority>{pr}</priority></url>"
             for p, pr in FIXED_PAGES]
+    hub_alt = "".join(f'<xhtml:link rel="alternate" hreflang="{x}" href="{BASE}{DIRS[x]}/index.html"/>' for x in LANGS)
+    rows += [f"  <url><loc>{BASE}{DIRS[lang]}/index.html</loc>{f'<lastmod>{today}</lastmod>' if today else ''}"
+             f"<priority>0.7</priority>{hub_alt}</url>" for lang in LANGS]
     for sid in done:
         alt = "".join(f'<xhtml:link rel="alternate" hreflang="{x}" href="{BASE}{DIRS[x]}/{sid}.html"/>' for x in LANGS)
         for lang in LANGS:
