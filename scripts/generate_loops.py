@@ -1615,7 +1615,8 @@ def trim_retrace(l, level, duration_h, bounds):
         ok, why_ = _ar_ok(n, duration_h, bounds)             # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
         if n is not None:
             n.time_s = t_
-        ok = ok and n.score >= l.score - 1.0                 # une à une : une coupe qui nuit n'empêche pas les autres
+        ok = ok and n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - 1.0   # une à une ; le demi-tour net qui remplace
+        # le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
         _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,   # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
                  **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
         if ok:
@@ -2525,6 +2526,7 @@ RETRACE_MAX_M = 500.0            # au-delà, c'est un aller-retour (Barceloneta)
 RETRACE_MIN_M = 60.0
 RETRACE_SAME_M = 5.0
 RETRACE_SEA_DEG = 0.001          # au bord même de l'eau : la pointe de Sant Martí 2 h, à 1 km de la mer, n'en est pas une
+RETRACE_TURN_PTS = 17.0
 RETRACE_TIP_SHARE = 0.42
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
