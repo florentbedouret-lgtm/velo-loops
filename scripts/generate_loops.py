@@ -1636,7 +1636,7 @@ def _shore_trim(path, n_out, n_back):
         if i >= len(c) - 2:
             break
         hi = bisect.bisect_right(cum, cum[i] + RETRACE_MAX_M) - 1
-        j = next((j for j in range(hi, i + 1, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_SAME_M), None)
+        j = next((j for j in range(hi, i + 1, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
         if j is not None:
             path = splice_path(path, i, j, {"points": {"coordinates": [c[i]]}})
             n_out -= min(j - i, max(0, n_out - i))
@@ -1648,7 +1648,7 @@ def _shore_trim(path, n_out, n_back):
             return path
         cum = _cum(c)
         hi = bisect.bisect_right(cum, cum[i] + RETRACE_MAX_M) - 1
-        j = next((j for j in range(hi, i + 1, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_SAME_M), None)
+        j = next((j for j in range(hi, i + 1, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
         if j is not None:
             path = splice_path(path, i, j, {"points": {"coordinates": [c[i]]}})
         i += 1
@@ -1692,6 +1692,7 @@ def shore_loop(gh, l, level, duration_h, bounds):
     ok = ok and not n.dead_end and n.score > l.score - DEAD_END_PEN
     _journal("bord de mer", l, n, c[i], ok, why_, **({} if n is None else {
         "points_demi_tour": [[round(u[1], 5), round(u[0], 5), round(u[2])] for u in uturn_points(n.coords)],
+        "tete": [[round(p[1], 5), round(p[0], 5)] for p in n.coords[:400:4]],
         "avant": score_detail(l), "apres": score_detail(n)}))
     if not ok:
         return None
@@ -2512,7 +2513,7 @@ DEAD_END_MIN_M = 1000.0
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_PEN = 10.0               # points retirés au dernier choix : avant, ils écartaient de bonnes boucles à reprendre
 DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
-SHORE_VIA = [(2.1895, 41.3727), (2.1930, 41.3790), (2.1962, 41.3845)]  # la plage de la Barceloneta, du sud au nord
+SHORE_VIA = [(2.18952, 41.37436), (2.1930, 41.3790), (2.1962, 41.3845)]  # la plage de la Barceloneta, du sud au nord
 SHORE_JOIN = (2.1996, 41.3886)   # rejoint la piste vers le Port Olímpic
 SHORE_START_M = 2500.0
 SHORE_HEAD_M = 5000.0
