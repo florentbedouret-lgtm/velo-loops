@@ -1588,11 +1588,46 @@ def spike_windows(coords) -> list:
     return out
 
 
+def _once_m(coords, cum, i, j) -> float:
+    """Mètres de coords[i:j] parcourus une seule fois dans cette fenêtre (pas repassés à plus de 60 m de trace d'écart)."""
+    s = 0.0
+    for k in range(i, j):
+        mx, my, mc = (coords[k][0] + coords[k + 1][0]) / 2, (coords[k][1] + coords[k + 1][1]) / 2, (cum[k] + cum[k + 1]) / 2
+        if not any(abs(cum[t] - mc) > RETRACE_MIN_M and haversine(mx, my, coords[t][0], coords[t][1]) < RETRACE_R_M
+                   for t in range(i, j + 1)):
+            s += cum[k + 1] - cum[k]
+    return s
+
+
+def lasso_windows(coords) -> list:
+    """Boucles en bout d'aller-retour (DEAD_END) : la trace repasse au même point après un petit tour de moins de LASSO_MAX_M,
+    que spike_windows ne voit pas, faute de pointe nette (Sant Martí 45 min, pont del Molinet : on monte au pont, on redescend
+    par le chemin voisin et on y remonte avant de refaire l'aller en sens inverse, 03/11/2026). Indices [(a, b)]."""
+    cum, out, i = _cum(coords), [], 0
+    while i < len(coords) - 2:
+        cut = None
+        for j in range(bisect.bisect_right(cum, cum[i] + LASSO_MAX_M) - 1, i + 1, -1):
+            if cum[j] - cum[i] < LASSO_MIN_M:
+                break
+            if haversine(coords[i][0], coords[i][1], coords[j][0], coords[j][1]) < RETRACE_SAME_M:
+                tip = max(coords[i:j + 1], key=lambda p: haversine(coords[i][0], coords[i][1], p[0], p[1]))
+                once = _once_m(coords, cum, i, j)            # le tour lui-même, sans la tige faite deux fois ; sans tour,
+                if once >= LASSO_MIN_M and cum[j] - cum[i] - once <= LASSO_STEM_M and not near_sea(tip, RETRACE_SEA_DEG):
+                    cut = j                                  # c'est le bout d'un aller-retour (113 boucles sur 516)
+                break
+        if cut is not None:
+            out.append((i, cut))
+            i = cut
+        i += 1
+    return out
+
+
 def trim_retrace(l, level, duration_h, bounds):
     """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
     les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
     wins = sorted(getattr(l, "retrace_windows", None) or [])
     wins += [w for w in spike_windows(l.coords) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
+    wins += [w for w in lasso_windows(l.coords) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     if not wins:
         return None
     path, best = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}, l
@@ -2555,7 +2590,10 @@ RETRACE_MIN_M = 60.0
 RETRACE_SAME_M = 5.0
 RETRACE_SEA_DEG = 0.001          # au bord même de l'eau : la pointe de Sant Martí 2 h, à 1 km de la mer, n'en est pas une
 RETRACE_TURN_PTS = 17.0
-TRIM_ROUNDS = 4                  # tours de coupe au plus : chaque tour ne revoit que les boucles choisies pas encore vues
+LASSO_MIN_M = 200.0              # petit tour en bout d'aller-retour (lasso_windows) : longueur du tour, de ... à ...
+LASSO_MAX_M = 1200.0             # (Sant Martí 45 min, pont del Molinet : environ 800 m)
+LASSO_STEM_M = 200.0             # tige faite à l'aller et au retour, au plus (aller et retour comptés)
+TRIM_ROUNDS = 4                 # tours de coupe au plus : chaque tour ne revoit que les boucles choisies pas encore vues
 RETRACE_TIP_SHARE = 0.42
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
 
