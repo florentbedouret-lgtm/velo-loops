@@ -7,7 +7,7 @@
   <link rel="canonical" href="https://florentbedouret-lgtm.github.io/velo-loops/">
   <meta name="google-site-verification" content="HEG7fZYnPCIdD-XxhOdn3IWssNDU8s8xtDFdhMWFZWE">   <!-- Google Search Console (08/10/2026) -->
   <!-- données structurées (audit SEO du 08/10/2026) : l'app, gratuite, en 4 langues -->
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Oyan","url":"https://florentbedouret-lgtm.github.io/velo-loops/","description":"Des boucles à vélo calculées à l'avance autour de Barcelone depuis environ 860 départs : peu de feux, sortie rapide de la ville, trace GPX à télécharger.","applicationCategory":"SportsApplication","operatingSystem":"Web","inLanguage":["fr","ca","es","en"],"isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"areaServed":{"@type":"AdministrativeArea","name":"Província de Barcelona"},"image":"https://florentbedouret-lgtm.github.io/velo-loops/brand/png/oyan-icone-512.png"}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Oyan","alternateName":["Oyan boucles vélo","Oyan bike loops","Oyan rutas en bici","Oyan rutes en bici"],"url":"https://florentbedouret-lgtm.github.io/velo-loops/","description":"Des boucles à vélo calculées à l'avance autour de Barcelone depuis environ 860 départs : peu de feux, sortie rapide de la ville, trace GPX à télécharger.","applicationCategory":"SportsApplication","operatingSystem":"Web","inLanguage":["fr","ca","es","en"],"isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"areaServed":{"@type":"AdministrativeArea","name":"Província de Barcelona"},"image":"https://florentbedouret-lgtm.github.io/velo-loops/brand/png/oyan-icone-512.png"}</script>
   <meta name="description" content="Des boucles à vélo calculées à l'avance autour de Barcelone : peu de feux, sortie rapide de la ville, trace GPX à télécharger.">
   <!-- aperçu des liens partagés (WhatsApp, Signal, réseaux) -->
   <meta property="og:type" content="website">
@@ -141,6 +141,9 @@
     .lang-menu button[aria-checked=true] { background: var(--color-bg); }
     #settings { display: none; padding: 0 16px 16px; max-height: calc(100dvh - 128px - 90px); overflow-y: auto; }
     #top.open #settings { display: block; }
+    .tagline { margin: 0 0 12px; font-size: 13px; color: var(--color-text-2); text-wrap: balance; }
+    .tagline a { color: var(--color-text-2); text-decoration: none; }
+    @media (hover: hover) and (pointer: fine) { .tagline a:hover { color: var(--color-text); text-decoration: underline; } }
     .k-label { font-size: 13px; font-weight: var(--fw-medium); color: var(--color-text-2); margin: 18px 0 8px; }
     #search { display: flex; gap: 8px; }
     .field { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 6px;
@@ -425,6 +428,9 @@
       </button>
     </div>
     <div id="settings">
+      <!-- la même promesse dans les 4 langues, chacune vers sa page d'aide (référencement, 03/11/2026 : « oyan bike »
+           et « oyan bici » ne trouvaient pas le site, dont l'accueil n'existait pour Google qu'en français) -->
+      <p class="tagline"><a href="comment-ca-marche.html" lang="fr" hreflang="fr">Boucles vélo</a> · <a href="how-it-works.html" lang="en" hreflang="en">Bike loops</a> · <a href="como-funciona.html" lang="es" hreflang="es">Rutas en bici</a> · <a href="com-funciona.html" lang="ca" hreflang="ca">Rutes en bici</a></p>
       <div id="search">
         <div class="field">
           <button id="go" type="button" class="icon-btn" aria-label="Chercher l'adresse" data-i18n-aria="search_btn">
