@@ -1670,7 +1670,7 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds):
     ok, why_ = _ar_ok(n, duration_h, bounds)                 # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
     if n is not None:
         n.time_s = t_
-    ok = ok and n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - 1.0   # une à une ; le demi-tour net qui
+    ok = ok and n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - RETRACE_TOL   # une à une ; le demi-tour net qui
     # remplace le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
     _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,       # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
              **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
@@ -2604,6 +2604,8 @@ RETRACE_MIN_M = 60.0
 RETRACE_SAME_M = 5.0
 RETRACE_SEA_DEG = 0.001          # au bord même de l'eau : la pointe de Sant Martí 2 h, à 1 km de la mer, n'en est pas une
 RETRACE_TURN_PTS = 17.0
+RETRACE_TOL = 3.0                # points qu'une coupe de crochet peut coûter (1 avant le 03/11/2026 : Ciutat Vella 1 h,
+                                 # crochets refusés à −2 et −2,5 pour un peu de front de mer ; Florent : à éliminer)
 LASSO_MIN_M = 200.0              # petit tour en bout d'aller-retour (lasso_windows) : longueur du tour, de ... à ...
 LASSO_MAX_M = 1200.0             # (Sant Martí 45 min, pont del Molinet : environ 800 m)
 LASSO_STEM_M = 200.0             # tige faite à l'aller et au retour, au plus (aller et retour comptés)
@@ -6555,11 +6557,15 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             t = shore_loop(gh, l, level, duration_h, bounds)
             if t is not None:
                 pool = [t if x is l else x for x in pool]
-        for l in pool:
-            if getattr(l, "dead_end", False):
-                l.score -= DEAD_END_PEN
-                l.dead_end = False
-                log(f"    cul-de-sac : {l.distance_m / 1000:.1f} km, note -> {l.score:.1f}")
+        def dead_pen(pool):
+            for l in pool:
+                if getattr(l, "dead_end", False):
+                    l.score -= DEAD_END_PEN
+                    l.dead_end = False
+                    log(f"    cul-de-sac : {l.distance_m / 1000:.1f} km, note -> {l.score:.1f}")
+        dead_pen(pool)
+        pool = _trim_pool(pool, prior, level, duration_h, bounds, log)   # celles que la pénalité fait passer devant
+        dead_pen(pool)                                       # n'étaient jamais revues (Sants-Montjuïc 3 h Modéré, 03/11/2026)
     picks = pick_options(pool, prior)
     if dead_end():
         log("    choix : " + ", ".join(f"{lab} {l.distance_m / 1000:.1f} km {l.score:.1f}" for lab, l in picks))
