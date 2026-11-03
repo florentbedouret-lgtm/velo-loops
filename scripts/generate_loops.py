@@ -1689,9 +1689,15 @@ def shore_loop(gh, l, level, duration_h, bounds):
     if n is not None:
         n.order_bonus = getattr(l, "order_bonus", 0.0)
         n.score = score(n)
+    t_ = None if n is None else n.time_s
+    if n is not None:                                        # quelques minutes de moins que la plage de durée : mieux qu'un détour
+        n.time_s += SHORE_SLACK_S                            # ajouté pour les reprendre (Ciutat Vella 3 h Modéré, 48,35 km)
     ok, why_ = _ar_ok(n, duration_h, bounds)
+    if n is not None:
+        n.time_s = t_
     ok = ok and not n.dead_end and n.score > l.score - DEAD_END_PEN
     _journal("bord de mer", l, n, c[i], ok, why_, **({} if n is None else {
+        "min_essai": round(n.time_s / 60.0, 1),
         "points_demi_tour": [[round(u[1], 5), round(u[0], 5), round(u[2])] for u in uturn_points(n.coords)],
         "tete": [[round(p[1], 5), round(p[0], 5)] for p in n.coords[:400:4]],
         "avant": score_detail(l), "apres": score_detail(n)}))
@@ -2520,6 +2526,7 @@ SHORE_START_M = 2500.0
 SHORE_HEAD_M = 5000.0
 SHORE_NEAR_M = 200.0
 SHORE_TRIM_PTS = 40
+SHORE_SLACK_S = 180.0
 RETRACE_R_M = 25.0
 RETRACE_SHARE = 0.7
 RETRACE_MAX_M = 500.0            # au-delà, c'est un aller-retour (Barceloneta), pas un demi-tour parasite
