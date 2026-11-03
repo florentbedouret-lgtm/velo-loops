@@ -659,7 +659,7 @@
       const grip = document.getElementById('grip');
       let drag = null, justDragged = false;
       grip.addEventListener('pointerdown', e => {
-        if (e.target.closest('button') || !startData || isDesk()) return;   // ordinateur : panneau fixe  // pastilles = boutons ; sans départ, rien à ouvrir
+        if (e.target.closest('button') || !startData || isDesk()) return;   // pastilles = boutons ; sans départ ou sur ordinateur, rien à tirer
         drag = { y: e.clientY, h: SHEET_GLIDE && glideH ? glideH : sheet.getBoundingClientRect().height, moved: false,
                  t: Date.now(), pts: [[Date.now(), e.clientY]] };
         grip.setPointerCapture(e.pointerId);                   // le doigt peut sortir de l'en-tête sans perdre le panneau
@@ -1131,7 +1131,7 @@
           else if (!isDesk() && !sheet.hidden && sheet.dataset.state !== 'low' && sheet.dataset.state !== 'peek') setSheet('low');
           return;
         }
-        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing && shown.length > 1 && !sheet.hidden) {
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing && menu.hidden && shown.length > 1 && !sheet.hidden) {
           e.preventDefault();
           const n = shown.length, k = (current + (e.key === 'ArrowRight' ? 1 : n - 1)) % n;
           select(k);
