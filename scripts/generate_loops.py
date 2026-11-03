@@ -1639,7 +1639,8 @@ def _trim_pool(pool, prior, level, duration_h, bounds, log=None):
             seen.add(id(l))
             t = trim_retrace(l, level, duration_h, bounds)
             if log is not None:
-                log(f"    sans demi-tour : {l.distance_m / 1000:.1f} km, note {l.score:.1f} -> "
+                w_ = len(getattr(l, "retrace_windows", None) or []) + len(spike_windows(l.coords))
+                log(f"    sans demi-tour : graine {l.seed}, {w_} fenêtre(s), {l.distance_m / 1000:.1f} km, note {l.score:.1f} -> "
                     + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:
                 seen.add(id(t))

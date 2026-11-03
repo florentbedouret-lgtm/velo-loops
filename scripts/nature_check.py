@@ -629,8 +629,8 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
         prior = []
         for level in sorted(levels, key=list(g.LEVELS).index):
             buf: list = []                                  # journal gardé pour les durées vides (mesure combinée)
-            logf = buf.append if getattr(g._TL, "collect_logs", False) else (lambda *_: None)
             tkey = f"{sid}|{d:g}|{level}"
+            logf = buf.append if getattr(g._TL, "collect_logs", False) or tkey in TRACE else (lambda *_: None)
             tr = trace_pool(gh, st_, sid, level, d, options, logf) if tkey in TRACE else None
             pool = g.ordered_pool(gh, st_, level, d, g.CANDIDATES, logf, options)
             picks = g.choose_options(gh, st_, level, d, pool, prior, logf,
@@ -640,6 +640,7 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                                    "origine": origin(l.seed), "seed": l.seed,
                                    "coords": [[round(p[0], 5), round(p[1], 5)] for p in g.simplify(l.coords, 15.0)]}
                                   for lab, l in picks]
+                tr["suivi"] = [str(x) for x in buf][-300:]       # messages du choix (coupe des demi-tours, 03/11/2026)
                 TRACE_OUT.setdefault((sid, getattr(g._TL, "trace_phase", "?")), {})[tkey] = tr
             if not picks and getattr(g._TL, "collect_logs", False):
                 g._TL.empty_logs[f"{d:g}|{level}"] = [str(x) for x in buf][-80:]
