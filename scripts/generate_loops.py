@@ -1680,21 +1680,20 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds):
 def _trim_pool(pool, prior, level, duration_h, bounds, log=None):
     """pool avec ses boucles choisies coupées de leurs demi-tours, jusqu'à ce que chaque boucle choisie ait été vue : la coupe
     baisse la note, et le choix retombait sur une jumelle restée avec son crochet (Sant Martí 45 min, 03/11/2026)."""
-    pool, seen = list(pool), set()
+    pool, seen = list(pool), []                              # les boucles elles-mêmes : un id() peut resservir
     for _ in range(TRIM_ROUNDS):
-        todo = [l for _, l in pick_options(pool, prior) if id(l) not in seen]
+        todo = [l for _, l in pick_options(pool, prior) if not any(l is s for s in seen)]
         if not todo:
             break
         for l in todo:
-            seen.add(id(l))
+            seen.append(l)
             t = trim_retrace(l, level, duration_h, bounds)
             if log is not None:
                 w_ = len(getattr(l, "retrace_windows", None) or []) + len(spike_windows(l.coords))
                 log(f"    sans demi-tour : graine {l.seed}, {w_} fenêtre(s), {l.distance_m / 1000:.1f} km, note {l.score:.1f} -> "
                     + ("inchangée" if t is None else f"{t.score:.1f}"))
-            if t is not None:
-                seen.add(id(t))
-                pool = [t if x is l else x for x in pool]
+            if t is not None:                                # revue au tour suivant : une coupe peut en découvrir une autre
+                pool = [t if x is l else x for x in pool]    # (Sant Martí 45 min Modéré, rampe du pont del Molinet)
     return pool
 
 
