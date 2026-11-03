@@ -371,6 +371,26 @@
     .cmp-table th:first-child, .cmp-table td:first-child { text-align: left; color: var(--color-text-2); font-weight: normal; }
     .cmp-table thead th { font-weight: var(--fw-medium); }
     .cmp-table .cur { font-weight: var(--fw-medium); }
+
+    /* ---------- ordinateur (03/11/2026, Florent) : même page, une colonne à gauche (réglages en haut, boucle dessous, toujours
+       dépliée) et la carte sur le reste ; plus de panneau à tirer, rien ne passe sous la boucle */
+    @media (min-width: 1024px) {
+      :root { --panel-w: clamp(380px, 30vw, 440px); }
+      body { display: grid; grid-template-columns: var(--panel-w) 1fr; grid-template-rows: auto minmax(0, 1fr); height: 100dvh;
+             background: linear-gradient(to right, var(--color-surface) var(--panel-w), var(--color-bg) 0); }
+      #map { left: var(--panel-w); }
+      #top, #sheet { position: relative; grid-column: 1; max-width: none; margin: 0; border-radius: 0; box-shadow: none;
+                     border-right: 1px solid var(--color-border); }
+      #top { grid-row: 1; top: auto; left: auto; right: auto; z-index: 5; border-bottom: 1px solid var(--color-border); }
+      #top.open { border-radius: 0; }
+      #settings { max-height: calc(100dvh - 52px - 240px); }   /* réglages ouverts : la boucle garde son nom, ses chiffres et le GPX */
+      #sheet { grid-row: 2; height: auto !important; min-height: 0; transform: none !important; transition: none; z-index: 4; }
+      #sheetFoot { transform: none !important; }
+      #grip { cursor: default; touch-action: auto; border-radius: 0; padding-top: 16px; }
+      .handle { display: none; }
+      #undo, #update { left: calc(var(--panel-w) + (100vw - var(--panel-w)) / 2); }
+      .maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib { max-width: calc(100vw - var(--panel-w) - 72px); }
+    }
   </style>
 </head>
 <body>
@@ -537,6 +557,9 @@
     const sheetBody = document.getElementById('sheetBody');
     const sheetFoot = document.getElementById('sheetFoot');
     const topCard = document.getElementById('top');
+    // ordinateur : colonne à gauche, panneau toujours au cran « mi-hauteur » (tout affiché : options, chiffres, détail, GPX)
+    const DESK = window.matchMedia('(min-width: 1024px)');
+    const isDesk = () => DESK.matches;
 
     // ---------- panneau coulissant (maquette « Oyan App Refonte », étape 5) : quatre hauteurs
     // peek = réglages ouverts (nom et chiffres seulement) ; low = replié (chiffres + GPX) ; mid = mi-hauteur ; high = ouvert
@@ -550,6 +573,11 @@
                high: H - 120 };
     }
     function setSheetHeight(h) {
+      if (isDesk()) {                                       // la colonne fixe la hauteur ; rien ne recouvre la carte
+        sheet.style.height = '';
+        document.documentElement.style.setProperty('--sheet-h', '0px');
+        return;
+      }
       sheet.style.height = h + 'px';
       document.documentElement.style.setProperty('--sheet-h', (sheet.hidden ? 0 : h) + 'px');
     }
@@ -594,16 +622,18 @@
       glideTimer = setTimeout(() => glideSettle(target), 320);
     }
     function setSheet(state) {
+      if (isDesk()) state = 'mid';
       sheet.dataset.state = state;
       document.documentElement.dataset.sheet = state;
-      if (SHEET_GLIDE) glideTo(sheetHeights()[state]); else setSheetHeight(sheetHeights()[state]);
-      if (state !== 'peek' && topCard.classList.contains('open')) setSettings(false);
+      if (SHEET_GLIDE && !isDesk()) glideTo(sheetHeights()[state]); else setSheetHeight(sheetHeights()[state]);
+      if (state !== 'peek' && topCard.classList.contains('open') && !isDesk()) setSettings(false);
       if (state === 'low' || state === 'mid') sheetBody.scrollTop = 0;
       fitRoute();                                           // brief v2 : recadrer à chaque changement de cran
     }
     function setSettings(open) {
       topCard.classList.toggle('open', open);
       document.getElementById('pill').setAttribute('aria-expanded', String(open));
+      if (isDesk()) { fitRoute(); return; }                 // ordinateur : les réglages poussent la boucle, ils ne la replient pas
       if (open && !sheet.hidden && sheet.dataset.state !== 'peek') setSheet('peek');
       else if (!open && sheet.dataset.state === 'peek') setSheet('low');
     }
@@ -617,7 +647,7 @@
       const grip = document.getElementById('grip');
       let drag = null, justDragged = false;
       grip.addEventListener('pointerdown', e => {
-        if (e.target.closest('button') || !startData) return;  // pastilles = boutons ; sans départ, rien à ouvrir
+        if (e.target.closest('button') || !startData || isDesk()) return;   // ordinateur : panneau fixe  // pastilles = boutons ; sans départ, rien à ouvrir
         drag = { y: e.clientY, h: SHEET_GLIDE && glideH ? glideH : sheet.getBoundingClientRect().height, moved: false,
                  t: Date.now(), pts: [[Date.now(), e.clientY]] };
         grip.setPointerCapture(e.pointerId);                   // le doigt peut sortir de l'en-tête sans perdre le panneau
@@ -665,14 +695,21 @@
       grip.addEventListener('pointerup', end);
       grip.addEventListener('pointercancel', end);
       grip.addEventListener('click', e => {
-        if (justDragged || e.target.closest('button') || !startData) return;
+        if (justDragged || e.target.closest('button') || !startData || isDesk()) return;
         const next = { peek: 'low', low: 'mid', mid: 'high', high: 'low' }[sheet.dataset.state];
         setSheet(next);
         fitRoute();
       });
+      DESK.addEventListener('change', () => {               // fenêtre élargie ou rétrécie : changer de disposition
+        if (sheet.hidden) { setSheetHeight(0); return; }
+        if (isDesk()) { sheet.style.transform = sheetFoot.style.transform = ''; glideH = 0; }
+        setSheet(isDesk() ? 'mid' : 'low');
+      });
+      let refit = null;
       window.addEventListener('resize', () => {
+        if (isDesk()) { clearTimeout(refit); refit = setTimeout(fitRoute, 200); }   // fenêtre redimensionnée : boucle recadrée
         if (sheet.hidden) return;
-        if (SHEET_GLIDE) glideSettle(sheetHeights()[sheet.dataset.state]); else setSheetHeight(sheetHeights()[sheet.dataset.state]);
+        if (SHEET_GLIDE && !isDesk()) glideSettle(sheetHeights()[sheet.dataset.state]); else setSheetHeight(sheetHeights()[sheet.dataset.state]);
       });
     })();
 
@@ -2262,6 +2299,11 @@
       const bounds = new maplibregl.LngLatBounds();
       shown.forEach(x => x.coords.forEach(c => bounds.extend([c[0], c[1]])));   // la boucle et ses variantes (maquette 5b)
       if (startData) bounds.extend([startData.start.lon, startData.start.lat]);  // le départ ne passe jamais sous le panneau
+      if (isDesk()) {                                       // ordinateur : la carte n'a ni réglages ni panneau par-dessus
+        const aH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--attr-h')) || 24;
+        map.fitBounds(bounds, { padding: { top: 48, bottom: aH + 32, left: 48, right: shown.length > 1 ? 96 : 48 }, duration: 500 });
+        return;
+      }
       const hs = sheetHeights(), H = window.innerHeight;
       // brief v3 : au cran ouvert, l'ancien calcul réduisait les deux marges dans la même proportion, et la boucle passait
       // en partie sous le panneau. On cadre dans la bande visible ; si elle est très étroite, on rogne la marge du haut.
