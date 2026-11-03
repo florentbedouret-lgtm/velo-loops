@@ -51,14 +51,16 @@ let pfLast = null; // géométrie du dernier profil dessiné, utilisée par bind
 // couleurs de terrain de brand/oyan-tokens.css (réservées à la barre de terrain et à cette bande)
 const PF_TERRAIN = { v: '#3A3F3B', e: '#8FA3AB', f: '#6E7A5A', o: '#D4C3A3' };
 
-function profileSvg(o) {
+// wide (facultatif) : largeur réelle en px, pour le bandeau sous la carte de la vue ordinateur (03/11/2026) ; sans elle,
+// 320 de large, mis à l'échelle de la colonne
+function profileSvg(o, wide) {
   if (!o.coords[0] || o.coords[0].length < 3) return '';
   const p = profileData(o.coords, o.distance_km);
   const seq = (o.scenery && o.scenery.landcover_seq) || '';
   // avec des montées : 16 px de marge en plus au-dessus de la courbe, pour que les repères numérotés restent au-dessus
   // des sommets au lieu de les cacher (remarque de Florent, 27/09/2026)
   const top = ((o.terrain && o.terrain.climbs) || []).length ? 16 : 0;
-  const W = 320, H = (seq ? 128 : 120) + top, mL = 42, mR = 8, mT = 8 + top, mB = seq ? 28 : 20;
+  const W = wide ? Math.max(320, Math.round(wide)) : 320, H = (seq ? 128 : 120) + top, mL = 42, mR = 8, mT = 8 + top, mB = seq ? 28 : 20;
   let lo = Math.min(...p.alt), hi = Math.max(...p.alt);
   if (hi - lo < 20) { const mid = (hi + lo) / 2; lo = mid - 10; hi = mid + 10; } // profil presque plat : échelle minimale de 20 m
   lo = Math.floor(lo / 10) * 10;

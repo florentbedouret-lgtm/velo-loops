@@ -23,6 +23,12 @@ const I18N = {
   dur_plus: ['Durée plus longue', 'Longer', 'Más larga', 'Més llarga'],
   where_hint: ['Tape une adresse, touche un point sur la carte ou utilise ta position.', 'Type an address, tap a point on the map or use your location.',
     'Escribe una dirección, toca un punto en el mapa o usa tu ubicación.', 'Escriu una adreça, toca un punt al mapa o fes servir la teva ubicació.'],
+  // à la souris (vue ordinateur, 03/11/2026) : on clique, on ne touche pas
+  where_hint_m: ['Tape une adresse, clique sur un point de la carte ou utilise ta position.', 'Type an address, click a point on the map or use your location.',
+    'Escribe una dirección, haz clic en un punto del mapa o usa tu ubicación.', 'Escriu una adreça, fes clic en un punt del mapa o fes servir la teva ubicació.'],
+  geo_denied_m: ['Localisation refusée. Tape une adresse ou clique sur la carte.', 'Location denied. Type an address or click the map.',
+    'Ubicación denegada. Escribe una dirección o haz clic en el mapa.', 'Ubicació denegada. Escriu una adreça o fes clic al mapa.'],
+  kbd_hint: ['← → pour passer d\'une boucle à l\'autre', '← → to switch loops', '← → para cambiar de ruta', '← → per canviar de ruta'],
   pick_list: ['Choisir dans la liste', 'Choose from the list', 'Elegir en la lista', 'Tria a la llista'],
   chosen_map: ['Choisi sur la carte', 'Chosen on the map', 'Elegida en el mapa', 'Triada al mapa'],
   empty_sheet: ['Choisis un départ pour voir la boucle.', 'Choose a start to see the loop.', 'Elige una salida para ver la ruta.',

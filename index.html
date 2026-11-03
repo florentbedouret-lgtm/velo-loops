@@ -380,7 +380,16 @@
       :root { --panel-w: clamp(380px, 30vw, 440px); }
       body { display: grid; grid-template-columns: var(--panel-w) 1fr; grid-template-rows: auto minmax(0, 1fr); height: 100dvh;
              background: linear-gradient(to right, var(--color-surface) var(--panel-w), var(--color-bg) 0); }
-      #map { left: var(--panel-w); }
+      #map { left: var(--panel-w); bottom: var(--dock-h, 0px); }
+      /* profil d'altitude en bandeau sous la carte, sur toute sa largeur (audit du 03/11/2026, comme Komoot et Strava) */
+      #pfDock { position: fixed; z-index: 3; left: var(--panel-w); right: 0; bottom: 0; background: var(--color-surface);
+                border-top: 1px solid var(--color-border); padding: 10px 20px 4px; }
+      #pfDock .pf-head { margin-bottom: 2px; }
+      #pfDock svg.pf { display: block; }
+      html.has-loop #suggestBox, html.has-loop #history { display: none; }   /* boucle affichée : réglages réduits à l'essentiel */
+      .kbd-hint { margin: 6px 0 0; font-size: 12px; color: var(--color-text-2); }
+      .maplibregl-ctrl-top-right .maplibregl-ctrl-group { margin: 12px 12px 0 0; border-radius: var(--radius-sm);
+                                                         box-shadow: 0 2px 10px rgba(36, 34, 31, .15); }
       #top, #sheet { position: relative; grid-column: 1; max-width: none; margin: 0; border-radius: 0; box-shadow: none;
                      border-right: 1px solid var(--color-border); }
       #top { grid-row: 1; top: auto; left: auto; right: auto; z-index: 5; border-bottom: 1px solid var(--color-border); }
@@ -399,6 +408,7 @@
   <h1 class="sr-only" data-i18n="app_title">Oyan : boucles à vélo autour de Barcelone</h1>
   <div id="srStatus" class="sr-only" role="status" aria-live="polite"></div>
   <div id="map"></div>
+  <div id="pfDock" hidden></div>   <!-- ordinateur : profil d'altitude en bandeau sous la carte -->
   <div id="top" class="open">
     <div id="pill" role="button" tabindex="0" aria-expanded="true" aria-controls="settings">
       <svg width="26" height="26" viewBox="0 0 48 48" aria-hidden="true"><path d="M37.86 18.26 A15 15 0 1 1 29.74 10.14" fill="none" stroke="#24221F" stroke-width="5.5" stroke-linecap="round"/><circle cx="29.74" cy="10.14" r="4.5" fill="#A8522F"/></svg>
@@ -706,10 +716,17 @@
         if (sheet.hidden) { setSheetHeight(0); return; }
         if (isDesk()) { sheet.style.transform = sheetFoot.style.transform = ''; glideH = 0; }
         setSheet(isDesk() ? 'mid' : 'low');
+        if (document.documentElement.classList.contains('has-loop')) select(current);   // profil, comparaison : à leur place
       });
       let refit = null;
       window.addEventListener('resize', () => {
-        if (isDesk()) { clearTimeout(refit); refit = setTimeout(fitRoute, 200); }   // fenêtre redimensionnée : boucle recadrée
+        if (isDesk()) {                                     // fenêtre redimensionnée : profil redessiné, boucle recadrée
+          clearTimeout(refit);
+          refit = setTimeout(() => {
+            if (document.documentElement.classList.contains('has-loop') && shown[current]) drawProfile(shown[current]);
+            fitRoute();
+          }, 200);
+        }
         if (sheet.hidden) return;
         if (SHEET_GLIDE && !isDesk()) glideSettle(sheetHeights()[sheet.dataset.state]); else setSheetHeight(sheetHeights()[sheet.dataset.state]);
       });
@@ -725,6 +742,14 @@
     // crédits DÉPLIÉS, en bas à gauche (brief v3 : la licence d'OpenStreetMap demande une attribution visible ; repli
     // seulement après l'avis du juriste). Leur hauteur réelle (1 ou 2 lignes selon la largeur) est mesurée : --attr-h
     map.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-left');
+    // ordinateur : boutons + / − (usage des cartes sur écran) et départs visibles dès la vue d'ensemble (audit du 03/11/2026)
+    const zoomCtl = new maplibregl.NavigationControl({ showCompass: false });
+    let zoomOn = false;
+    function deskMap() {
+      if (isDesk() !== zoomOn) { if (isDesk()) map.addControl(zoomCtl, 'top-right'); else map.removeControl(zoomCtl); zoomOn = isDesk(); }
+      if (map.getLayer('starts-pts')) map.setLayerZoomRange('starts-pts', isDesk() ? 7 : 10, 24);
+    }
+    DESK.addEventListener('change', deskMap);
     function measureAttr() {
       const a = document.querySelector('.maplibregl-ctrl-bottom-left');
       document.documentElement.style.setProperty('--attr-h', (a ? a.offsetHeight : 24) + 'px');
@@ -879,7 +904,7 @@
     }
 
     // ---------- ligne « Départ : … » des réglages : le texte est produit par une fonction, rejouée au changement de langue
-    let whereFn = () => esc(t('where_hint')), whereAfter = null;
+    let whereFn = () => esc(t(FINE.matches ? 'where_hint_m' : 'where_hint')), whereAfter = null;
     function setWhere(fn, after) { whereFn = fn; whereAfter = after || null; renderWhere(); }
     function renderWhere() { whereEl.innerHTML = whereFn(); if (whereAfter) whereAfter(); }
     const startLine = (s, sub) => esc(t('start_prefix')) + ' <b>' + esc(startLabel(s)) + '</b>' + stationNote(s.kind) +
@@ -995,6 +1020,7 @@
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 1.8, 11, 3, 13, 4.5, 16, 6],
         'circle-color': ROUTE.other, 'circle-stroke-color': '#FFFFFF',
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 8, 0.6, 12, 1.5] } }, beforeId);
+      deskMap();
       const lineLayout = { 'line-cap': 'round', 'line-join': 'round' };
       const isSel = ['get', 'selected'];
       soberBasemap();
@@ -1113,6 +1139,12 @@
           if (b && el.closest && el.closest('.optseg')) b.focus();   // le focus suit s'il était sur les boutons des boucles
         }
       });
+      const dockEl = document.getElementById('pfDock');      // bandeau du profil (ordinateur) : repères des montées cliquables
+      dockEl.addEventListener('click', e => { const h = e.target.closest('[data-hl]'); if (h) toggleHighlight(h); });
+      dockEl.addEventListener('keydown', e => {
+        const h = e.target.closest('[data-hl]');
+        if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleHighlight(h); }
+      });
       sheetBody.addEventListener('keydown', e => {
         const h = e.target.closest('[data-hl]');
         if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleHighlight(h); }
@@ -1124,7 +1156,7 @@
         setWhere(() => esc(t('locating')));
         navigator.geolocation.getCurrentPosition(
           p => { addr.value = ''; setPosition(p.coords.longitude, p.coords.latitude); },
-          () => { setSettings(true); setWhere(() => esc(t('geo_denied'))); },
+          () => { setSettings(true); setWhere(() => esc(t(FINE.matches ? 'geo_denied_m' : 'geo_denied'))); },
           { enableHighAccuracy: true, timeout: 15000 });
       };
       document.getElementById('me').onclick = locate;
@@ -1192,7 +1224,13 @@
       restoreLoop();                                        // lien partagé ou derniers réglages de l'appareil
     }
     // panneau sans départ choisi (brief v2) : « Choisis un départ pour voir la boucle. »
+    function noLoop() {                                     // plus de boucle affichée : ni bandeau du profil, ni réglages réduits
+      document.documentElement.classList.remove('has-loop');
+      pfCtl = null;
+      if (map.getSource('cursor')) drawProfile(null);
+    }
     function showEmptySheet() {
+      noLoop();
       sheetHead.innerHTML = '<div class="empty-msg">' + esc(t('empty_sheet')) + '</div>';
       renderSuggest();
       sheetBody.textContent = '';
@@ -1324,7 +1362,7 @@
       if (!res.ok) {                                        // on n'affiche pas la boucle du départ précédent
         sheetBody.textContent = t('load_error', { s: res.status });
         startData = null; shown = []; sheetFoot.hidden = true; updatePill(); setAdv(false);
-        map.getSource('routes').setData(EMPTY);
+        map.getSource('routes').setData(EMPTY); noLoop();
         altMarkers.forEach(m => m.marker.remove()); altMarkers = [];
         poiMarkers(null);
         return;
@@ -1333,7 +1371,7 @@
       if (marker) marker.remove();
       marker = new maplibregl.Marker({ element: dotEl('mk-start') })
         .setLngLat([startData.start.lon, startData.start.lat]).addTo(map);
-      setSettings(false);                                   // départ trouvé : on replie les réglages et on montre la boucle
+      if (!isDesk() || innerHeight < 860) setSettings(false);   // départ trouvé : réglages repliés (grand écran : gardés sous la main)
       setAdv(false);
       showLevel();
     }
@@ -1366,7 +1404,7 @@
         sheetBody.querySelectorAll('button[data-min]').forEach(b => {
           b.onclick = () => { durSel.value = String(Number(b.dataset.min) / 60); showLevel(); };
         });
-        map.getSource('routes').setData(EMPTY);
+        map.getSource('routes').setData(EMPTY); noLoop();
         map.getSource('cursor').setData(EMPTY);
         altMarkers.forEach(m => m.marker.remove()); altMarkers = [];
         poiMarkers(null);
@@ -1930,19 +1968,23 @@
       }
       const lc = LANDCOVER_OK && o.scenery && o.scenery.landcover;
       // autres boucles de la même durée : lignes compactes (les chiffres absolus sont dans les pastilles de l'en-tête)
-      const others = shown.map((x, k) => k === current ? '' : altRow('data-act="opt" data-i="' + k + '"', esc(optName(x)),
+      const othersRows = shown.map((x, k) => k === current ? '' : altRow('data-act="opt" data-i="' + k + '"', esc(optName(x)),
         compareLine(x, o) ? '<span class="cmp">' + esc(compareLine(x, o)) + '</span>' : '',
         deltas(x, o), '', optName(x) + ', ' + km(x.distance_km) + ' km, ' + t('dplus_inline', { m: Math.round(x.ascend_m) }) +
         ', ' + hm(x.time_est_min))).join('');
+      // ordinateur : les autres boucles sont déjà dans les boutons du haut, et leur comparaison remonte en tête du détail
+      const desk = isDesk();
+      const others = desk ? '' : othersRows;
       const sugg = longer + natureNeighbour(o) + trainStart(o);
       const ex0 = exitKm(o);
       const why = (natureNeighbour.last || trainStart.last) && (ex0 == null || ex0 > 5)
         ? '<p class="alts-why">' + esc(ex0 == null ? t('alts_why_stays') : t('alts_why_km', { km: km(ex0) })) + '</p>' : '';
       const alts = sugg || others ? '<section class="alts" aria-labelledby="altsH"><h3 class="alts-h" id="altsH">' +
-        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + why + sugg + others + compareTable(o) + '</section>' : '';
-      const pf = profileSvg(o);
+        esc(t('alts_h', { d: hm(o.duration_target_min) })) + '</h3>' + why + sugg + others + (desk ? '' : compareTable(o)) + '</section>' : '';
+      const pf = desk ? '' : profileSvg(o);                // ordinateur : le profil est dans le bandeau sous la carte
 
       return `
+        ${desk ? compareTable(o) : ''}
         ${lc ? terrainBar(o) : '<div class="sub">' + esc(t('city_pct', { p: pctStr(Math.round(cityShare(o) * 100)) })) + '</div>'}
         ${keysHtml(o)}
         ${knowHtml(o)}
@@ -1977,7 +2019,8 @@
         '<button type="button" class="alt" data-i="' + k + '" aria-pressed="' + (k === current) + '"><span class="l1"><i class="sw' +
         (k === current ? ' on' : '') + '"></i><span>' + esc(optName(x)) + '</span></span>' +
         (k === current ? '' : '<small class="dlt">' + esc(segDelta(x, o)) + '</small>') + '</button>').join('') + '</div>' : '';
-      return `<div class="head-row${seg ? ' has-seg' : ''}"><span class="opt-label" tabindex="-1">${esc(optName(o))}</span>${seg}</div>
+      const kbd = seg && isDesk() && FINE.matches ? '<p class="kbd-hint" aria-hidden="true">' + esc(t('kbd_hint')) + '</p>' : '';
+      return `<div class="head-row${seg ? ' has-seg' : ''}"><span class="opt-label" tabindex="-1">${esc(optName(o))}</span>${seg}</div>${kbd}
         <div class="sum-line">${km(o.distance_km)} km · ${esc(t('dplus_inline', { m: Math.round(o.ascend_m) }))} · ≈ ${hm(o.time_est_min)}</div>
         <div class="figs">
           <div class="k">${esc(t('fig_distance'))}</div><div class="k">${esc(t('fig_dplus'))}<button type="button" class="qm" aria-expanded="false" aria-label="${esc(t('dplus_help_btn'))}" onclick="toggleDplusHelp(this)">?</button></div><div class="k">${esc(t('fig_duration'))}</div>
@@ -1985,6 +2028,29 @@
           <div class="dplus-help" hidden>${esc(t('dplus_help'))}</div>
         </div>${o.shares.main_roads > 0.10 ? '<div class="roadwarn">' + WARN_ICON_() + '<span><b>' + pc(o.shares.main_roads) +
           '</b> ' + esc(t('k_main_short')) + '</span></div>' : ''}`;
+    }
+
+    // profil d'altitude : dans le détail (téléphone) ou en bandeau sous la carte (ordinateur), relié à la carte dans les deux sens
+    function drawProfile(o) {
+      const dock = document.getElementById('pfDock');
+      let host = sheetBody;
+      if (isDesk() && o) {
+        dock.hidden = false;                                // visible pour en mesurer la largeur
+        const pf = profileSvg(o, dock.clientWidth - 40);
+        dock.innerHTML = pf ? '<div class="pf-head"><span class="sec-label">' + esc(t('profile')) + '</span><span id="pfRead"></span></div>' + pf : '';
+        dock.hidden = !pf;
+        host = dock;
+      } else {
+        dock.hidden = true;
+        dock.innerHTML = '';
+      }
+      document.documentElement.style.setProperty('--dock-h', (dock.hidden ? 0 : dock.offsetHeight) + 'px');
+      map.resize();
+      if (!o) { pfCtl = null; return; }
+      const svg = host.querySelector('svg.pf');
+      pfCtl = svg ? bindProfile(svg, pos => map.getSource('cursor').setData(pos
+        ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY),
+        document.getElementById('pfRead')) : null;
     }
 
     function select(i) {
@@ -2007,10 +2073,8 @@
         if (SHEET_GLIDE) glideSettle(hLow); else setSheetHeight(hLow);
       }
       map.getSource('cursor').setData(EMPTY);
-      const pf = sheetBody.querySelector('svg.pf');
-      pfCtl = pf ? bindProfile(pf, pos => map.getSource('cursor').setData(pos
-        ? { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: pos } } : EMPTY),
-        document.getElementById('pfRead')) : null;
+      document.documentElement.classList.add('has-loop');
+      drawProfile(o);
       preview(-1);
 
       const features = shown
@@ -2123,7 +2187,7 @@
       hlKey = null;
       if (map.getSource('hl')) map.getSource('hl').setData(EMPTY);
       if (map.getLayer('routes')) { map.setPaintProperty('routes', 'line-opacity', 1); map.setPaintProperty('routes-casing', 'line-opacity', 1); }
-      sheetBody.querySelectorAll('.hl-on').forEach(x => x.classList.remove('hl-on'));
+      document.querySelectorAll('#sheetBody .hl-on, #pfDock .hl-on').forEach(x => x.classList.remove('hl-on'));
     }
     function toggleHighlight(el) {
       const kind = el.dataset.hl, again = hlKey === kind;
