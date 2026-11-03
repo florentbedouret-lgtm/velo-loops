@@ -1566,13 +1566,13 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
-def spike_windows(coords) -> list:
-    """Pointes (DEAD_END) : la trace repasse au même point après un aller et retour de moins de RETRACE_MAX_M, sans lieu ni mer
+def spike_windows(coords, max_m=RETRACE_MAX_M) -> list:
+    """Pointes (DEAD_END) : la trace repasse au même point après un aller et retour de moins de max_m, sans lieu ni mer
     au bout (Sant Martí 2 h, pont de Cristòfol de Moura, 194 m : block_detours ne les voit pas). Indices [(a, b)]."""
     cum, out, i = _cum(coords), [], 0
     while i < len(coords) - 2:
         cut = None
-        for j in range(bisect.bisect_right(cum, cum[i] + RETRACE_MAX_M) - 1, i + 1, -1):
+        for j in range(bisect.bisect_right(cum, cum[i] + max_m) - 1, i + 1, -1):
             m = cum[j] - cum[i]
             if m < RETRACE_MIN_M or haversine(coords[i][0], coords[i][1], coords[j][0], coords[j][1]) >= RETRACE_SAME_M:
                 continue
@@ -1632,34 +1632,48 @@ def trim_retrace(l, level, duration_h, bounds):
         return None
     path, best = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}, l
     for a, b in sorted(wins, reverse=True):                  # par la fin : les indices d'avant restent bons
-        c, cut = path["points"]["coordinates"], None         # coupé sur place : recalculer l'itinéraire le dégradait
-        for i in range(a, b):                                # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
-            j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
-            if j is not None and (cut is None or j - i > cut[1] - cut[0]):
-                cut = (i, j)
-        if cut is None:
-            continue
-        p_ = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
-        n = analyse(p_, level, l.profile, duration_h, l.seed, l.heading)
-        if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
-            _mark_pleasant_ar(n, None)
-        if n is not None:
-            n.order_bonus = getattr(l, "order_bonus", 0.0)
-            n.score = score(n)
-            t_, n.time_s = n.time_s, l.time_s                # quelques centaines de mètres en moins : la durée ne refuse pas
-        ok, why_ = _ar_ok(n, duration_h, bounds)             # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
-        if n is not None:
-            n.time_s = t_
-        ok = ok and n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - 1.0   # une à une ; le demi-tour net qui remplace
-        # le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
-        _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,   # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
-                 **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
-        if ok:
-            path, best = p_, n
+        r = _retrace_cut(path, a, b, l, level, duration_h, bounds)
+        if r is not None and not r[2] and r[1] is not None:  # refusée : la coupe découvre souvent l'éperon qui menait au
+            c2 = r[0]["points"]["coordinates"]               # crochet (Sant Martí 45 min : 130 m coupés, la rampe du pont
+            for a2, b2 in spike_windows(c2, 2 * RETRACE_MAX_M):   # del Molinet, 268 m, devenait un éperon, de 71 à 57)
+                if a2 <= r[3] <= b2:
+                    r2 = _retrace_cut(r[0], a2, b2, l, level, duration_h, bounds)
+                    if r2 is not None and r2[2]:
+                        r = r2
+                    break
+        if r is not None and r[2]:
+            path, best = r[0], r[1]
     if best is l:
         return None
     _keep_attrs(l, best)
     return best
+
+
+def _retrace_cut(path, a, b, l, level, duration_h, bounds):
+    """Essai de coupe d'un demi-tour dans la fenêtre [a, b] de path : (chemin, boucle, acceptée, indice de la coupe), ou None."""
+    c, cut = path["points"]["coordinates"], None             # coupé sur place : recalculer l'itinéraire le dégradait
+    for i in range(a, b):                                    # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
+        j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
+        if j is not None and (cut is None or j - i > cut[1] - cut[0]):
+            cut = (i, j)
+    if cut is None:
+        return None
+    p_ = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
+    n = analyse(p_, level, l.profile, duration_h, l.seed, l.heading)
+    if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
+        _mark_pleasant_ar(n, None)
+    if n is not None:
+        n.order_bonus = getattr(l, "order_bonus", 0.0)
+        n.score = score(n)
+        t_, n.time_s = n.time_s, l.time_s                    # quelques centaines de mètres en moins : la durée ne refuse pas
+    ok, why_ = _ar_ok(n, duration_h, bounds)                 # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
+    if n is not None:
+        n.time_s = t_
+    ok = ok and n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - 1.0   # une à une ; le demi-tour net qui
+    # remplace le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
+    _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,       # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
+             **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
+    return p_, n, ok, cut[0]
 
 
 def _trim_pool(pool, prior, level, duration_h, bounds, log=None):
