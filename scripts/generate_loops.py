@@ -1627,7 +1627,7 @@ def trim_retrace(l, level, duration_h, bounds):
     return best
 
 
-def _trim_pool(pool, prior, level, duration_h, bounds):
+def _trim_pool(pool, prior, level, duration_h, bounds, log=None):
     """pool avec ses boucles choisies coupées de leurs demi-tours, jusqu'à ce que chaque boucle choisie ait été vue : la coupe
     baisse la note, et le choix retombait sur une jumelle restée avec son crochet (Sant Martí 45 min, 03/11/2026)."""
     pool, seen = list(pool), set()
@@ -1638,6 +1638,9 @@ def _trim_pool(pool, prior, level, duration_h, bounds):
         for l in todo:
             seen.add(id(l))
             t = trim_retrace(l, level, duration_h, bounds)
+            if log is not None:
+                log(f"    sans demi-tour : {l.distance_m / 1000:.1f} km, note {l.score:.1f} -> "
+                    + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:
                 seen.add(id(t))
                 pool = [t if x is l else x for x in pool]
@@ -6479,7 +6482,7 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     if dead_end() and pool:                                  # avant les variantes, qui héritent des demi-tours (DEAD_END)
-        pool = _trim_pool(pool, prior, level, duration_h, bounds)
+        pool = _trim_pool(pool, prior, level, duration_h, bounds, log)
     if pleasant_ar() and pool:                               # aller-retour par la moitié agréable (PLEASANT_AR)
         extra = [t for _, l in pick_options(pool, prior) for t in pleasant_ar_candidates(gh, l, level, duration_h, bounds)]
         if repeat_fix():                                     # sans ses tronçons repassés hors de la partie agréable
@@ -6494,7 +6497,7 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             if t is not None:
                 pool = [t if x is l else x for x in pool]
     if dead_end() and pool:                                  # demi-tours sur place, cul-de-sac de rivière (DEAD_END)
-        pool = _trim_pool(pool, prior, level, duration_h, bounds)
+        pool = _trim_pool(pool, prior, level, duration_h, bounds, log)
         for _, l in pick_options(pool, prior):
             t = shore_loop(gh, l, level, duration_h, bounds)
             if t is not None:
@@ -6503,7 +6506,10 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
             if getattr(l, "dead_end", False):
                 l.score -= DEAD_END_PEN
                 l.dead_end = False
+                log(f"    cul-de-sac : {l.distance_m / 1000:.1f} km, note -> {l.score:.1f}")
     picks = pick_options(pool, prior)
+    if dead_end():
+        log("    choix : " + ", ".join(f"{lab} {l.distance_m / 1000:.1f} km {l.score:.1f}" for lab, l in picks))
     if lights_late() and picks:                              # feux en fin de boucle (LIGHTS_LATE)
         picks = lights_late_swap(gh, level, duration_h, picks, log)
     full = pick_options(pool)
