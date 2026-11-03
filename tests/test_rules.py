@@ -894,3 +894,19 @@ def test_trim_pool_revoit(monkeypatch):
     pool = g._trim_pool([a, b], [], "modere", 0.75, None)
     assert seen == ["a", "b", "a1", "a2"]                    # a coupée : b passe devant ; b coupée : a1 revue, coupée en a2
     assert {l.name for l in pool} == {"a2", "b1"}
+
+
+def test_ridden_place(monkeypatch):
+    """Lieu remarquable au bout d'un aller-retour (Florent, 03/11/2026) : gardé si on y va à vélo jusqu'au bout (château),
+    coupé si la fin se fait à pied (allée de jardin, Sants-Montjuïc 3 h, Palauet Albéniz)."""
+    monkeypatch.setattr(g, "place_tip", lambda p: True)
+    c = _trace([(0, 0), (3000, 0), (3000, 200), (3000, 0), (6000, 0), (6000, 6000), (0, 6000), (0, 0)])
+    import bisect
+    cum, n = g._cum(c), len(c) - 1
+    a, tip, b = (bisect.bisect_left(cum, m) for m in (3000, 3200, 3400))   # pied de la rampe, bout, retour au pied
+    route = {"road_class": [[0, n, "residential"]], "bike_road_access": [[0, n, "missing"]]}
+    jardin = {"road_class": [[0, n, "residential"], [tip - 6, tip + 6, "footway"]], "bike_road_access": [[0, n, "missing"]]}
+    assert g.ridden_place(c, route, a, b, cum, c[tip])
+    assert not g.ridden_place(c, jardin, a, b, cum, c[tip])
+    assert g.spike_windows(c, det=route) == []               # château à vélo : le crochet est gardé
+    assert len(g.spike_windows(c, det=jardin)) == 1          # allée à pied : il peut être coupé

@@ -1566,9 +1566,25 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
-def spike_windows(coords, max_m=None) -> list:
-    """Pointes (DEAD_END) : la trace repasse au même point après un aller et retour de moins de max_m, sans lieu ni mer
-    au bout (Sant Martí 2 h, pont de Cristòfol de Moura, 194 m : block_detours ne les voit pas). Indices [(a, b)]."""
+def foot_m(det, n, a, b, cum) -> float:
+    """Mètres faits à pied entre les points a et b : chemin piéton, zone piétonne ou escaliers sans accès vélo déclaré."""
+    rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
+    return sum(cum[i + 1] - cum[i] for i in range(max(0, a), min(b, n))
+               if (rc[i] in ("footway", "pedestrian", "steps") and ba[i] not in ("yes", "designated"))
+               or (rc[i] == "path" and ba[i] in ("no", "dismount")))
+
+
+def ridden_place(coords, det, i, j, cum, tip) -> bool:
+    """Un lieu remarquable au bout de l'aller-retour, atteint à vélo jusqu'au bout (Florent, 03/11/2026 : un château où l'on
+    monte à vélo justifie le crochet ; une allée de jardin à pied non, Sants-Montjuïc 3 h, Palauet Albéniz)."""
+    if not place_tip(tip):
+        return False
+    return det is None or foot_m(det, len(coords) - 1, i, j, cum) <= FOOT_TIP_M
+
+
+def spike_windows(coords, max_m=None, det=None) -> list:
+    """Pointes (DEAD_END) : la trace repasse au même point après un aller et retour de moins de max_m, sans lieu atteint à
+    vélo ni mer au bout (Sant Martí 2 h, pont de Cristòfol de Moura, 194 m : block_detours ne les voit pas). Indices [(a, b)]."""
     max_m = RETRACE_MAX_M if max_m is None else max_m
     cum, out, i = _cum(coords), [], 0
     while i < len(coords) - 2:
@@ -1579,7 +1595,8 @@ def spike_windows(coords, max_m=None) -> list:
                 continue
             d = [haversine(coords[i][0], coords[i][1], coords[t][0], coords[t][1]) for t in range(i, j + 1)]
             tip = coords[i + d.index(max(d))]
-            if max(d) >= RETRACE_TIP_SHARE * m and not place_tip(tip) and not near_sea(tip, RETRACE_SEA_DEG):
+            if (max(d) >= RETRACE_TIP_SHARE * m and not ridden_place(coords, det, i, j, cum, tip)
+                    and not near_sea(tip, RETRACE_SEA_DEG)):
                 cut = j
                 break
         if cut is not None:
@@ -1600,7 +1617,7 @@ def _once_m(coords, cum, i, j) -> float:
     return s
 
 
-def lasso_windows(coords) -> list:
+def lasso_windows(coords, det=None) -> list:
     """Boucles en bout d'aller-retour (DEAD_END) : la trace repasse au même point après un petit tour de moins de LASSO_MAX_M,
     que spike_windows ne voit pas, faute de pointe nette (Sant Martí 45 min, pont del Molinet : on monte au pont, on redescend
     par le chemin voisin et on y remonte avant de refaire l'aller en sens inverse, 03/11/2026). Indices [(a, b)]."""
@@ -1613,7 +1630,8 @@ def lasso_windows(coords) -> list:
             if haversine(coords[i][0], coords[i][1], coords[j][0], coords[j][1]) < RETRACE_SAME_M:
                 tip = max(coords[i:j + 1], key=lambda p: haversine(coords[i][0], coords[i][1], p[0], p[1]))
                 once = _once_m(coords, cum, i, j)            # le tour lui-même, sans la tige faite deux fois ; sans tour,
-                if once >= LASSO_MIN_M and cum[j] - cum[i] - once <= LASSO_STEM_M and not near_sea(tip, RETRACE_SEA_DEG):
+                if (once >= LASSO_MIN_M and cum[j] - cum[i] - once <= LASSO_STEM_M and not near_sea(tip, RETRACE_SEA_DEG)
+                        and not ridden_place(coords, det, i, j, cum, tip)):    # tour d'un lieu atteint à vélo : gardé
                     cut = j                                  # c'est le bout d'un aller-retour (113 boucles sur 516)
                 break
         if cut is not None:
@@ -1627,8 +1645,8 @@ def trim_retrace(l, level, duration_h, bounds):
     """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
     les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
     wins = sorted(getattr(l, "retrace_windows", None) or [])
-    wins += [w for w in spike_windows(l.coords) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
-    wins += [w for w in lasso_windows(l.coords) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
+    wins += [w for w in spike_windows(l.coords, det=l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
+    wins += [w for w in lasso_windows(l.coords, l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     if not wins:
         return None
     path, best = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}, l
@@ -1636,7 +1654,7 @@ def trim_retrace(l, level, duration_h, bounds):
         r = _retrace_cut(path, a, b, l, level, duration_h, bounds)
         if r is not None and not r[2] and r[1] is not None:  # refusée : la coupe découvre souvent l'éperon qui menait au
             c2 = r[0]["points"]["coordinates"]               # crochet (Sant Martí 45 min : 130 m coupés, la rampe du pont
-            for a2, b2 in spike_windows(c2, 2 * RETRACE_MAX_M):   # del Molinet, 268 m, devenait un éperon, de 71 à 57)
+            for a2, b2 in spike_windows(c2, 2 * RETRACE_MAX_M, r[0]["details"]):   # del Molinet, 268 m, devenait un éperon, de 71 à 57)
                 if a2 <= r[3] <= b2:
                     r2 = _retrace_cut(r[0], a2, b2, l, level, duration_h, bounds)
                     if r2 is not None and r2[2]:
@@ -1689,7 +1707,8 @@ def _trim_pool(pool, prior, level, duration_h, bounds, log=None):
             seen.append(l)
             t = trim_retrace(l, level, duration_h, bounds)
             if log is not None:
-                w_ = len(getattr(l, "retrace_windows", None) or []) + len(spike_windows(l.coords))
+                w_ = (len(getattr(l, "retrace_windows", None) or []) + len(spike_windows(l.coords, det=l.gh_details))
+                      + len(lasso_windows(l.coords, l.gh_details)))
                 log(f"    sans demi-tour : graine {l.seed}, {w_} fenêtre(s), {l.distance_m / 1000:.1f} km, note {l.score:.1f} -> "
                     + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:                                # revue au tour suivant : une coupe peut en découvrir une autre
@@ -2609,6 +2628,7 @@ RETRACE_TOL = 3.0                # points qu'une coupe de crochet peut coûter (
 LASSO_MIN_M = 200.0              # petit tour en bout d'aller-retour (lasso_windows) : longueur du tour, de ... à ...
 LASSO_MAX_M = 1200.0             # (Sant Martí 45 min, pont del Molinet : environ 800 m)
 LASSO_STEM_M = 200.0             # tige faite à l'aller et au retour, au plus (aller et retour comptés)
+FOOT_TIP_M = 30.0                # à pied au plus pour qu'un lieu remarquable justifie un crochet (Florent, 03/11/2026)
 TRIM_ROUNDS = 4                 # tours de coupe au plus : chaque tour ne revoit que les boucles choisies pas encore vues
 RETRACE_TIP_SHARE = 0.42
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
