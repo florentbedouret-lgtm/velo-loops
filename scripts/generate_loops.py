@@ -5990,18 +5990,18 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                    for i in range(a, min(b, len(foot))) if foot[i])
         if walk > FOOT_BACKTRACK_MAX_M:
             return None
-    if det is not None and dead_end() and foot_m(det, len(coords) - 1, a, b, _cum(coords), plaza=False) > FOOT_AR_M:
-        cum_ = _cum(coords)                                  # DEAD_END (D91) : allée de jardin à pied, même vers un lieu ;
-        tt = t if t is not None else max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1],
-                                                                                 coords[i][0], coords[i][1]))
-        i0 = next(i for i in range(a, b + 1) if cum_[i] >= cum_[tt] - RETRACE_MAX_M / 2)
-        i1 = next((i for i in range(b, a - 1, -1) if cum_[i] <= cum_[tt] + RETRACE_MAX_M / 2), b)
-        n_ = len(coords) - 1                                 # au bord de la mer, la pointe faite à pied sera coupée
-        if not (near_sea(coords[tt], RETRACE_SEA_DEG)        # (spike_windows) : seul compte ce qui reste à pied
-                and foot_m(det, n_, a, i0, cum_, plaza=False) + foot_m(det, n_, i1, b, cum_, plaza=False) <= FOOT_AR_M):
-            return None
-                                                             # (Sants-Montjuïc 3 h, Palauet Albéniz) ; une zone piétonne,
-    cap = backtrack_max_share()                              # où l'on roule au pas, ne compte pas (Passeig del Mare Nostrum)
+    tip_walk = False                                         # DEAD_END (D91) : allée de jardin à pied, même vers un lieu
+    if det is not None and dead_end():                       # (Sants-Montjuïc 3 h, Palauet Albéniz) ; une zone piétonne,
+        cum_, n_ = _cum(coords), len(coords) - 1             # où l'on roule au pas, ne compte pas (Passeig del Mare Nostrum)
+        walk = foot_m(det, n_, a, b, cum_, plaza=False)
+        if walk > FOOT_AR_M:                                 # la pointe faite à pied sera coupée (spike_windows) : seul
+            for sa, sb in spike_windows(coords, det=det):    # compte ce qui reste (Sants-Montjuïc 1 h Modéré : 450 m
+                if max(a, sa) < min(b, sb):                  # « pied à terre » avant l'hôtel W, au bout de la piste)
+                    walk -= foot_m(det, n_, max(a, sa), min(b, sb), cum_, plaza=False)
+            if walk > FOOT_AR_M:
+                return None
+            tip_walk = True                                  # le lieu ou le sommet était au bout à pied : plus un but
+    cap = backtrack_max_share()
     if cap is not None:                                      # trop long : la boucle devient un aller-retour
         part = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
         whole = part + sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
@@ -6012,7 +6012,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     if (POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
             or dest_heritage() and len(POIS["patrimoine"][0].query(
                 shapely.points(np.array([[coords[t if t is not None else b][0], coords[t if t is not None else b][1]]])),
-                predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])):
+                predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])) and not tip_walk:
         return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
     if unp is not None:                                      # jamais sur la terre ou le gravier pour revenir sur ses pas
         dirt = sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
@@ -6031,7 +6031,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         if seen_view:
             return "belvédère"
     if (level in BACKTRACK_RELIEF_LEVELS and len(seg[0]) > 2
-            and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(coords[t])):
+            and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(coords[t]) and not tip_walk):
         return "relief"                                      # monte, et fait demi-tour à un sommet, un col ou au bord de l'eau
     long_ = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
     if long_ < BACKTRACK_PLEASANT_MIN_M:                     # trop court pour « prolonger une route agréable »
