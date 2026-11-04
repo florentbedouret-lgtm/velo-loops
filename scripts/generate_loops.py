@@ -5990,17 +5990,15 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                    for i in range(a, min(b, len(foot))) if foot[i])
         if walk > FOOT_BACKTRACK_MAX_M:
             return None
-    tip_walk = False                                         # DEAD_END (D91) : allée de jardin à pied, même vers un lieu
-    if det is not None and dead_end():                       # (Sants-Montjuïc 3 h, Palauet Albéniz) ; une zone piétonne,
-        cum_, n_ = _cum(coords), len(coords) - 1             # où l'on roule au pas, ne compte pas (Passeig del Mare Nostrum)
+    if det is not None and dead_end():                       # DEAD_END (D91) : allée de jardin à pied, même vers un lieu
+        cum_, n_ = _cum(coords), len(coords) - 1             # (Palauet Albéniz) ; une zone piétonne, où l'on roule au pas,
         walk = foot_m(det, n_, a, b, cum_, plaza=False)
-        if walk > FOOT_AR_M:                                 # la pointe faite à pied sera coupée (spike_windows) : seul
-            for sa, sb in spike_windows(coords, det=det):    # compte ce qui reste (Sants-Montjuïc 1 h Modéré : 450 m
-                if max(a, sa) < min(b, sb):                  # « pied à terre » avant l'hôtel W, au bout de la piste)
-                    walk -= foot_m(det, n_, max(a, sa), min(b, sb), cum_, plaza=False)
-            if walk > FOOT_AR_M:
+        if walk > FOOT_AR_M:                                 # ne compte pas. La pointe faite à pied sera coupée
+            for sa, sb in spike_windows(coords, det=det):    # (spike_windows) : seul compte ce qui reste, on va à vélo
+                if max(a, sa) < min(b, sb):                  # jusqu'à l'entrée (hôtel W, 450 m « pied à terre » ; place
+                    walk -= foot_m(det, n_, max(a, sa), min(b, sb), cum_, plaza=False)   # du monastère de Montserrat ;
+            if walk > FOOT_AR_M:                             # jardins du Palauet Albéniz)
                 return None
-            tip_walk = True                                  # le lieu ou le sommet était au bout à pied : plus un but
     cap = backtrack_max_share()
     if cap is not None:                                      # trop long : la boucle devient un aller-retour
         part = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
@@ -6012,7 +6010,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     if (POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
             or dest_heritage() and len(POIS["patrimoine"][0].query(
                 shapely.points(np.array([[coords[t if t is not None else b][0], coords[t if t is not None else b][1]]])),
-                predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])) and not tip_walk:
+                predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])):
         return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
     if unp is not None:                                      # jamais sur la terre ou le gravier pour revenir sur ses pas
         dirt = sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
@@ -6031,7 +6029,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         if seen_view:
             return "belvédère"
     if (level in BACKTRACK_RELIEF_LEVELS and len(seg[0]) > 2
-            and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(coords[t]) and not tip_walk):
+            and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(coords[t])):
         return "relief"                                      # monte, et fait demi-tour à un sommet, un col ou au bord de l'eau
     long_ = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
     if long_ < BACKTRACK_PLEASANT_MIN_M:                     # trop court pour « prolonger une route agréable »
