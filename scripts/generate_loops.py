@@ -1598,7 +1598,9 @@ def spike_windows(coords, max_m=None, det=None) -> list:
             d = [haversine(coords[i][0], coords[i][1], coords[t][0], coords[t][1]) for t in range(i, j + 1)]
             tip = coords[i + d.index(max(d))]
             if (max(d) >= RETRACE_TIP_SHARE * m and not ridden_place(coords, det, i, j, cum, tip)
-                    and not near_sea(tip, RETRACE_SEA_DEG)):
+                    and not (near_sea(tip, RETRACE_SEA_DEG)          # la mer au bout, sauf à pied (Sants-Montjuïc 1 h :
+                             and (det is None or foot_m(det, len(coords) - 1, i, j, cum, plaza=False) <= FOOT_TIP_M))):
+                # 450 m « pied à terre » avant l'hôtel W)
                 cut = j
                 break
         if cut is not None:
@@ -5987,7 +5989,15 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         if walk > FOOT_BACKTRACK_MAX_M:
             return None
     if det is not None and dead_end() and foot_m(det, len(coords) - 1, a, b, _cum(coords), plaza=False) > FOOT_TIP_M:
-        return None                                          # DEAD_END (D91) : allée de jardin à pied, même vers un lieu
+        cum_ = _cum(coords)                                  # DEAD_END (D91) : allée de jardin à pied, même vers un lieu ;
+        tt = t if t is not None else max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1],
+                                                                                 coords[i][0], coords[i][1]))
+        i0 = next(i for i in range(a, b + 1) if cum_[i] >= cum_[tt] - RETRACE_MAX_M / 2)
+        i1 = next((i for i in range(b, a - 1, -1) if cum_[i] <= cum_[tt] + RETRACE_MAX_M / 2), b)
+        n_ = len(coords) - 1                                 # au bord de la mer, la pointe faite à pied sera coupée
+        if not (near_sea(coords[tt], RETRACE_SEA_DEG)        # (spike_windows) : seul compte ce qui reste à pied
+                and foot_m(det, n_, a, i0, cum_, plaza=False) + foot_m(det, n_, i1, b, cum_, plaza=False) <= FOOT_TIP_M):
+            return None
                                                              # (Sants-Montjuïc 3 h, Palauet Albéniz) ; une zone piétonne,
     cap = backtrack_max_share()                              # où l'on roule au pas, ne compte pas (Passeig del Mare Nostrum)
     if cap is not None:                                      # trop long : la boucle devient un aller-retour
