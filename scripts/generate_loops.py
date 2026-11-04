@@ -1566,11 +1566,13 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
     return _trim_run(gh, l, t, level, duration_h, bounds) if pleasant_order() and t.detours else t
 
 
-def foot_m(det, n, a, b, cum) -> float:
-    """Mètres faits à pied entre les points a et b : chemin piéton, zone piétonne ou escaliers sans accès vélo déclaré."""
+def foot_m(det, n, a, b, cum, plaza: bool = True) -> float:
+    """Mètres faits à pied entre les points a et b : chemin piéton, zone piétonne ou escaliers sans accès vélo déclaré.
+    plaza=False : une zone piétonne, où l'on roule au pas, ne compte pas (seules les allées et les marches)."""
     rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
+    walk = ("footway", "pedestrian", "steps") if plaza else ("footway", "steps")
     return sum(cum[i + 1] - cum[i] for i in range(max(0, a), min(b, n))
-               if (rc[i] in ("footway", "pedestrian", "steps") and ba[i] not in ("yes", "designated"))
+               if (rc[i] in walk and ba[i] not in ("yes", "designated"))
                or (rc[i] == "path" and ba[i] in ("no", "dismount")))
 
 
@@ -5984,9 +5986,10 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                    for i in range(a, min(b, len(foot))) if foot[i])
         if walk > FOOT_BACKTRACK_MAX_M:
             return None
-    if det is not None and dead_end() and foot_m(det, len(coords) - 1, a, b, _cum(coords)) > FOOT_TIP_M:
+    if det is not None and dead_end() and foot_m(det, len(coords) - 1, a, b, _cum(coords), plaza=False) > FOOT_TIP_M:
         return None                                          # DEAD_END (D91) : allée de jardin à pied, même vers un lieu
-    cap = backtrack_max_share()                              # (Sants-Montjuïc 3 h, jardin du Palauet Albéniz : 2,9 km)
+                                                             # (Sants-Montjuïc 3 h, Palauet Albéniz) ; une zone piétonne,
+    cap = backtrack_max_share()                              # où l'on roule au pas, ne compte pas (Passeig del Mare Nostrum)
     if cap is not None:                                      # trop long : la boucle devient un aller-retour
         part = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
         whole = part + sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
