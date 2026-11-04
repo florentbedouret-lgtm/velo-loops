@@ -4658,7 +4658,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     rc_rep = road_edges(det, len(cum) - 1)            # partie répétée sur piste cyclable (aller-retour, OUTBACK_OK)
     unp_e = unpaved_edges(det, len(cum) - 1) if backtrack_rules() else None
     foot_e = foot_edges(det, len(cum) - 1) if foot_backtrack() else None
-    useful = useful_windows(coords, level, rc_rep, unp_e, foot_e, det) if backtrack_rules() else []
+    useful = useful_windows(coords, level, rc_rep, unp_e, foot_e) if backtrack_rules() else []
     dup_windows = []
     if turn_rules() and len(useful) > 1:                 # même destination deux fois : seul le 1er aller-retour compte
         keep = []                                        # (Florent, 17/10/2026 : l'Eixample 4 h Sportif monte deux fois
@@ -4801,7 +4801,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.cells = {(round(c[0] / 0.006), round(c[1] / 0.005)) for c in coords}   # cellules ~500 m
     loop.remarkable = remarkable_passed(coords, cum)
     loop.views_passed = views_passed(coords, cum)
-    loop.spurs = unjustified_spurs(coords, level, rc_rep, unp_e, foot_e, det) if SPUR_FIX else []
+    loop.spurs = unjustified_spurs(coords, level, rc_rep, unp_e, foot_e) if SPUR_FIX else []
     for a_, b_, t_, _ in dup_windows:                    # aller-retour vers une destination déjà vue : crochet inutile
         loop.spurs = [s_ for s_ in loop.spurs if s_["b"] < a_ or s_["a"] > b_]
         loop.spurs.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_, "b": b_,
@@ -4816,7 +4816,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         for a_, b_, t_ in corridor_spurs(coords, cum):
             if any(not (b_ < x or a_ > y) for x, y in taken):
                 continue                                     # déjà vu comme aller-retour ordinaire
-            if backtrack_useful(coords, a_, b_, level, rc_rep, unp_e, t_, foot_e, det) is None:
+            if backtrack_useful(coords, a_, b_, level, rc_rep, unp_e, t_, foot_e) is None:
                 # 2e version : comme une boucle accrochée (3 points, la boucle sans lui essayée), pas comme un éperon
                 corridor_windows.append({"km": round(cum[a_] / 1000.0, 1), "m": round(cum[b_] - cum[a_]), "a": a_,
                                          "b": b_, "lon": round(coords[t_][0], 5), "lat": round(coords[t_][1], 5),
@@ -4851,7 +4851,7 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
         loop.detours = [d for d in loop.detours if not smooth_window(coords, d["a"], d["b"])]
     if loop.detours and backtrack_rules():           # détour utile (lieu, eau, piste…) : gardé
         loop.detours = [d for d in loop.detours
-                        if (backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e, det) or "")
+                        if (backtrack_useful(coords, d["a"], d["b"], level, rc_rep, unp_e, None, foot_e) or "")
                         not in (("lieu", "belvédère", "relief") if detour_dest() else
                                 ("lieu", "belvédère", "relief", "nature", "piste", "montée"))]
     if loop.detours and forced_detours() and FORCED_SPOTS:   # lacet ou passage obligé déjà reconnu (FORCED_DETOURS)
@@ -5966,7 +5966,7 @@ def natural_tip(p) -> bool:
     return False
 
 
-def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=None, foot=None, det=None):
+def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=None, foot=None):
     """Pourquoi le passage coords[a..b], où la boucle revient sur ses pas, est utile (voir BACKTRACK_RULES) : "lieu",
     "belvédère", "relief", "nature" ou "piste" ; None s'il n'apporte rien. cyc : lettre de chaque tronçon (road_edges) ;
     unp : lettre de chaque tronçon (unpaved_edges) ; t : indice du demi-tour (sinon le point le plus éloigné de l'entrée)."""
@@ -5988,16 +5988,11 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         if part > cap * whole:
             return None
     pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]]))
-    tip = coords[t if t is not None else b]
-    heritage = dest_heritage() and POIS and "patrimoine" in POIS and len(POIS["patrimoine"][0].query(
-        shapely.points(np.array([[tip[0], tip[1]]])), predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
     if (POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
-            or heritage):
-        if not (dead_end() and det is not None):
-            return "lieu"                                    # un lieu remarquable vaut le détour, même sur la fin en terre
-        if ((place_tip(tip) or heritage)                     # DEAD_END (D91) : le lieu au bout, atteint à vélo ; passer
-                and foot_m(det, len(coords) - 1, a, b, _cum(coords)) <= FOOT_TIP_M):   # près d'un lieu en chemin ne suffit
-            return "lieu"                                    # pas (Sants-Montjuïc 3 h : 2,9 km jusqu'au jardin du Palauet)
+            or dest_heritage() and len(POIS["patrimoine"][0].query(
+                shapely.points(np.array([[coords[t if t is not None else b][0], coords[t if t is not None else b][1]]])),
+                predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])):
+        return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
     if unp is not None:                                      # jamais sur la terre ou le gravier pour revenir sur ses pas
         dirt = sum(haversine(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1])
                    for i in range(a, min(b, len(unp))) if unp[i] in ("u", "p"))
@@ -6044,17 +6039,17 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     return None
 
 
-def useful_windows(coords, level: str, cyc=None, unp=None, foot=None, det=None) -> list:
+def useful_windows(coords, level: str, cyc=None, unp=None, foot=None) -> list:
     """Allers-retours utiles de la boucle (voir BACKTRACK_RULES) : [(a, b, t, raison)] (entrée, sortie, demi-tour)."""
     out = []
     for s in spur_list(coords):
-        why = backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot, det)
+        why = backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot)
         if why:
             out.append((s["a"], s["b"], s["t"], why))
     return out
 
 
-def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None, foot=None, det=None) -> list:
+def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None, foot=None) -> list:
     """Éperons d'au moins SPUR_MIN_M, hors départ et arrivée, qui n'apportent rien (voir SPUR_FIX ; avec
     BACKTRACK_RULES, jugés par backtrack_useful)."""
     import numpy as np
@@ -6065,7 +6060,7 @@ def unjustified_spurs(coords, level: str | None = None, cyc=None, unp=None, foot
         if s["m"] < SPUR_MIN_M or s["start_m"] < SPUR_END_M or s["end_m"] < SPUR_END_M:
             continue
         if rules:
-            if backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot, det) is None:
+            if backtrack_useful(coords, s["a"], s["b"], level, cyc, unp, s["t"], foot) is None:
                 a, b, m = s["a"], s["b"], s["m"]
                 if foot is not None and foot_backtrack():   # seule la fin à pied est retirée si le reste est utile
                     walk = [i for i in range(a, min(b, len(foot))) if foot[i]]
