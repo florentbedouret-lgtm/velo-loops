@@ -2607,6 +2607,8 @@ PLEASANT_ORDER_TOL = 8.0
 DEAD_END = False
 DEAD_END_MIN_M = 1000.0
 DEAD_END_LOOP_SHARE = 0.2
+DEAD_END_OUTBACK = 0.4            # boucle faite à 40 % deux fois : c'est un aller-retour, son bout n'est pas un
+                                 # cul-de-sac (Horta 1 h Modéré, 04/11/2026 : retour agréable identique > différent)
 DEAD_END_PEN = 10.0               # points retirés au dernier choix : avant, ils écartaient de bonnes boucles à reprendre
 DEAD_END_SEA_DEG = 0.012          # ~1 km de la mer : un demi-tour près de la côte reste une destination
 SHORE_VIA = [(2.18952, 41.37436), (2.1930, 41.3790), (2.1962, 41.3845)]  # la plage de la Barceloneta, du sud au nord
@@ -4835,6 +4837,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                          and DEAD_END_MIN_M <= cum[min(b_, len(cum) - 1)] - cum[a_] < DEAD_END_LOOP_SHARE * total
                          and along_water(coords, a_, b_) and not place_tip(coords[t_]) and not near_sea(coords[t_])
                          and not along_sea(coords, a_, b_)]
+    if loop.overlap >= DEAD_END_OUTBACK:                # la boucle est elle-même un aller-retour (ordre des retours, D85)
+        loop.dead_windows = []
     loop.dead_end = bool(loop.dead_windows)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
     loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ in ("nature", "montée")
