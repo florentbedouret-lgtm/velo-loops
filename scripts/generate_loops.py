@@ -1599,7 +1599,7 @@ def spike_windows(coords, max_m=None, det=None) -> list:
             tip = coords[i + d.index(max(d))]
             if (max(d) >= RETRACE_TIP_SHARE * m and not ridden_place(coords, det, i, j, cum, tip)
                     and not (near_sea(tip, RETRACE_SEA_DEG)          # la mer au bout, sauf à pied (Sants-Montjuïc 1 h :
-                             and (det is None or foot_m(det, len(coords) - 1, i, j, cum, plaza=False) <= FOOT_TIP_M))):
+                             and (det is None or foot_m(det, len(coords) - 1, i, j, cum, plaza=False) <= FOOT_AR_M))):
                 # 450 m « pied à terre » avant l'hôtel W)
                 cut = j
                 break
@@ -2635,6 +2635,8 @@ LASSO_MIN_M = 200.0              # petit tour en bout d'aller-retour (lasso_wind
 LASSO_MAX_M = 1200.0             # (Sant Martí 45 min, pont del Molinet : environ 800 m)
 LASSO_STEM_M = 200.0             # tige faite à l'aller et au retour, au plus (aller et retour comptés)
 FOOT_TIP_M = 30.0                # à pied au plus pour qu'un lieu remarquable justifie un crochet (Florent, 03/11/2026)
+FOOT_AR_M = 100.0                # à pied au plus sur un aller-retour, aller et retour comptés (Palauet Albéniz : 210 m ;
+                                 # Horta 1 h Modéré : 45 m de raccord vers la Carretera del Cementiri, gardé)
 TRIM_ROUNDS = 4                 # tours de coupe au plus : chaque tour ne revoit que les boucles choisies pas encore vues
 RETRACE_TIP_SHARE = 0.42
 PLEASANT_RUN_GAP_M = 1500.0      # 2e version : coupure tolérée dans le bord de l'eau (l'Avinguda d'Eduard Maristany)
@@ -5988,7 +5990,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                    for i in range(a, min(b, len(foot))) if foot[i])
         if walk > FOOT_BACKTRACK_MAX_M:
             return None
-    if det is not None and dead_end() and foot_m(det, len(coords) - 1, a, b, _cum(coords), plaza=False) > FOOT_TIP_M:
+    if det is not None and dead_end() and foot_m(det, len(coords) - 1, a, b, _cum(coords), plaza=False) > FOOT_AR_M:
         cum_ = _cum(coords)                                  # DEAD_END (D91) : allée de jardin à pied, même vers un lieu ;
         tt = t if t is not None else max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1],
                                                                                  coords[i][0], coords[i][1]))
@@ -5996,7 +5998,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         i1 = next((i for i in range(b, a - 1, -1) if cum_[i] <= cum_[tt] + RETRACE_MAX_M / 2), b)
         n_ = len(coords) - 1                                 # au bord de la mer, la pointe faite à pied sera coupée
         if not (near_sea(coords[tt], RETRACE_SEA_DEG)        # (spike_windows) : seul compte ce qui reste à pied
-                and foot_m(det, n_, a, i0, cum_, plaza=False) + foot_m(det, n_, i1, b, cum_, plaza=False) <= FOOT_TIP_M):
+                and foot_m(det, n_, a, i0, cum_, plaza=False) + foot_m(det, n_, i1, b, cum_, plaza=False) <= FOOT_AR_M):
             return None
                                                              # (Sants-Montjuïc 3 h, Palauet Albéniz) ; une zone piétonne,
     cap = backtrack_max_share()                              # où l'on roule au pas, ne compte pas (Passeig del Mare Nostrum)
