@@ -1569,11 +1569,46 @@ def _pleasant_run_one(gh, l, level, duration_h, bounds, mask, c, cum, k0, k1):
 def foot_m(det, n, a, b, cum, plaza: bool = True) -> float:
     """Mètres faits à pied entre les points a et b : chemin piéton, zone piétonne ou escaliers sans accès vélo déclaré.
     plaza=False : une zone piétonne, où l'on roule au pas, ne compte pas (seules les allées et les marches)."""
+    w = _walk_edges(det, n, plaza)
+    return sum(cum[i + 1] - cum[i] for i in range(max(0, a), min(b, n)) if w[i])
+
+
+def _walk_edges(det, n, plaza: bool = True) -> list:
+    """Par tronçon : True s'il se fait à pied (voir foot_m)."""
     rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
     walk = ("footway", "pedestrian", "steps") if plaza else ("footway", "steps")
-    return sum(cum[i + 1] - cum[i] for i in range(max(0, a), min(b, n))
-               if (rc[i] in walk and ba[i] not in ("yes", "designated"))
-               or (rc[i] == "path" and ba[i] in ("no", "dismount")))
+    return [(rc[i] in walk and ba[i] not in ("yes", "designated")) or (rc[i] == "path" and ba[i] in ("no", "dismount"))
+            for i in range(n)]
+
+
+def walk_tip(coords, det, a: int, b: int, t: int):
+    """Pointe faite à pied de l'aller-retour [a, b] : (i, j), la marche d'un seul tenant autour du demi-tour t (coupures
+    de FOOT_TIP_M au plus), où l'on pose le vélo pour finir à pied ; None si l'on roule jusqu'au demi-tour. Plus longue
+    qu'une pointe de spike_windows (Sants-Montjuïc 1 h : 450 m « pied à terre » avant l'hôtel W, aller et retour)."""
+    n, cum = len(coords) - 1, _cum(coords)
+    w, i, j = _walk_edges(det, n, plaza=False), t, t
+    for step, lim in ((-1, a), (1, b)):
+        k, gap = t - 1 if step < 0 else t, 0.0
+        while (k >= lim if step < 0 else k < lim) and 0 <= k < n:
+            if w[k]:
+                gap = 0.0
+                if step < 0:
+                    i = k
+                else:
+                    j = k + 1
+            else:
+                gap += cum[k + 1] - cum[k]
+                if gap > FOOT_TIP_M:
+                    break
+            k += step
+    return (i, j) if foot_m(det, n, i, j, cum, plaza=False) > FOOT_TIP_M else None
+
+
+def walk_tips(coords, det) -> list:
+    """Pointes faites à pied des allers-retours de la boucle (walk_tip), à couper (DEAD_END) : [(i, j)]."""
+    if det is None:
+        return []
+    return [w for s in spur_list(coords) for w in [walk_tip(coords, det, s["a"], s["b"], s["t"])] if w]
 
 
 def ridden_place(coords, det, i, j, cum, tip) -> bool:
@@ -1649,6 +1684,7 @@ def trim_retrace(l, level, duration_h, bounds):
     """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
     les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
     wins = sorted(getattr(l, "retrace_windows", None) or [])
+    wins += [w for w in walk_tips(l.coords, l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     wins += [w for w in spike_windows(l.coords, det=l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     wins += [w for w in lasso_windows(l.coords, l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     if not wins:
@@ -1712,7 +1748,7 @@ def _trim_pool(pool, prior, level, duration_h, bounds, log=None):
             t = trim_retrace(l, level, duration_h, bounds)
             if log is not None:
                 w_ = (len(getattr(l, "retrace_windows", None) or []) + len(spike_windows(l.coords, det=l.gh_details))
-                      + len(lasso_windows(l.coords, l.gh_details)))
+                      + len(lasso_windows(l.coords, l.gh_details)) + len(walk_tips(l.coords, l.gh_details)))
                 log(f"    sans demi-tour : graine {l.seed}, {w_} fenêtre(s), {l.distance_m / 1000:.1f} km, note {l.score:.1f} -> "
                     + ("inchangée" if t is None else f"{t.score:.1f}"))
             if t is not None:                                # revue au tour suivant : une coupe peut en découvrir une autre
@@ -5994,10 +6030,12 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
         cum_, n_ = _cum(coords), len(coords) - 1             # (Palauet Albéniz) ; une zone piétonne, où l'on roule au pas,
         walk = foot_m(det, n_, a, b, cum_, plaza=False)
         if walk > FOOT_AR_M:                                 # ne compte pas. La pointe faite à pied sera coupée
-            for sa, sb in spike_windows(coords, det=det):    # (spike_windows) : seul compte ce qui reste, on va à vélo
-                if max(a, sa) < min(b, sb):                  # jusqu'à l'entrée (hôtel W, 450 m « pied à terre » ; place
-                    walk -= foot_m(det, n_, max(a, sa), min(b, sb), cum_, plaza=False)   # du monastère de Montserrat ;
-            if walk > FOOT_AR_M:                             # jardins du Palauet Albéniz)
+            tt = t if t is not None else max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1],
+                                                                                     coords[i][0], coords[i][1]))
+            w_ = walk_tip(coords, det, a, b, tt)             # (walk_tips) : seul compte ce qui reste, on va à vélo
+            if w_:                                           # jusqu'à l'entrée (hôtel W, 450 m « pied à terre » ; place
+                walk -= foot_m(det, n_, w_[0], w_[1], cum_, plaza=False)   # du monastère de Montserrat ; Palauet)
+            if walk > FOOT_AR_M:
                 return None
     cap = backtrack_max_share()
     if cap is not None:                                      # trop long : la boucle devient un aller-retour

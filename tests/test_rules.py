@@ -910,3 +910,19 @@ def test_ridden_place(monkeypatch):
     assert not g.ridden_place(c, jardin, a, b, cum, c[tip])
     assert g.spike_windows(c, det=route) == []               # château à vélo : le crochet est gardé
     assert len(g.spike_windows(c, det=jardin)) == 1          # allée à pied : il peut être coupé
+
+
+def test_walk_tip():
+    """Pointe faite à pied (Sants-Montjuïc 1 h, 450 m « pied à terre » avant l'hôtel W) : repérée d'un seul tenant autour
+    du demi-tour, au-delà des 500 m d'une pointe de spike_windows ; une marche en route n'en est pas une."""
+    c = _trace([(0, 0), (4000, 0), (0, 0)])
+    import bisect
+    cum, n = g._cum(c), len(c) - 1
+    a, t, b = (bisect.bisect_left(cum, m) for m in (2000, 4000, 6000))
+    i0, i1 = bisect.bisect_left(cum, 3550), bisect.bisect_left(cum, 4450)
+    w = {"road_class": [[0, n, "residential"], [i0, i1, "footway"]], "bike_road_access": [[0, n, "missing"]]}
+    tip = g.walk_tip(c, w, a, b, t)
+    assert tip == (i0, i1) and cum[i1] - cum[i0] > g.RETRACE_MAX_M
+    r = bisect.bisect_left(cum, 2500)
+    raccord = {"road_class": [[0, n, "residential"], [r, r + 2, "footway"]], "bike_road_access": [[0, n, "missing"]]}
+    assert g.walk_tip(c, raccord, a, b, t) is None
