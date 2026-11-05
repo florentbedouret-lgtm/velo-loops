@@ -926,3 +926,7 @@ def test_walk_tip():
     r = bisect.bisect_left(cum, 2500)
     raccord = {"road_class": [[0, n, "residential"], [r, r + 2, "footway"]], "bike_road_access": [[0, n, "missing"]]}
     assert g.walk_tip(c, raccord, a, b, t) is None
+    k0, k1 = bisect.bisect_left(cum, 3900), bisect.bisect_left(cum, 4100)   # place piétonne au bout : la marche continue
+    place = {"road_class": [[0, n, "residential"], [i0, i1, "footway"], [k0, k1, "pedestrian"]],
+             "bike_road_access": [[0, n, "missing"]]}
+    assert g.walk_tip(c, place, a, b, t) == (i0, i1)

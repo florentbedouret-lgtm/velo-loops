@@ -1585,8 +1585,8 @@ def walk_tip(coords, det, a: int, b: int, t: int):
     """Pointe faite à pied de l'aller-retour [a, b] : (i, j), la marche d'un seul tenant autour du demi-tour t (coupures
     de FOOT_TIP_M au plus), où l'on pose le vélo pour finir à pied ; None si l'on roule jusqu'au demi-tour. Plus longue
     qu'une pointe de spike_windows (Sants-Montjuïc 1 h : 450 m « pied à terre » avant l'hôtel W, aller et retour)."""
-    n, cum = len(coords) - 1, _cum(coords)
-    w, i, j = _walk_edges(det, n, plaza=False), t, t
+    n, cum = len(coords) - 1, _cum(coords)                   # une zone piétonne ne coupe pas la marche (la place devant
+    w, i, j = _walk_edges(det, n, plaza=True), t, t          # l'hôtel W, au bout), mais ne compte pas dans les mètres
     for step, lim in ((-1, a), (1, b)):
         k, gap = t - 1 if step < 0 else t, 0.0
         while (k >= lim if step < 0 else k < lim) and 0 <= k < n:
@@ -1684,14 +1684,15 @@ def trim_retrace(l, level, duration_h, bounds):
     """La boucle choisie l sans ses demi-tours sur place (DEAD_END) : retirés au dernier choix, pour ne pas écarter en amont
     les bonnes boucles à reprendre (31/10/2026, Ciutat Vella 3 h Facile, de 81 à 70) ; None si aucune version valide."""
     wins = sorted(getattr(l, "retrace_windows", None) or [])
-    wins += [w for w in walk_tips(l.coords, l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
+    foot = [w for w in walk_tips(l.coords, l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
+    wins += foot
     wins += [w for w in spike_windows(l.coords, det=l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     wins += [w for w in lasso_windows(l.coords, l.gh_details) if not any(w[0] <= b and a <= w[1] for a, b in wins)]
     if not wins:
         return None
     path, best = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}, l
     for a, b in sorted(wins, reverse=True):                  # par la fin : les indices d'avant restent bons
-        r = _retrace_cut(path, a, b, l, level, duration_h, bounds)
+        r = _retrace_cut(path, a, b, l, level, duration_h, bounds, force=(a, b) in foot)
         if r is not None and not r[2] and r[1] is not None:  # refusée : la coupe découvre souvent l'éperon qui menait au
             c2 = r[0]["points"]["coordinates"]               # crochet (Sant Martí 45 min : 130 m coupés, la rampe du pont
             for a2, b2 in spike_windows(c2, 2 * RETRACE_MAX_M, r[0]["details"]):   # del Molinet, 268 m, devenait un éperon, de 71 à 57)
@@ -1708,8 +1709,10 @@ def trim_retrace(l, level, duration_h, bounds):
     return best
 
 
-def _retrace_cut(path, a, b, l, level, duration_h, bounds):
-    """Essai de coupe d'un demi-tour dans la fenêtre [a, b] de path : (chemin, boucle, acceptée, indice de la coupe), ou None."""
+def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False):
+    """Essai de coupe d'un demi-tour dans la fenêtre [a, b] de path : (chemin, boucle, acceptée, indice de la coupe), ou None.
+    force : coupée même si la note baisse (pointe faite à pied, walk_tips : le crochet n'est compté utile que sans elle ;
+    Sants-Montjuïc 3 h, jardins du Palauet Albéniz, refusée de 62,9 à 52,3 et gardée à pied)."""
     c, cut = path["points"]["coordinates"], None             # coupé sur place : recalculer l'itinéraire le dégradait
     for i in range(a, b):                                    # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
         j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
@@ -1728,7 +1731,7 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds):
     ok, why_ = _ar_ok(n, duration_h, bounds)                 # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
     if n is not None:
         n.time_s = t_
-    ok = ok and n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - RETRACE_TOL   # une à une ; le demi-tour net qui
+    ok = ok and (force or n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - RETRACE_TOL)   # une à une ; le demi-tour net qui
     # remplace le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
     _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,       # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
              **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
