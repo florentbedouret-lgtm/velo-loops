@@ -1573,6 +1573,22 @@ def foot_m(det, n, a, b, cum, plaza: bool = True) -> float:
     return sum(cum[i + 1] - cum[i] for i in range(max(0, a), min(b, n)) if w[i])
 
 
+def foot_twice_m(det, coords, a, b, cum) -> float:
+    """Mètres faits à pied entre a et b, à l'aller et au retour (repassés à moins de RETRACE_R_M), hors zones piétonnes :
+    une marche faite une seule fois appartient à la boucle, pas à l'aller-retour (Sants-Montjuïc 1 h Modéré, 160 m sur la
+    Plaça de Pau Vila au retour seulement, faisaient refuser le front de mer)."""
+    n, w = len(coords) - 1, _walk_edges(det, len(coords) - 1, plaza=False)
+    s = 0.0
+    for k in range(max(0, a), min(b, n)):
+        if not w[k]:
+            continue
+        mx, my, mc = (coords[k][0] + coords[k + 1][0]) / 2, (coords[k][1] + coords[k + 1][1]) / 2, (cum[k] + cum[k + 1]) / 2
+        if any(abs(cum[t] - mc) > RETRACE_MIN_M and haversine(mx, my, coords[t][0], coords[t][1]) < RETRACE_R_M
+               for t in range(a, b + 1)):
+            s += cum[k + 1] - cum[k]
+    return s
+
+
 def _walk_edges(det, n, plaza: bool = True) -> list:
     """Par tronçon : True s'il se fait à pied (voir foot_m)."""
     rc, ba = per_edge(det.get("road_class"), n), per_edge(det.get("bike_road_access"), n)
@@ -6031,7 +6047,7 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
             return None
     if det is not None and dead_end():                       # DEAD_END (D91) : allée de jardin à pied, même vers un lieu
         cum_, n_ = _cum(coords), len(coords) - 1             # (Palauet Albéniz) ; une zone piétonne, où l'on roule au pas,
-        walk = foot_m(det, n_, a, b, cum_, plaza=False)
+        walk = foot_twice_m(det, coords, a, b, cum_)         # (marche faite à l'aller et au retour seulement)
         if walk > FOOT_AR_M:                                 # ne compte pas. La pointe faite à pied sera coupée
             tt = t if t is not None else max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1],
                                                                                      coords[i][0], coords[i][1]))

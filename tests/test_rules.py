@@ -930,3 +930,18 @@ def test_walk_tip():
     place = {"road_class": [[0, n, "residential"], [i0, i1, "footway"], [k0, k1, "pedestrian"]],
              "bike_road_access": [[0, n, "missing"]]}
     assert g.walk_tip(c, place, a, b, t) == (i0, i1)
+
+
+def test_foot_twice_m():
+    """Marche d'un aller-retour : seulement celle faite à l'aller et au retour (Sants-Montjuïc 1 h, Plaça de Pau Vila)."""
+    import bisect
+    c = _trace([(0, 0), (1000, 0), (0, 0)])
+    cum, n = g._cum(c), len(c) - 1
+    i0, i1 = bisect.bisect_left(cum, 400), bisect.bisect_left(cum, 600)
+    det = {"road_class": [[0, n, "residential"], [i0, i1, "footway"]], "bike_road_access": [[0, n, "missing"]]}
+    assert g.foot_twice_m(det, c, 0, n, cum) == pytest.approx(200, abs=15)
+    c = _trace([(0, 0), (1000, 0), (1000, 300), (0, 300)])
+    cum, n = g._cum(c), len(c) - 1
+    i0, i1 = bisect.bisect_left(cum, 1050), bisect.bisect_left(cum, 1250)
+    det = {"road_class": [[0, n, "residential"], [i0, i1, "footway"]], "bike_road_access": [[0, n, "missing"]]}
+    assert g.foot_twice_m(det, c, 0, n, cum) == 0
