@@ -1750,7 +1750,8 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False):
     ok = ok and (force or n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - RETRACE_TOL)   # une à une ; le demi-tour net qui
     # remplace le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
     _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,       # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
-             **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and not ok else {}))
+             **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and (force or not ok) else {}),
+             **({"a_pied": True} if force else {}))     # pointe à pied, coupée de force : ce qu'elle coûte
     return p_, n, ok, cut[0]
 
 
