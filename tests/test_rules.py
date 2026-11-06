@@ -958,3 +958,18 @@ def test_turn_point(monkeypatch):
     assert g.turn_point(c, 0) is c[0]
     monkeypatch.setattr(g, "DEAD_END", False)
     assert g.turn_point(c, t) is c[t]
+
+
+def test_turn_point_chain(monkeypatch):
+    """Deux coupes à pied de suite : la 2e entrée hérite du bout d'origine (Ciutat Vella 1 h Modéré, de 61,9 à 26,1)."""
+    c = _trace([(0, 0), (1000, 0), (0, 0)])
+    t = max(range(len(c)), key=lambda i: c[i][0])
+    tip = [c[t][0] + 0.004, c[t][1], 0]
+    monkeypatch.setattr(g, "DEAD_END", True)
+    monkeypatch.setattr(g, "_FOOT_ENDS", [(c[t], tip)])
+    i = next(i for i in range(t) if g.haversine(c[i][0], c[i][1], c[t][0], c[t][1]) < 300)
+    j = next(j for j in range(len(c) - 1, t, -1) if g.haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < g.RETRACE_R_M)
+    e = c[i]
+    k = max(range(i, j + 1), key=lambda x: g.haversine(e[0], e[1], c[x][0], c[x][1]))
+    g._FOOT_ENDS.append((e, g.turn_point(c, k)))
+    assert g.turn_point(c, i) is tip

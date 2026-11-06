@@ -1751,9 +1751,10 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False):
             cut = (i, j)
     if cut is None:
         return None
-    if force:                                                # l'entrée garde le but du bout (turn_point)
-        e = c[cut[0]]
-        _FOOT_ENDS.append((e, max(c[cut[0]:cut[1] + 1], key=lambda p: haversine(e[0], e[1], p[0], p[1]))))
+    if force:                                                # l'entrée garde le but du bout (turn_point), même coupée
+        e = c[cut[0]]                                        # une 2e fois au tour suivant (Ciutat Vella 1 h Modéré : de
+        k = max(range(cut[0], cut[1] + 1), key=lambda i: haversine(e[0], e[1], c[i][0], c[i][1]))   # 61,9 à 26,1)
+        _FOOT_ENDS.append((e, turn_point(c, k)))
     p_ = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
     n = analyse(p_, level, l.profile, duration_h, l.seed, l.heading)
     if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
