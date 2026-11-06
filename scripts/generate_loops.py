@@ -1620,6 +1620,21 @@ def walk_tip(coords, det, a: int, b: int, t: int):
     return (i, j) if foot_m(det, n, i, j, cum, plaza=False) > FOOT_TIP_M else None
 
 
+_FOOT_ENDS: list = []           # [(entrée, bout)] des pointes à pied coupées (DEAD_END, _retrace_cut)
+
+
+def turn_point(coords, t: int):
+    """Point où juger le demi-tour t : le bout d'origine quand on fait demi-tour à l'entrée d'une pointe faite à pied, coupée
+    (on va à vélo jusqu'à l'entrée, le but reste le même ; Sants-Montjuïc 1 h Modéré : le front de mer devant l'hôtel W,
+    sans sa pointe à pied, perdait son belvédère, de 55,4 à 22,1)."""
+    p = coords[t]
+    if dead_end():
+        for e, tip in _FOOT_ENDS:
+            if haversine(p[0], p[1], e[0], e[1]) < RETRACE_R_M:
+                return tip
+    return p
+
+
 def walk_tips(coords, det) -> list:
     """Pointes faites à pied des allers-retours de la boucle (walk_tip), à couper (DEAD_END) : [(i, j)]."""
     if det is None:
@@ -1736,6 +1751,9 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False):
             cut = (i, j)
     if cut is None:
         return None
+    if force:                                                # l'entrée garde le but du bout (turn_point)
+        e = c[cut[0]]
+        _FOOT_ENDS.append((e, max(c[cut[0]:cut[1] + 1], key=lambda p: haversine(e[0], e[1], p[0], p[1]))))
     p_ = splice_path(path, cut[0], cut[1], {"points": {"coordinates": [c[cut[0]]]}})
     n = analyse(p_, level, l.profile, duration_h, l.seed, l.heading)
     if n is not None and water_ar() and getattr(l, "pleasant_ar", False):
@@ -4892,22 +4910,22 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
                         **({"water": True} if water_ar() and along_water(coords, a_, b_) else {})}
                        for a_, b_, t, w in useful]
     loop.aimless_bt = (sum(1 for (a_, b_, t_, w_) in useful if w_ in ("nature", "piste")
-                           and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])   # comme avant
+                           and not destination_tip([round(turn_point(coords, t_)[0], 5), round(turn_point(coords, t_)[1], 5)])   # comme avant
                            and not (backtrack_dest() and along_water(coords, a_, b_))) if turn_rules() else 0)
     loop.dead_windows = [(a_, b_) for a_, b_, t_, w_ in useful   # cul-de-sac le long d'une rivière : pénalisé au dernier choix
                          if dead_end() and w_ in ("nature", "piste")
                          and DEAD_END_MIN_M <= cum[min(b_, len(cum) - 1)] - cum[a_] < DEAD_END_LOOP_SHARE * total
-                         and along_water(coords, a_, b_) and not place_tip(coords[t_]) and not near_sea(coords[t_])
+                         and along_water(coords, a_, b_) and not place_tip(turn_point(coords, t_)) and not near_sea(turn_point(coords, t_))
                          and not along_sea(coords, a_, b_)]
     if loop.overlap >= DEAD_END_OUTBACK:                # la boucle est elle-même un aller-retour (ordre des retours, D85)
         loop.dead_windows = []
     loop.dead_end = bool(loop.dead_windows)
     loop.climb_mid_bt = sum(1 for b_ in loop.backtracks if b_["why"] == "montée")
     loop.aimless_windows = ([(a_, b_) for a_, b_, t_, w_ in useful if w_ in ("nature", "montée")
-                             and not destination_tip(coords[t_])]
+                             and not destination_tip(turn_point(coords, t_))]
                             if backtrack_dest() else [])     # le long de l'eau aussi : bouclé si une boucle propre existe
     loop.water_bt = (sum(1 for a_, b_, t_, w_ in useful if w_ in ("nature", "piste")
-                         and not destination_tip([round(coords[t_][0], 5), round(coords[t_][1], 5)])
+                         and not destination_tip([round(turn_point(coords, t_)[0], 5), round(turn_point(coords, t_)[1], 5)])
                          and along_water(coords, a_, b_)) if backtrack_dest() else 0)     # allers-retours « nature » sans destination (BACKTRACK_DEST)
     loop.detours = block_detours(coords) if detour_fix() else []
     loop.retrace_windows = []
@@ -6064,10 +6082,13 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
                            for i in list(range(0, a)) + list(range(b, len(coords) - 1)))
         if part > cap * whole:
             return None
+    tp = turn_point(coords, t if t is not None else b)       # bout d'une pointe à pied coupée : jugé là (DEAD_END)
     pts = shapely.points(np.array([(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]]))
-    if (POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
+    pts_l = pts if tp is coords[t if t is not None else b] else shapely.points(np.array(
+        [(c[0], c[1]) for c in seg[::max(1, len(seg) // 30)]] + [(tp[0], tp[1])]))
+    if (POIS and "lieu" in POIS and len(POIS["lieu"][0].query(pts_l, predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])
             or dest_heritage() and len(POIS["patrimoine"][0].query(
-                shapely.points(np.array([[coords[t if t is not None else b][0], coords[t if t is not None else b][1]]])),
+                shapely.points(np.array([[tp[0], tp[1]]])),
                 predicate="dwithin", distance=REMARKABLE_NEAR_DEG)[0])):
         return "lieu"                                        # un lieu remarquable vaut le détour, même sur la fin en terre
     if unp is not None:                                      # jamais sur la terre ou le gravier pour revenir sur ses pas
@@ -6078,22 +6099,23 @@ def backtrack_useful(coords, a: int, b: int, level: str, cyc=None, unp=None, t=N
     tv = LANDSCAPE.trees.get("view") if LANDSCAPE is not None else None
     if t is None:                                            # demi-tour : le point le plus éloigné de l'entrée
         t = max(range(a, b + 1), key=lambda i: haversine(coords[a][0], coords[a][1], coords[i][0], coords[i][1]))
+    tp = turn_point(coords, t)
     if tv is not None:
         if turn_rules():                                     # le demi-tour doit être au point de vue (TURN_RULES)
-            seen_view = len(tv.query(shapely.points(np.array([[coords[t][0], coords[t][1]]])), predicate="dwithin",
+            seen_view = len(tv.query(shapely.points(np.array([[tp[0], tp[1]]])), predicate="dwithin",
                                      distance=VIEW_NEAR_DEG)[0])
         else:
             seen_view = len(tv.query(pts, predicate="dwithin", distance=VIEW_NEAR_DEG)[0])
         if seen_view:
             return "belvédère"
     if (level in BACKTRACK_RELIEF_LEVELS and len(seg[0]) > 2
-            and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(coords[t])):
+            and max(c[2] for c in seg) - seg[0][2] >= BACKTRACK_CLIMB_M and natural_tip(tp)):
         return "relief"                                      # monte, et fait demi-tour à un sommet, un col ou au bord de l'eau
     long_ = sum(haversine(seg[i][0], seg[i][1], seg[i + 1][0], seg[i + 1][1]) for i in range(len(seg) - 1))
     if long_ < BACKTRACK_PLEASANT_MIN_M:                     # trop court pour « prolonger une route agréable »
         return None
     climb_mid = (turn_rules() and len(seg[0]) > 2 and coords[t][2] - seg[0][2] >= TURN_CLIMB_M
-                 and not natural_tip(coords[t]))           # monte puis fait demi-tour en pleine montée (TURN_RULES)
+                 and not natural_tip(tp))                  # monte puis fait demi-tour en pleine montée (TURN_RULES)
     green = None
     if LANDSCAPE is not None:
         hit = np.zeros(len(pts), dtype=bool)

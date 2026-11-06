@@ -945,3 +945,16 @@ def test_foot_twice_m():
     i0, i1 = bisect.bisect_left(cum, 1050), bisect.bisect_left(cum, 1250)
     det = {"road_class": [[0, n, "residential"], [i0, i1, "footway"]], "bike_road_access": [[0, n, "missing"]]}
     assert g.foot_twice_m(det, c, 0, n, cum) == 0
+
+
+def test_turn_point(monkeypatch):
+    """Demi-tour à l'entrée d'une pointe à pied coupée : jugé au bout d'origine (Sants-Montjuïc 1 h, hôtel W)."""
+    c = _trace([(0, 0), (1000, 0), (0, 0)])
+    t = max(range(len(c)), key=lambda i: c[i][0])
+    tip = [c[t][0] + 0.004, c[t][1], 0]
+    monkeypatch.setattr(g, "_FOOT_ENDS", [(c[t], tip)])
+    monkeypatch.setattr(g, "DEAD_END", True)
+    assert g.turn_point(c, t) is tip
+    assert g.turn_point(c, 0) is c[0]
+    monkeypatch.setattr(g, "DEAD_END", False)
+    assert g.turn_point(c, t) is c[t]
