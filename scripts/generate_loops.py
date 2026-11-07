@@ -1723,12 +1723,12 @@ def trim_retrace(l, level, duration_h, bounds):
         return None
     path, best = {"points": {"coordinates": l.coords}, "details": l.gh_details, "ascend": l.ascend_gh_m}, l
     for a, b in sorted(wins, reverse=True):                  # par la fin : les indices d'avant restent bons
-        r = _retrace_cut(path, a, b, l, level, duration_h, bounds, force=(a, b) in foot)
+        r = _retrace_cut(path, a, b, l, level, duration_h, bounds, force=(a, b) in foot, ref=best)
         if r is not None and not r[2] and r[1] is not None:  # refusée : la coupe découvre souvent l'éperon qui menait au
             c2 = r[0]["points"]["coordinates"]               # crochet (Sant Martí 45 min : 130 m coupés, la rampe du pont
             for a2, b2 in spike_windows(c2, 2 * RETRACE_MAX_M, r[0]["details"]):   # del Molinet, 268 m, devenait un éperon, de 71 à 57)
                 if a2 <= r[3] <= b2:
-                    r2 = _retrace_cut(r[0], a2, b2, l, level, duration_h, bounds)
+                    r2 = _retrace_cut(r[0], a2, b2, l, level, duration_h, bounds, ref=best)
                     if r2 is not None and r2[2]:
                         r = r2
                     break
@@ -1740,10 +1740,13 @@ def trim_retrace(l, level, duration_h, bounds):
     return best
 
 
-def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False):
+def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False, ref=None):
     """Essai de coupe d'un demi-tour dans la fenêtre [a, b] de path : (chemin, boucle, acceptée, indice de la coupe), ou None.
     force : coupée même si la note baisse (pointe faite à pied, walk_tips : le crochet n'est compté utile que sans elle ;
-    Sants-Montjuïc 3 h, jardins du Palauet Albéniz, refusée de 62,9 à 52,3 et gardée à pied)."""
+    Sants-Montjuïc 3 h, jardins du Palauet Albéniz, refusée de 62,9 à 52,3 et gardée à pied). ref : la version déjà coupée,
+    à laquelle la coupe se compare (sinon l : les demi-tours ajoutés par les coupes d'avant comptaient pour celle-ci ;
+    Ciutat Vella 1 h Modéré, 3e coupe acceptée de 61,9 à 26,1)."""
+    ref = l if ref is None else ref
     c, cut = path["points"]["coordinates"], None             # coupé sur place : recalculer l'itinéraire le dégradait
     for i in range(a, b):                                    # (Ciutat Vella 1 h 30 : de 64 à 26, l'autre chaussée)
         j = next((j for j in range(b, i, -1) if haversine(c[i][0], c[i][1], c[j][0], c[j][1]) < RETRACE_R_M), None)
@@ -1766,10 +1769,10 @@ def _retrace_cut(path, a, b, l, level, duration_h, bounds, force=False):
     ok, why_ = _ar_ok(n, duration_h, bounds)                 # (Ciutat Vella 1 h 30 : 24,2 km au ras de la plage, de 64 à 66)
     if n is not None:
         n.time_s = t_
-    ok = ok and (force or n.score + RETRACE_TURN_PTS * max(0, n.u_turns - l.u_turns) >= l.score - RETRACE_TOL)   # une à une ; le demi-tour net qui
+    ok = ok and (force or n.score + RETRACE_TURN_PTS * max(0, n.u_turns - ref.u_turns) >= ref.score - RETRACE_TOL)   # une à une ; le demi-tour net qui
     # remplace le crochet ne compte pas contre la coupe : le crochet n'était qu'une façon de tourner (Sant Martí 45 min, pont del Molinet)
-    _journal("sans demi-tour", l, n, c[cut[0]], ok, why_,       # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
-             **({"avant": score_detail(l), "apres": score_detail(n)} if n is not None and (force or not ok) else {}),
+    _journal("sans demi-tour", ref, n, c[cut[0]], ok, why_,       # refusée : ce qui fait chuter la note (Sant Martí 45 min, de 73 à 57)
+             **({"avant": score_detail(ref), "apres": score_detail(n)} if n is not None and (force or not ok) else {}),
              **({"a_pied": True} if force else {}))     # pointe à pied, coupée de force : ce qu'elle coûte
     return p_, n, ok, cut[0]
 
