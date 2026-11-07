@@ -484,7 +484,9 @@ jobs:
             [ "$DIAG_PART" = "rx8" ] && RELIEF_IDS="sant-marti;cornella-de-llobregat;horta-guinardo;sants-montjuic" && NATURE_TRACE="sant-marti|3|facile;cornella-de-llobregat|3|modere"
             [ "$DIAG_PART" = "rx9" ] && RELIEF_IDS="ripoll;castelldefels;monistrol-de-montserrat" && NATURE_TRACE="ripoll|6|soutenu;castelldefels|1|soutenu"
             [ "$DIAG_PART" = "ry1" ] && RELIEF_IDS="sarria-sant-gervasi;horta-guinardo;cornella-de-llobregat;ciutat-vella" && NATURE_TRACE="sarria-sant-gervasi|4|facile;horta-guinardo|3|modere;ciutat-vella|3|facile"
-            [ "$DIAG_PART" = "ry4" ] && RELIEF_IDS="ciutat-vella;horta-guinardo" && NATURE_TRACE="ciutat-vella|1|modere;horta-guinardo|1|modere"
+            # baisses restantes de DEAD_END (07/11/2026) : Horta 4 h Modéré perd belvédère et mer, Monistrol 6 h Sportif un aller-retour
+            [ "$DIAG_PART" = "ry4" ] && RELIEF_IDS="horta-guinardo" && NATURE_TRACE="horta-guinardo|4|modere;horta-guinardo|6|facile;horta-guinardo|1|modere"
+            [ "$DIAG_PART" = "ry8" ] && RELIEF_IDS="monistrol-de-montserrat;sants-montjuic" && NATURE_TRACE="monistrol-de-montserrat|6|soutenu;sants-montjuic|1.5|modere"
             [ "$DIAG_PART" = "ry5" ] && RELIEF_IDS="sant-marti" && NATURE_TRACE="sant-marti|0.75|facile;sant-marti|0.75|modere"
             # reproductibilité (03/11/2026) : ry6 et ry7 identiques, lancées ensemble ; Sants-Montjuïc 3 h Modéré perdait 71 -> 60
             case "$DIAG_PART" in ry6|ry7) RELIEF_IDS="sants-montjuic"; NATURE_TRACE="sants-montjuic|3|modere;sants-montjuic|1.5|modere" ;; esac
