@@ -980,11 +980,14 @@
     }
 
     async function init() {
+      // index allégé d'abord (10/11/2026) : sans les blocs « compare » (87 % du fichier), chargés juste après (loadCompare)
       const [index] = await Promise.all([
-        fetch('web/data/index.json').then(r => r.json()),
+        fetch('web/data/index_app.json').then(r => (r.ok ? r.json() : fetch('web/data/index.json').then(x => x.json())))
+          .catch(() => fetch('web/data/index.json').then(x => x.json())),
         new Promise(ok => map.once('load', ok))
       ]);
       indexData = index;
+      loadCompare();
       try {
         fetch('web/data/train_links.json').then(r => (r.ok ? r.json() : null)).then(d => { trainLinks = d; })
           .catch(() => { /* pas de liaisons : pas de suggestion de train */ });
@@ -1251,6 +1254,29 @@
     // accueil (07/10/2026) : trois quartiers ou villes autour de Barcelone (10 km autour de la plaça de Catalunya) qui sortent le plus vite de
     // la ville, pour l'allure et la durée réglées ; affichés sous la ligne du départ tant qu'aucun départ n'est choisi
     const BCN = [2.1700, 41.3870], SUGGEST_KM = 10;
+    // blocs « compare » de l'index (départs proposés, départ voisin, gare, durée absente) : chargés après la carte, puis
+    // seules les parties qui en dépendent sont redessinées (la boucle affichée, la carte et le défilement ne bougent pas)
+    function loadCompare() {
+      if (!indexData || indexData.starts.some(s => s.compare)) return;   // index complet (repli) : déjà là
+      fetch('web/data/compare.json').then(r => (r.ok ? r.json() : null)).then(cmp => {
+        if (!cmp) return;
+        indexData.starts.forEach(s => { if (cmp[s.id]) s.compare = cmp[s.id]; });
+        renderSuggest();
+        if (!startData) return;
+        if (!shown.length) { showLevel(); return; }                    // durée absente : ses propositions
+        const o = shown[current];
+        if (!o) return;
+        const tmp = document.createElement('div');
+        tmp.innerHTML = detailHtml(o);
+        const nu = tmp.querySelector(':scope > .alts'), old = sheetBody.querySelector(':scope > .alts');
+        if (old && nu) old.replaceWith(nu);
+        else if (old) old.remove();
+        else if (nu) {
+          const first = sheetBody.querySelector(':scope > .rows');
+          if (first) first.after(nu);
+        }
+      }).catch(() => { /* pas de comparaison : pas de suggestion de départ voisin */ });
+    }
     function renderSuggest() {
       const box = document.getElementById('suggestBox');
       if (box) box.innerHTML = startData ? '' : suggestHtml();

@@ -814,6 +814,9 @@ jobs:
           if [ "$START_PAGES" = "1" ]; then              # une page par départ et par langue, lisible sans JavaScript
             python scripts/build_start_pages.py --data _site/web/data --out _site
           fi
+          # index allégé pour l'app (10/11/2026) : les blocs « compare » (87 % de index.json) chargés après la carte ;
+          # index.json reste entier (outils, pages par départ, liaisons de train)
+          python scripts/split_index.py _site/web/data || echo "index allégé indisponible : l'app lit index.json"
           du -sh _site _site/web/data
 
       - name: Rapport de génération (critères de réussite)

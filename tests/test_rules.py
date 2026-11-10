@@ -1025,3 +1025,16 @@ def test_prev_faithful(monkeypatch):
         del g._TL.small_model
         g._TL.faithful_route = False
     assert "custom_model" in sent[0] and "custom_model" not in sent[1]
+
+
+def test_split_index():
+    """Index allégé pour l'app : sans « compare », que l'app charge ensuite (compare.json)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("split_index", Path(__file__).parent.parent / "scripts" / "split_index.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    idx = {"region": "x", "starts": [{"id": "a", "lat": 1, "compare": {"1": {"modere": {"score": 50}}}}, {"id": "b", "lat": 2}]}
+    app, cmp_ = m.split(idx)
+    assert app["starts"] == [{"id": "a", "lat": 1}, {"id": "b", "lat": 2}] and app["region"] == "x"
+    assert cmp_ == {"a": {"1": {"modere": {"score": 50}}}}
+    assert "compare" in idx["starts"][0]                       # index.json gardé entier pour les outils
