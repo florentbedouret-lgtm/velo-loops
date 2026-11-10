@@ -2711,6 +2711,12 @@ SPORT_SHORT_FACTOR = 2.0
 # compte s'il fait au moins INDUSTRIAL_MIN_KM2 (Castelldefels 6 h : 3,9 km contre 1,7 ; Les Corts 4 h : 0 contre 2,2).
 INDUSTRIAL_CLUSTER = False
 INDUSTRIAL_CLUSTER_DEG = 0.0006
+# PREV_FAITHFUL : une boucle publiée remise en jeu (KEEP_PREVIOUS) est retracée par ses points de passage sans le modèle
+# de calcul des règles d'essai (petites routes, bord de l'eau, piétons) : ce modèle la faisait dévier entre deux points
+# espacés de 500 m, avec des demi-tours de 160 à 260 m que l'originale n'avait pas (comparaison 6, 10/11/2026 : Sant
+# Martí 45 min Sportif 14,2 km noté 50 devenu 14,8 km noté 20 ; Sants-Montjuïc 3 h, Sarrià 5 h, Sant Martí 6 h, Les
+# Corts 4 h) ; les boucles que Florent préférait ne pouvaient plus gagner.
+PREV_FAITHFUL = False
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_OUTBACK = 0.4            # boucle faite à 40 % deux fois : c'est un aller-retour, son bout n'est pas un
                                  # cul-de-sac (Horta 1 h Modéré, 04/11/2026 : retour agréable identique > différent)
@@ -2789,6 +2795,10 @@ def sport_short() -> bool:
 
 def industrial_cluster() -> bool:
     return _flag("industrial_cluster", INDUSTRIAL_CLUSTER)
+
+
+def prev_faithful() -> bool:
+    return _flag("prev_faithful", PREV_FAITHFUL)
 
 
 def water_ar() -> bool:
@@ -4481,7 +4491,8 @@ class GraphHopper:
         import copy
         if scenic_areas() and body.get("profile") in SCENIC_PROFILES:   # zones agréables (SCENIC_AREAS)
             body = {**body, "profile": body["profile"] + "_scenic"}
-        if small_model() or track_grade() or water_hug() or foot_no_bike():   # petites routes, pistes, eau, piétons
+        if ((small_model() or track_grade() or water_hug() or foot_no_bike())   # petites routes, pistes, eau, piétons
+                and not getattr(_TL, "faithful_route", False)):     # boucle publiée retracée telle quelle (PREV_FAITHFUL)
             cm = dict(body.get("custom_model") or {})
             foot_, sea_ = foot_no_bike_rules(body.get("points") or []) if foot_no_bike() else ([], None)
             cm["priority"] = (list(cm.get("priority") or []) + (SMALL_MODEL_PRIORITY if small_model() else [])
@@ -6283,7 +6294,11 @@ def previous_candidates(gh, st, level, duration_h) -> list:
     for profile, coords in items:
         way = route_waypoints(coords, step_m=previous_step())
         way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
-        path = gh.via(way, profile, pass_through=True)
+        _TL.faithful_route = prev_faithful()
+        try:
+            path = gh.via(way, profile, pass_through=True)
+        finally:
+            _TL.faithful_route = False
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
         if (loop is None or not time_ok(loop.time_s, duration_h) or not overlap_ok(loop)
                 or loop.u_turns > MAX_UTURNS or not dirt_ok(loop)):

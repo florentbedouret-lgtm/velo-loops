@@ -44,7 +44,7 @@ def test_reglages_v17():
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
                "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
-               "INDUSTRIAL_CLUSTER"):
+               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -1001,3 +1001,27 @@ def test_industrial_clusters():
     assert all(p.area * g.KM2_PER_DEG2 < g.INDUSTRIAL_MIN_KM2 for p in small)
     assert len(g.industrial_clusters(small)) == 1
     assert g.industrial_clusters(small[:1]) == []
+
+
+def test_prev_faithful(monkeypatch):
+    """Boucle publiée retracée sans le modèle des règles d'essai (comparaison 6 : Sant Martí 45 min Sportif déformé)."""
+    sent = []
+
+    class R:
+        status_code = 200
+
+        def json(self):
+            return {"paths": [{}]}
+
+    gh = g.GraphHopper("http://x")
+    monkeypatch.setattr(gh.http, "post", lambda url, json, timeout: sent.append(json) or R())
+    monkeypatch.setattr(g, "GH_MEMO", False)
+    g._TL.small_model = True
+    try:
+        gh.via([[2.0, 41.0], [2.01, 41.0]], "bike")
+        g._TL.faithful_route = True
+        gh.via([[2.0, 41.0], [2.01, 41.0]], "bike")
+    finally:
+        del g._TL.small_model
+        g._TL.faithful_route = False
+    assert "custom_model" in sent[0] and "custom_model" not in sent[1]
