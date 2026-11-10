@@ -487,18 +487,18 @@ jobs:
             # baisses restantes de DEAD_END (07/11/2026) : Horta 4 h Modéré perd belvédère et mer, Monistrol 6 h Sportif un aller-retour
             [ "$DIAG_PART" = "ry4" ] && RELIEF_IDS="horta-guinardo" && NATURE_TRACE="horta-guinardo|4|modere;horta-guinardo|6|facile;horta-guinardo|1|modere"
             [ "$DIAG_PART" = "ry5" ] && RELIEF_IDS="monistrol-de-montserrat;sants-montjuic" && NATURE_TRACE="monistrol-de-montserrat|6|soutenu;sants-montjuic|1.5|modere"
-            # boucles de la mesure de référence DEAD_END (03/11/2026, 15e version) remises en jeu comme boucles publiées
-            # (07/11/2026) : une baisse qui reste vient des règles, pas d'un tirage GraphHopper différent
-            [ "$DIAG_PART" = "ry6" ] && RELIEF_IDS="horta-guinardo;sants-montjuic;ciutat-vella" && NATURE_TRACE="horta-guinardo|4|modere;horta-guinardo|6|facile;sants-montjuic|1.5|modere"
-            [ "$DIAG_PART" = "ry7" ] && RELIEF_IDS="monistrol-de-montserrat;ripoll;granollers;cornella-de-llobregat" && NATURE_TRACE="monistrol-de-montserrat|6|soutenu;ripoll|2|soutenu;granollers|0.75|facile"
+            # comparaison 6 (10/11/2026) : les boucles de production (bloc v16 de la mesure du 07/11/2026) remises en jeu comme
+            # boucles publiées, comme le fait KEEP_PREVIOUS en production ; mêmes 12 départs que ry1 à ry3
+            [ "$DIAG_PART" = "ry6" ] && RELIEF_IDS="sarria-sant-gervasi;horta-guinardo;cornella-de-llobregat;ciutat-vella;les-corts;sants-montjuic" && NATURE_TRACE="sants-montjuic|3|modere;sarria-sant-gervasi|5|facile"
+            [ "$DIAG_PART" = "ry7" ] && RELIEF_IDS="ripoll;castelldefels;sant-marti;monistrol-de-montserrat;collbato;granollers" && NATURE_TRACE="sant-marti|0.75|soutenu;collbato|1|modere;sant-marti|6|modere"
             if [ "$DIAG_PART" = "ry6" ] || [ "$DIAG_PART" = "ry7" ]; then
-              for r in 41601948206 41601954025 41601959402; do gh run download "$r" --repo "$GITHUB_REPOSITORY" -n diagnostic-nature -D "data/rrb/$r"; done
+              for r in 42330179526 42330182573 42330185344; do gh run download "$r" --repo "$GITHUB_REPOSITORY" -n diagnostic-nature -D "data/rrb/$r"; done
               mkdir -p data/rrprev && python - <<'PY'
           import glob, json, os
           for f in glob.glob("data/rrb/*/relief_*.json"):
               sid = os.path.basename(f)[len("relief_"):-len(".json")]
               opts = [{"level": k.split("|")[1], "duration_target_min": float(k.split("|")[0]) * 60, "coords": l["coords"]}
-                      for k, ls in json.load(open(f, encoding="utf-8"))["relief"].items() for l in ls]
+                      for k, ls in json.load(open(f, encoding="utf-8"))["v16"].items() for l in ls]
               json.dump({"options": opts}, open(f"data/rrprev/{sid}.json", "w", encoding="utf-8"))
               print(sid, len(opts), "boucles de référence")
           PY
