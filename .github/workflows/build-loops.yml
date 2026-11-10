@@ -506,7 +506,7 @@ jobs:
             fi
             [ "$DIAG_PART" = "ry2" ] && RELIEF_IDS="ripoll;castelldefels;sant-marti;monistrol-de-montserrat" && NATURE_TRACE="ripoll|6|soutenu;monistrol-de-montserrat|1.5|modere"
             [ "$DIAG_PART" = "ry3" ] && RELIEF_IDS="collbato;granollers;les-corts;sants-montjuic" && NATURE_TRACE="les-corts|3|modere"
-            # rz1 et rz2 comme ry4 et ry5, avec en plus INDUSTRIAL_CLUSTER et PREV_FAITHFUL (10/11/2026)
+            # rz1 et rz2 comme ry4 et ry5, avec en plus INDUSTRIAL_CLUSTER, PREV_FAITHFUL et DEAD_END_ANY (10/11/2026)
             [ "$DIAG_PART" = "rz1" ] && RELIEF_IDS="sarria-sant-gervasi;horta-guinardo;cornella-de-llobregat;ciutat-vella;les-corts;sants-montjuic" && NATURE_TRACE="les-corts|4|facile;sants-montjuic|3|modere"
             [ "$DIAG_PART" = "rz2" ] && RELIEF_IDS="ripoll;castelldefels;sant-marti;monistrol-de-montserrat;collbato;granollers" && NATURE_TRACE="castelldefels|6|modere;sant-marti|0.75|soutenu"
             [ "$DIAG_PART" = "rx3" ] && NATURE_TRACE="les-corts|3|modere;terrassa|0.75|soutenu"

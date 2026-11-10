@@ -2717,6 +2717,11 @@ INDUSTRIAL_CLUSTER_DEG = 0.0006
 # Martí 45 min Sportif 14,2 km noté 50 devenu 14,8 km noté 20 ; Sants-Montjuïc 3 h, Sarrià 5 h, Sant Martí 6 h, Les
 # Corts 4 h) ; les boucles que Florent préférait ne pouvaient plus gagner.
 PREV_FAITHFUL = False
+# DEAD_END_ANY : un aller-retour « nature » ou « piste » d'au moins DEAD_END_MIN_M sans lieu remarquable au bout est un
+# cul-de-sac (DEAD_END) partout, plus seulement le long d'une rivière (Florent : Monistrol 45 min, 08/11/2026, « pas
+# désagréable mais peu d'intérêt : l'éviter si possible » ; Sants-Montjuïc 3 h, comparaison 6 : demi-tour sec de 2,7 km
+# vers Montcada, compté comme « nature », contre une petite boucle préférée).
+DEAD_END_ANY = False
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_OUTBACK = 0.4            # boucle faite à 40 % deux fois : c'est un aller-retour, son bout n'est pas un
                                  # cul-de-sac (Horta 1 h Modéré, 04/11/2026 : retour agréable identique > différent)
@@ -2799,6 +2804,10 @@ def industrial_cluster() -> bool:
 
 def prev_faithful() -> bool:
     return _flag("prev_faithful", PREV_FAITHFUL)
+
+
+def dead_end_any() -> bool:
+    return _flag("dead_end_any", DEAD_END_ANY)
 
 
 def water_ar() -> bool:
@@ -4984,7 +4993,8 @@ def analyse(path: dict, level: str, profile: str, duration_h: float, seed: int, 
     loop.dead_windows = [(a_, b_) for a_, b_, t_, w_ in useful   # cul-de-sac le long d'une rivière : pénalisé au dernier choix
                          if dead_end() and w_ in ("nature", "piste")
                          and DEAD_END_MIN_M <= cum[min(b_, len(cum) - 1)] - cum[a_] < DEAD_END_LOOP_SHARE * total
-                         and along_water(coords, a_, b_) and not place_tip(turn_point(coords, t_)) and not near_sea(turn_point(coords, t_))
+                         and (dead_end_any() or along_water(coords, a_, b_))   # partout si DEAD_END_ANY
+                         and not place_tip(turn_point(coords, t_)) and not near_sea(turn_point(coords, t_))
                          and not along_sea(coords, a_, b_)]
     if loop.overlap >= DEAD_END_OUTBACK:                # la boucle est elle-même un aller-retour (ordre des retours, D85)
         loop.dead_windows = []
