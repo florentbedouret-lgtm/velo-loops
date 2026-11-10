@@ -43,8 +43,8 @@ def test_reglages_v17():
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
-               "FOOT_NO_BIKE"):
-        assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026), en essai
+               "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT"):
+        assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
     assert g.SMALL_ROADS is False                      # petites routes goudronnées, en essai
@@ -973,3 +973,21 @@ def test_turn_point_chain(monkeypatch):
     k = max(range(i, j + 1), key=lambda x: g.haversine(e[0], e[1], c[x][0], c[x][1]))
     g._FOOT_ENDS.append((e, g.turn_point(c, k)))
     assert g.turn_point(c, i) is tip
+
+
+# ----------------------------------------------------------------------------- comparaison 6 (10/11/2026)
+def test_sport_short(monkeypatch):
+    """Sportif d'une heure au plus : le relief pèse deux fois plus (Sant Martí 45 min Sportif, 47 m de D+ contre 224)."""
+    seen = []
+    monkeypatch.setattr(g, "score_from", lambda l, w=None, *a, **k: seen.append(w) or 0.0)
+    short, long_, calm = (SimpleNamespace(level="soutenu", duration_h=0.75), SimpleNamespace(level="soutenu", duration_h=3.0),
+                          SimpleNamespace(level="facile", duration_h=0.75))
+    for l in (short, long_, calm):
+        g.score(l)
+    base = g.RELIEF_WEIGHTS.get("soutenu")
+    assert seen == [base, base, g.RELIEF_WEIGHTS.get("facile")]
+    seen.clear()
+    monkeypatch.setattr(g, "SPORT_SHORT", True)
+    for l in (short, long_, calm):
+        g.score(l)
+    assert seen == [base * g.SPORT_SHORT_FACTOR, base, g.RELIEF_WEIGHTS.get("facile")]

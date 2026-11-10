@@ -2688,6 +2688,23 @@ PLEASANT_ORDER_TOL = 8.0
 # DEAD_END_LOOP_SHARE de la distance) ; une fenêtre qui repart par où elle est venue n'est jamais un lacet.
 DEAD_END = False
 DEAD_END_MIN_M = 1000.0
+# Comparaison 6 (Florent, 10/11/2026), trois règles d'essai, une par remarque :
+# AR_STRICT : « un aller-retour peu utile reste un défaut, même au bord de mer » (Sant Martí 45 min Sportif, 81 % repassé ;
+# Ciutat Vella 45 min Facile, 75 %, et 1 h Modéré, 57 % : les trois perdent contre une vraie boucle) ; dans un aller-retour
+# agréable, l'accès en ville repassé est pesé AR_STRICT_PLAIN fois (comme dans une boucle, FLOW_V2_FACTOR) et le bord de
+# l'eau AR_STRICT_WATER fois.
+AR_STRICT = False
+AR_STRICT_PLAIN = 3.0
+AR_STRICT_WATER = 0.5
+# UTURN_STRICT : « une petite boucle pour faire demi-tour plutôt qu'un demi-tour sec » (Collbató 1 h, Granollers 1 h,
+# Sants-Montjuïc 3 h) : chaque demi-tour sec coûte UTURN_STRICT_PEN de fluidité au lieu de 0,15.
+UTURN_STRICT = False
+UTURN_STRICT_PEN = 0.30
+# SPORT_SHORT : « pour un parcours sportif aussi court, le D+ est important » (Sant Martí 45 min Sportif : 47 m de D+
+# contre 224) ; jusqu'à SPORT_SHORT_MAX_H, le relief d'une boucle Sportif pèse SPORT_SHORT_FACTOR fois RELIEF_WEIGHTS.
+SPORT_SHORT = False
+SPORT_SHORT_MAX_H = 1.0
+SPORT_SHORT_FACTOR = 2.0
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_OUTBACK = 0.4            # boucle faite à 40 % deux fois : c'est un aller-retour, son bout n'est pas un
                                  # cul-de-sac (Horta 1 h Modéré, 04/11/2026 : retour agréable identique > différent)
@@ -2750,6 +2767,18 @@ def _order_bonus(l, t, base_ab, trial_ab):
 
 def dead_end() -> bool:
     return _flag("dead_end", DEAD_END)
+
+
+def ar_strict() -> bool:
+    return _flag("ar_strict", AR_STRICT)
+
+
+def uturn_strict() -> bool:
+    return _flag("uturn_strict", UTURN_STRICT)
+
+
+def sport_short() -> bool:
+    return _flag("sport_short", SPORT_SHORT)
 
 
 def water_ar() -> bool:
@@ -5048,6 +5077,7 @@ def _ar_water(l) -> float:
 def score_parts(l: Loop) -> tuple[dict, dict]:
     """Sous-scores (0 à 1) et poids utilisés par score() : exposés pour les diagnostics (nature_check.py)."""
     s = l.shares
+    uturn_pen = UTURN_STRICT_PEN if uturn_strict() else 0.15      # UTURN_STRICT (comparaison 6)
     parts = {
         "calm": 1.0 - (s.get("urban_car", s["urban"])["city"] + 0.4 * s.get("urban_car", s["urban"])["residential"]),
         "axes": 1.0 - min(1.0, 2.0 * s["main_roads"]),
@@ -5065,8 +5095,9 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
         # plus agréable que la boucle
         # même règle pour tout aller-retour dont la répétition est surtout au bord de l'eau (27/10/2026 : l'aller-retour
         # par la côte décrit par Florent à Ciutat Vella, noté comme une boucle ordinaire, payait toute sa répétition)
-        "flow": (1.0 - min(1.0, 0.15 * l.u_turns
-                               + PLEASANT_AR_PLAIN * _ar_plain(l) + PLEASANT_AR_WATER * _ar_water(l)
+        "flow": (1.0 - min(1.0, uturn_pen * l.u_turns
+                               + (AR_STRICT_PLAIN if ar_strict() else PLEASANT_AR_PLAIN) * _ar_plain(l)
+                               + (AR_STRICT_WATER if ar_strict() else PLEASANT_AR_WATER) * _ar_water(l)
                                + PLEASANT_AR_NICE * max(0.0, l.overlap - _ar_plain(l) - _ar_water(l))))
                 if (getattr(l, "pleasant_ar", False) or water_out_and_back(l)) else
                 1.0 - min(1.0, FLOW_OVERLAP_FACTOR * l.overlap
@@ -5077,7 +5108,7 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
                           - (((FLOW_V2_FACTOR - WATER_AR_WEIGHT) * getattr(l, "rep_water_plain", 0.0)
                               + (FLOW_V2_NICE - WATER_AR_WEIGHT) * getattr(l, "rep_water_nice", 0.0))
                              if flow_v2() and water_ar() else 0.0)
-                          + 0.15 * l.u_turns),
+                          + uturn_pen * l.u_turns),
     }
     weights = dict(WEIGHTS)
     if l.signals is not None:
@@ -5094,7 +5125,10 @@ def score_parts(l: Loop) -> tuple[dict, dict]:
 
 
 def score(l: Loop) -> float:
-    return score_from(l, RELIEF_WEIGHTS.get(l.level))
+    w_ = RELIEF_WEIGHTS.get(l.level)
+    if w_ and sport_short() and l.level == "soutenu" and l.duration_h <= SPORT_SHORT_MAX_H:
+        w_ *= SPORT_SHORT_FACTOR                             # SPORT_SHORT (comparaison 6)
+    return score_from(l, w_)
 
 
 def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float | None = None,
