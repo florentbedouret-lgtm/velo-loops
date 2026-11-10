@@ -653,6 +653,7 @@ def relief_generate(gh, st_, sid, durations, levels, limits, dirt=None):
                 lc = (o.get("scenery") or {}).get("landcover") or {}
                 cats = [c.get("category") for c in (o.get("terrain") or {}).get("climbs", [])]
                 rows.append({"score": o["score"], "label": lab, "km": o["distance_km"], "dplus": o["ascend_m"],
+                             "profile": l.profile,
                              "dpk": round(o["ascend_m"] / max(o["distance_km"], 0.1), 1), "min": o["time_est_min"],
                              "nature": round(lc.get("forest", 0) + lc.get("water", 0), 3), "exit": o.get("exit_city_km"),
                              "lights_km": o["traffic_lights_per_km"], "axes": o["shares"].get("main_roads"),
@@ -705,10 +706,19 @@ def run_relief_test(sid, site, gh_url, durations, levels, prev_dir, variant="v17
             (o.get("profile") or g.LEVELS[o["level"]]["profiles"][0], o["coords"]))
     t0 = time.time()
     g._TL.trace_phase = "production"
+    inject = variant.endswith("+i")                         # boucles de la production remises en jeu dans la variante
+    if inject:
+        variant = variant[:-2]
     if variant.endswith("+p"):                              # boucles publiées retrouvées à 300 m près, des deux côtés
         g._TL.previous_step = 300.0
         variant = variant[:-2]
     a = relief_generate(gh, st_, sid, durations, levels, None)
+    if inject:                                              # même exploration des deux côtés (10/11/2026) : une règle
+        for k, rows in a.items():                           # change l'ordre des candidates, donc celles qui sont
+            d_, lv_ = k.split("|")                          # retouchées ou croisées ; la variante peut ainsi toujours
+            for r in rows:                                  # reprendre la boucle de la production si elle la juge meilleure
+                st_["previous"].setdefault((lv_, round(float(d_) * 60)), []).append(
+                    (r.get("profile") or g.LEVELS[lv_]["profiles"][0], r["coords"]))
     t1 = time.time()
     g._TL.trace_phase = "variante"
     if variant == "v19all":                                # mesure combinée v19 (docs/v19_proposition.md)
