@@ -2705,6 +2705,12 @@ UTURN_STRICT_PEN = 0.30
 SPORT_SHORT = False
 SPORT_SHORT_MAX_H = 1.0
 SPORT_SHORT_FACTOR = 2.0
+# INDUSTRIAL_CLUSTER : « la zone de Sant Andreu de la Barca à Cornellà est industrielle et peu agréable » (Castelldefels
+# 6 h, Les Corts 4 h) ; OSM y découpe la zone en parcelles de moins de INDUSTRIAL_MIN_KM2, aucune n'était comptée. Les
+# parcelles voisines (à INDUSTRIAL_CLUSTER_DEG, ~50 m, la route qui passe entre elles comprise) sont réunies, et l'amas
+# compte s'il fait au moins INDUSTRIAL_MIN_KM2 (Castelldefels 6 h : 3,9 km contre 1,7 ; Les Corts 4 h : 0 contre 2,2).
+INDUSTRIAL_CLUSTER = False
+INDUSTRIAL_CLUSTER_DEG = 0.0006
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_OUTBACK = 0.4            # boucle faite à 40 % deux fois : c'est un aller-retour, son bout n'est pas un
                                  # cul-de-sac (Horta 1 h Modéré, 04/11/2026 : retour agréable identique > différent)
@@ -2779,6 +2785,10 @@ def uturn_strict() -> bool:
 
 def sport_short() -> bool:
     return _flag("sport_short", SPORT_SHORT)
+
+
+def industrial_cluster() -> bool:
+    return _flag("industrial_cluster", INDUSTRIAL_CLUSTER)
 
 
 def water_ar() -> bool:
@@ -3754,14 +3764,16 @@ def load_density(pbf: Path, workdir: Path):
 class LandscapeIndex:
     """Part du tracé au bord de forêts, d'eau ou de parcs, et points de vue proches (shapely + OSM)."""
 
-    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=(), rivers=(), industrial=()):
+    def __init__(self, forests, waters, protected, viewpoints, builtup=(), buildings=(), sea=(), rivers=(), industrial=(),
+                 industrial_cl=()):
         import numpy as np  # noqa: F401
         from shapely.strtree import STRtree
         builtup, sea, rivers, industrial = list(builtup), list(sea), list(rivers), list(industrial)
         self.trees = {k: (STRtree(v) if v else None)
                       for k, v in (("forest", forests), ("water", waters), ("protected", protected),
                                    ("view", viewpoints), ("builtup", builtup), ("buildings", list(buildings)),
-                                   ("sea", sea), ("river", rivers), ("industrial", industrial))}   # sea / river : aussi
+                                   ("sea", sea), ("river", rivers), ("industrial", industrial),
+                                   ("industrial_cl", list(industrial_cl)))}   # sea / river : aussi
                                                                       # dans water (côte, plages ;
                                                                       # ligne centrale des grandes rivières)
         self.counts = {"forest": len(forests), "water": len(waters), "protected": len(protected),
@@ -3919,6 +3931,7 @@ def load_landscape(pbf: Path, workdir: Path):
         print(f"! extraction du paysage échouée : {e.stderr.decode()[:200]}", file=sys.stderr)
         return None
     forests, waters, protected, views, builtup, sea, rivers, industrial = [], [], [], [], [], [], [], []
+    parcels = []                                           # toutes les parcelles industrielles (INDUSTRIAL_CLUSTER)
     with out.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip("\x1e\n ")
@@ -3949,13 +3962,24 @@ def load_landscape(pbf: Path, workdir: Path):
                 forests.append(geom)
             elif props.get("landuse") in ("residential", "commercial", "industrial", "retail", "port"):
                 builtup.append(geom)                       # zones bâties : « ville » de la répartition du terrain
-                if props.get("landuse") in ("industrial", "port") and geom.area * KM2_PER_DEG2 >= INDUSTRIAL_MIN_KM2:
-                    industrial.append(geom)
+                if props.get("landuse") in ("industrial", "port"):
+                    parcels.append(geom)
+                    if geom.area * KM2_PER_DEG2 >= INDUSTRIAL_MIN_KM2:
+                        industrial.append(geom)
             elif props.get("leisure") in ("park", "nature_reserve") or props.get("boundary") in (
                     "protected_area", "national_park"):
                 protected.append(geom)
     return LandscapeIndex(forests, waters, protected, views, builtup, load_building_points(pbf, workdir), sea, rivers,
-                          industrial)
+                          industrial, industrial_clusters(parcels))
+
+
+def industrial_clusters(parcels) -> list:
+    """Amas de parcelles industrielles voisines (INDUSTRIAL_CLUSTER) d'au moins INDUSTRIAL_MIN_KM2."""
+    if not parcels:
+        return []
+    import shapely
+    u = shapely.union_all([p.buffer(INDUSTRIAL_CLUSTER_DEG) for p in parcels])
+    return [g_ for g_ in getattr(u, "geoms", [u]) if g_.area * KM2_PER_DEG2 >= INDUSTRIAL_MIN_KM2]
 
 
 def industrial_mask(trees, pts, step_m: float = 100.0):
@@ -3964,9 +3988,10 @@ def industrial_mask(trees, pts, step_m: float = 100.0):
     Partagé avec scripts/landcover.py (mode landcover)."""
     import numpy as np
     m = np.zeros(len(pts), dtype=bool)
-    if trees.get("industrial") is None:
+    key_ = "industrial_cl" if industrial_cluster() and trees.get("industrial_cl") is not None else "industrial"
+    if trees.get(key_) is None:
         return m
-    m[np.unique(trees["industrial"].query(pts, predicate="intersects")[0])] = True
+    m[np.unique(trees[key_].query(pts, predicate="intersects")[0])] = True
     m &= ~protected_mask(trees, pts)
     filled = m.copy()                                    # un trou d'un seul point ne coupe pas le passage
     filled[1:-1] |= m[:-2] & m[2:]

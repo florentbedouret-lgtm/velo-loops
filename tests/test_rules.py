@@ -43,7 +43,8 @@ def test_reglages_v17():
     assert g.BACKTRACK_DEST is False                   # allers-retours vers une destination, en essai
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
-               "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT"):
+               "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
+               "INDUSTRIAL_CLUSTER"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -991,3 +992,12 @@ def test_sport_short(monkeypatch):
     for l in (short, long_, calm):
         g.score(l)
     assert seen == [base * g.SPORT_SHORT_FACTOR, base, g.RELIEF_WEIGHTS.get("facile")]
+
+
+def test_industrial_clusters():
+    """Parcelles industrielles voisines réunies (Sant Andreu de la Barca - Cornellà, comparaison 6)."""
+    from shapely.geometry import box
+    small = [box(2.0 + i * 0.0025, 41.4, 2.0 + i * 0.0025 + 0.002, 41.402) for i in range(8)]   # ~0,04 km2 chacune
+    assert all(p.area * g.KM2_PER_DEG2 < g.INDUSTRIAL_MIN_KM2 for p in small)
+    assert len(g.industrial_clusters(small)) == 1
+    assert g.industrial_clusters(small[:1]) == []
