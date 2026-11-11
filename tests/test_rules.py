@@ -44,7 +44,7 @@ def test_reglages_v17():
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
                "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
-               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST"):
+               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -1017,6 +1017,18 @@ def test_loop_first():
     assert ar.score == 90.0                            # écart de plus de LOOP_FIRST_GAP points : inchangé
 
 
+
+
+def test_axes_strict():
+    """AXES_STRICT : au-delà de 20 % de grands axes, pente 1,2 au lieu de 0,5 (28 % -> 9,6 points au lieu de 4)."""
+    assert g.AXES_STRICT_PER * (0.28 - g.AXES_OVER_SHARE) * 100 > 9.5
+    assert g.AXES_OVER_PER * (0.28 - g.AXES_OVER_SHARE) * 100 < 4.1
+    assert g._flag("axes_strict", g.AXES_STRICT) is False
+    g._TL.axes_strict = True
+    try:
+        assert g.axes_strict() is True
+    finally:
+        del g._TL.axes_strict
 
 
 def test_prev_faithful(monkeypatch):

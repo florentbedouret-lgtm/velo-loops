@@ -2092,6 +2092,11 @@ def axes_over() -> bool:
     return bool(getattr(_TL, "axes_over", AXES_OVER))
 
 
+def axes_strict() -> bool:
+    """Grands axes plus pénalisés au-delà du seuil (AXES_STRICT), réglable par fil d'exécution."""
+    return _flag("axes_strict", AXES_STRICT)
+
+
 def corridor_spurs_on() -> bool:
     """Allers-retours dans un couloir (CORRIDOR_SPURS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "corridor_spurs", CORRIDOR_SPURS))
@@ -3327,6 +3332,13 @@ AXES_OVER = True                    # v19 (17/10/2026, mesures s3 à s0 puis c5 
 AXES_OVER_SHARE = 0.20
 AXES_OVER_PER = 0.5
 AXES_OVER_MAX = 0.15
+# AXES_STRICT (essai, diagnostic rz5 et rz6, 11/11/2026) : avec les règles d'essai, les bonnes boucles perdent jusqu'à 20 points
+# de pénalités (défauts, détours, forme) quand les grands axes n'en coûtent que 4 à 28 % : Les Corts 2 h Modéré passe de 6 %
+# à 28 % de grands axes, 4 h Modéré de 14 % à 26 %. Allumée, la pente passe à AXES_STRICT_PER (28 % -> 9,6 points,
+# 33 % -> 15,6) et le plafond à AXES_STRICT_MAX. Éteinte en production.
+AXES_STRICT = False
+AXES_STRICT_PER = 1.2
+AXES_STRICT_MAX = 0.25
 # Relecture de l'Eixample par Florent (17/10/2026, 10 captures : « beaucoup de boucles problématiques »). Trois causes :
 # (1) CLEAN_PICKS : les détours en pâté de maisons, les éperons et les boucles accrochées étaient bien repérés (22 boucles
 # de l'Eixample sur 51 gardaient un détour) mais réparés seulement sur les 3 meilleures candidates de chaque tirage ; les
@@ -5237,7 +5249,10 @@ def score_from(l: Loop, relief_weight: float | None = None, lights_weight: float
     if axes_over():                                       # grands axes au-delà du seuil (AXES_OVER)
         over = l.shares.get("main_roads", 0.0) - AXES_OVER_SHARE
         if over > 0:
-            total -= min(AXES_OVER_MAX, AXES_OVER_PER * over)
+            if axes_strict():                             # pente plus forte (AXES_STRICT, essai)
+                total -= min(AXES_STRICT_MAX, AXES_STRICT_PER * over)
+            else:
+                total -= min(AXES_OVER_MAX, AXES_OVER_PER * over)
     if motorway_nuisance():                               # à côté d'une voie rapide (MOTORWAY_NUISANCE)
         if motorway_v2():                                 # 2e version (MOTORWAY_V2)
             total -= min(MOTORWAY_V2_MAX, MOTORWAY_V2_PER_KM * getattr(l, "motorway_km", 0.0))
