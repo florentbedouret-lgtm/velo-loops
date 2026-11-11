@@ -513,9 +513,9 @@ jobs:
             [ "$DIAG_PART" = "rz3" ] && RELIEF_IDS="sarria-sant-gervasi;horta-guinardo;cornella-de-llobregat;ciutat-vella;les-corts;sants-montjuic" && NATURE_TRACE="sants-montjuic|3|modere" && RELIEF_VARIANT=g_req+i
             [ "$DIAG_PART" = "rz4" ] && RELIEF_IDS="ripoll;castelldefels;sant-marti;monistrol-de-montserrat;collbato;granollers" && NATURE_TRACE="sant-marti|0.75|soutenu" && RELIEF_VARIANT=g_req+i
             # rz5 et rz6 (11/11/2026) : comme rz3 et rz4 sur moins de départs (rz3 et rz4 n'ont pas eu le temps de tous les
-            # finir), boucles de la production tracées règle par règle (sous-notes, note sans chaque règle)
-            [ "$DIAG_PART" = "rz5" ] && RELIEF_IDS="sant-marti;castelldefels;granollers" && NATURE_TRACE="sant-marti|0.75|soutenu;castelldefels|3|soutenu;granollers|1|facile" && RELIEF_VARIANT=g_req+i
-            [ "$DIAG_PART" = "rz6" ] && RELIEF_IDS="cornella-de-llobregat;les-corts;collbato" && NATURE_TRACE="cornella-de-llobregat|2|facile;les-corts|3|facile;collbato|1|facile" && RELIEF_VARIANT=g_req+i
+            # finir), boucles de la production tracées règle par règle (sous-notes, note sans chaque règle) ; 11/11/2026 au soir : cas restants avec LOOP_FIRST (éperons de Castelldefels, grands axes des Corts)
+            [ "$DIAG_PART" = "rz5" ] && RELIEF_IDS="sant-marti;castelldefels;granollers" && NATURE_TRACE="castelldefels|3|facile;castelldefels|4|facile;sant-marti|1.5|soutenu" && RELIEF_VARIANT=g_req+i
+            [ "$DIAG_PART" = "rz6" ] && RELIEF_IDS="cornella-de-llobregat;les-corts;collbato" && NATURE_TRACE="les-corts|2|modere;les-corts|4|modere;cornella-de-llobregat|4|soutenu" && RELIEF_VARIANT=g_req+i
             [ "$DIAG_PART" = "rx3" ] && NATURE_TRACE="les-corts|3|modere;terrassa|0.75|soutenu"
             [ "$DIAG_PART" = "rx4" ] && NATURE_TRACE="collbato|6|facile;manresa|6|facile"
             [ "$DIAG_PART" = "rv9" ] && NATURE_TRACE="sants-montjuic|1|facile;sant-andreu|2|facile"
