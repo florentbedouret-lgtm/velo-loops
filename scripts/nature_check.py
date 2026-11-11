@@ -483,6 +483,15 @@ def ablation(path, level, profile, d) -> dict:
     return out
 
 
+def parts_row(l) -> dict:
+    """Sous-notes (0 à 1) et poids de score() pour une boucle (TRACE)."""
+    try:
+        parts, weights = g.score_parts(l)
+    except Exception as e:                               # noqa: BLE001 : diagnostic seulement
+        return {"erreur": str(e)}
+    return {k: [round(v, 3), weights.get(k)] for k, v in parts.items()}
+
+
 def trace_pool(gh, st_, sid, level, d, options, logf):
     """Candidates d'une durée (TRACE) : note, durée, origine, conformité, et pourquoi l'ordre des durées les écarte."""
     g._TL.trace_detail = []                              # détail des voies agréables et des départs voisins
@@ -507,7 +516,11 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
     for profile, coords in (st_.get("previous") or {}).get((level, dm), []):
         way = g.route_waypoints(coords, step_m=g.previous_step())
         way[0] = way[-1] = [st_["lon"], st_["lat"]]
-        path = gh.via(way, profile, pass_through=True)
+        g._TL.faithful_route = g.prev_faithful()           # comme previous_candidates (PREV_FAITHFUL, 11/11/2026)
+        try:
+            path = gh.via(way, profile, pass_through=True)
+        finally:
+            g._TL.faithful_route = False
         l = g.analyse(path, level, profile, d, 2000, None) if path else None
         if l is None:
             prev.append({"ok": False})
@@ -529,7 +542,10 @@ def trace_pool(gh, st_, sid, level, d, options, logf):
                                  "sans_but": getattr(l, "aimless_bt", 0), "eau_sans_but": getattr(l, "water_bt", 0),
                                  "montee_demi_tour": getattr(l, "climb_mid_bt", 0),
                                  "rep_ordinaire": round(getattr(l, "rep_plain", 0.0), 3)},
-                     "ablation": ablation(path, level, profile, d)})
+                     "ablation": ablation(path, level, profile, d),
+                     # 11/11/2026 (Sant Martí 45 min : la boucle vallonnée de la production 50,4 -> 37,5 dans la variante) :
+                     # sous-notes et poids, pour voir quelle part baisse
+                     "parties": parts_row(l)})
     return {"bornes_min": [round(lo / 60), None if hi == float("inf") else round(hi / 60)], "candidates": rows,
             "publiees": prev,
             "detail": detail}
