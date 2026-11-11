@@ -44,7 +44,7 @@ def test_reglages_v17():
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
                "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
-               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY"):
+               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -1001,6 +1001,22 @@ def test_industrial_clusters():
     assert all(p.area * g.KM2_PER_DEG2 < g.INDUSTRIAL_MIN_KM2 for p in small)
     assert len(g.industrial_clusters(small)) == 1
     assert g.industrial_clusters(small[:1]) == []
+def test_loop_first():
+    """LOOP_FIRST : un aller-retour passe derrière une vraie boucle au moins aussi agréable, pas derrière une boucle
+    nettement moins agréable (« agréable identique > différent non agréable »)."""
+    def L(score, ov, scene, km=20):
+        return SimpleNamespace(score=score, overlap=ov, scenery={"score": scene}, distance_m=km * 1000)
+    ar, loop = L(81.6, 0.99, 60), L(70.6, 0.0, 67)
+    g.loop_first_pen([ar, loop])
+    assert ar.score < loop.score
+    ar, dull = L(81.6, 0.99, 80), L(78.0, 0.0, 50)
+    g.loop_first_pen([ar, dull])
+    assert ar.score == 81.6                            # boucle moins agréable : l aller-retour garde sa place
+    ar, far = L(90.0, 0.6, 60), L(70.0, 0.1, 70)
+    g.loop_first_pen([ar, far])
+    assert ar.score == 90.0                            # écart de plus de LOOP_FIRST_GAP points : inchangé
+
+
 
 
 def test_prev_faithful(monkeypatch):

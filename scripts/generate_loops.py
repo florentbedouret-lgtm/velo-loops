@@ -2722,6 +2722,16 @@ PREV_FAITHFUL = False
 # désagréable mais peu d'intérêt : l'éviter si possible » ; Sants-Montjuïc 3 h, comparaison 6 : demi-tour sec de 2,7 km
 # vers Montcada, compté comme « nature », contre une petite boucle préférée).
 DEAD_END_ANY = False
+# LOOP_FIRST (11/11/2026, diagnostic rz5 et rz6 : la variante choisissait un aller-retour repassé à 55-99 % devant une vraie
+# boucle au moins aussi agréable, Castelldefels 3 h Sportif 72 km repassés à 99 %, Granollers 1 h, Cornellà 2 h, Les Corts
+# 3 h ; les règles d'essai empilaient sur la boucle les pénalités de défaut, de zone industrielle et de forme, qu'un
+# aller-retour « propre » évite). Ordre voulu par Florent : « agréable différent > agréable identique ». Au dernier choix,
+# un aller-retour (repassé à plus de MAX_OVERLAP) passe juste derrière la mieux notée des vraies boucles dont le paysage
+# vaut au moins le sien moins LOOP_FIRST_SCENE (sur 100), si elle est à moins de LOOP_FIRST_GAP points. Une boucle
+# nettement moins agréable laisse gagner l'aller-retour agréable (« agréable identique > différent non agréable »).
+LOOP_FIRST = False
+LOOP_FIRST_SCENE = 10.0
+LOOP_FIRST_GAP = 15.0
 DEAD_END_LOOP_SHARE = 0.2
 DEAD_END_OUTBACK = 0.4            # boucle faite à 40 % deux fois : c'est un aller-retour, son bout n'est pas un
                                  # cul-de-sac (Horta 1 h Modéré, 04/11/2026 : retour agréable identique > différent)
@@ -2808,6 +2818,33 @@ def prev_faithful() -> bool:
 
 def dead_end_any() -> bool:
     return _flag("dead_end_any", DEAD_END_ANY)
+
+
+def loop_first() -> bool:
+    return _flag("loop_first", LOOP_FIRST)
+
+
+def _scene(l) -> float | None:
+    return None if l.scenery is None else l.scenery.get("score")
+
+
+def loop_first_pen(pool, log=None) -> None:
+    """Aller-retour derrière une vraie boucle au moins aussi agréable (LOOP_FIRST) : notes modifiées sur place."""
+    loops = [m for m in pool if m.overlap <= MAX_OVERLAP]
+    for l in pool:
+        if l.overlap <= MAX_OVERLAP or _scene(l) is None:
+            continue
+        ok = [m for m in loops if _scene(m) is not None and _scene(m) >= _scene(l) - LOOP_FIRST_SCENE
+              and m.score >= l.score - LOOP_FIRST_GAP]
+        if not ok:
+            continue
+        m = max(ok, key=lambda x: x.score)
+        if m.score <= l.score:
+            new = round(m.score - 0.1, 1)
+            if log:
+                log(f"    boucle avant aller-retour : {l.distance_m / 1000:.1f} km repassé à {l.overlap:.0%}, "
+                    f"note {l.score:.1f} -> {new:.1f} (boucle {m.distance_m / 1000:.1f} km {m.score:.1f})")
+            l.score = new
 
 
 def water_ar() -> bool:
@@ -6773,6 +6810,8 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
         dead_pen(pool)
         pool = _trim_pool(pool, prior, level, duration_h, bounds, log)   # celles que la pénalité fait passer devant
         dead_pen(pool)                                       # n'étaient jamais revues (Sants-Montjuïc 3 h Modéré, 03/11/2026)
+    if loop_first() and pool:                                # vraie boucle avant aller-retour (LOOP_FIRST)
+        loop_first_pen(pool, log)
     picks = pick_options(pool, prior)
     if dead_end():
         log("    choix : " + ", ".join(f"{lab} {l.distance_m / 1000:.1f} km {l.score:.1f}" for lab, l in picks))
