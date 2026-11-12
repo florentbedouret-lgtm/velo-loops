@@ -2097,6 +2097,11 @@ def axes_strict() -> bool:
     return _flag("axes_strict", AXES_STRICT)
 
 
+def fallback_rel() -> bool:
+    """Marge du repli de relief proportionnelle au relief (FALLBACK_REL), réglable par fil d'exécution."""
+    return _flag("fallback_rel", FALLBACK_REL)
+
+
 def corridor_spurs_on() -> bool:
     """Allers-retours dans un couloir (CORRIDOR_SPURS), réglable par fil d'exécution."""
     return bool(getattr(_TL, "corridor_spurs", CORRIDOR_SPURS))
@@ -3339,6 +3344,12 @@ AXES_OVER_MAX = 0.15
 AXES_STRICT = False
 AXES_STRICT_PER = 1.2
 AXES_STRICT_MAX = 0.25
+# FALLBACK_REL (essai, diagnostic rz5, 12/11/2026) : sans boucle conforme au relief, le repli gardait la mieux notée à
+# FALLBACK_RELIEF_TOL (1 m/km) de la moins vallonnée ; à Collbató 2 h Tranquille, 15,6 m/km noté 7,7 (zigzags le long de
+# l'A-2 et dans les lotissements) battait la boucle publiée vers Masquefa, 18,1 m/km notée 37. Allumée, la marge est
+# aussi d'au moins FALLBACK_REL_SHARE fois le relief de la moins vallonnée (15,6 -> 3,1 m/km). Éteinte en production.
+FALLBACK_REL = False
+FALLBACK_REL_SHARE = 0.2
 # Relecture de l'Eixample par Florent (17/10/2026, 10 captures : « beaucoup de boucles problématiques »). Trois causes :
 # (1) CLEAN_PICKS : les détours en pâté de maisons, les éperons et les boucles accrochées étaient bien repérés (22 boucles
 # de l'Eixample sur 51 gardaient un détour) mais réparés seulement sur les 3 meilleures candidates de chaque tirage ; les
@@ -5369,7 +5380,11 @@ def relief_filter(pool: list, level: str, log) -> list:
         return ok
     flat = min(pool, key=lambda l: l.dplus_per_km)
     if fallback_best():                                      # la mieux notée parmi les quasi-moins vallonnées
-        flat = max((l for l in pool if l.dplus_per_km <= flat.dplus_per_km + FALLBACK_RELIEF_TOL), key=lambda l: l.score)
+        tol = max(FALLBACK_RELIEF_TOL, FALLBACK_REL_SHARE * flat.dplus_per_km) if fallback_rel() else FALLBACK_RELIEF_TOL
+        near = [l for l in pool if l.dplus_per_km <= flat.dplus_per_km + tol]
+        if fallback_rel():                                   # faisable à cette allure d'abord (FALLBACK_REL)
+            near = [l for l in near if relief_hard_ok(l)] or near
+        flat = max(near, key=lambda l: l.score)
     if not relief_hard_ok(flat):                            # même le repli n'est pas faisable à cette allure (B)
         log(f"    relief : aucune boucle faisable ({level}) : la moins vallonnée ({flat.dplus_per_km:.1f} m/km) a une "
             f"montée trop dure, une rampe de {flat.terrain.get('max_grade_pct') or 0:.0f} % ou un relief trop fort, "

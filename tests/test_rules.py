@@ -44,7 +44,7 @@ def test_reglages_v17():
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
                "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
-               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT"):
+               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT", "FALLBACK_REL"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -1029,6 +1029,30 @@ def test_axes_strict():
         assert g.axes_strict() is True
     finally:
         del g._TL.axes_strict
+
+
+def test_fallback_rel():
+    """FALLBACK_REL : sans boucle conforme, marge de 20 % du relief de la moins vallonnée (Collbató 2 h Tranquille :
+    15,6 m/km noté 7,7 contre 18,1 m/km noté 37)."""
+    class L:
+        pass
+
+    def mk(dpk, sc):
+        l = L()
+        l.dplus_per_km, l.score, l.level = dpk, sc, "facile"
+        l.terrain = {"climbs": [], "max_grade_pct": 0.0}
+        return l
+    a, b, c = mk(15.6, 7.7), mk(18.1, 37.3), mk(19.5, 80.0)   # aucune sous 10 m/km
+    g._TL.fallback_best = True
+    try:
+        assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [a]      # marge de 1 m/km
+        g._TL.fallback_rel = True
+        try:
+            assert g.relief_filter([a, b, c], "facile", lambda *_: None) == [b]  # 18,1 <= 15,6 + 3,1 ; 19,5 au-delà
+        finally:
+            del g._TL.fallback_rel
+    finally:
+        del g._TL.fallback_best
 
 
 def test_prev_faithful(monkeypatch):
