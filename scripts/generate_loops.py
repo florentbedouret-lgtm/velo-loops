@@ -2732,6 +2732,13 @@ PREV_FAITHFUL = False
 # la variante gardait un aller-retour en ville. Allumée, si la longueur recalculée s'écarte de plus de PREV_EXACT_TOL de
 # l'originale, on retente sans sens imposé, puis avec un point tous les PREV_EXACT_STEP_M, et on garde la plus proche.
 PREV_EXACT = False
+# PREV_LEVELS (essai, 12/11/2026, Collbató 2 h Tranquille : la seule boucle goudronnée trouvée zigzague dans les
+# lotissements, notée 7,7 ; Florent : « une troisième option serait intéressante ») : les boucles publiées des autres allures
+# du même départ (Modéré 2 h « moins de relief » : 35 km goudronnés à 16,5 m/km) ne sont jamais essayées. Allumée, celles
+# dont la durée visée est entre PREV_LEVELS_SPAN fois la durée demandée sont recalculées et notées à l'allure demandée ;
+# time_ok et les autres filtres gardent seulement celles qui conviennent.
+PREV_LEVELS = False
+PREV_LEVELS_SPAN = (0.6, 1.3)
 PREV_EXACT_TOL = 0.03
 PREV_EXACT_STEP_M = 250.0
 # DEAD_END_ANY : un aller-retour « nature » ou « piste » d'au moins DEAD_END_MIN_M sans lieu remarquable au bout est un
@@ -2833,6 +2840,10 @@ def path_length(path) -> float:
     """Longueur (m) d'un trajet GraphHopper, d'après ses points."""
     c = path["points"]["coordinates"]
     return sum(haversine(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]) for i in range(1, len(c)))
+
+
+def prev_levels() -> bool:
+    return _flag("prev_levels", PREV_LEVELS)
 
 
 def prev_exact() -> bool:
@@ -6385,6 +6396,10 @@ def previous_candidates(gh, st, level, duration_h) -> list:
         items = [pc for (lv, _), lst in sorted(prev.items()) if lv == level for pc in lst]
     else:
         items = prev.get((level, round(duration_h * 60)), [])
+    if prev_levels():                                        # boucles des autres allures, à cette allure (PREV_LEVELS)
+        lo_, hi_ = PREV_LEVELS_SPAN[0] * duration_h * 60, PREV_LEVELS_SPAN[1] * duration_h * 60
+        items = list(items) + [(LEVELS[level]["profiles"][0], c) for (lv, m), lst in sorted(prev.items())
+                               if lv != level and lo_ <= m <= hi_ for _, c in lst]
     for profile, coords in items:
         way = route_waypoints(coords, step_m=previous_step())
         way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
