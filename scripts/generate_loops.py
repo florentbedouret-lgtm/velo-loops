@@ -6377,9 +6377,16 @@ def previous_candidates(gh, st, level, duration_h) -> list:
         finally:
             _TL.faithful_route = False
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
+        detail = getattr(_TL, "trace_detail", None)            # traçage (nature_check) : pourquoi elle est écartée
         if (loop is None or not time_ok(loop.time_s, duration_h) or not overlap_ok(loop)
                 or loop.u_turns > MAX_UTURNS or not dirt_ok(loop)):
+            if detail is not None:
+                detail.append("  boucle publiée écartée : " + ("pas de trajet" if loop is None else
+                              f"{loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, répétée {loop.overlap:.0%}, "
+                              f"{loop.u_turns} demi-tour(s), terre {'ok' if dirt_ok(loop) else 'non'}"))
             continue
+        if detail is not None:
+            detail.append(f"  boucle publiée reprise : {loop.distance_m / 1000:.1f} km, note {loop.score:.1f}")
         out.append(loop)
     return out
 

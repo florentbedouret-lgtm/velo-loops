@@ -514,7 +514,7 @@ jobs:
             [ "$DIAG_PART" = "rz4" ] && RELIEF_IDS="ripoll;castelldefels;sant-marti;monistrol-de-montserrat;collbato;granollers" && NATURE_TRACE="sant-marti|0.75|soutenu" && RELIEF_VARIANT=g_req+i
             # rz5 et rz6 (11/11/2026 ; reciblés le 12/11 sur les cas vus sur carte : Horta 1 h, Collbató 1 h et 2 h Facile, Les Corts 4 h Modéré, Cornellà 2 h Facile) : comme rz3 et rz4 sur moins de départs (rz3 et rz4 n'ont pas eu le temps de tous les
             # finir), boucles de la production tracées règle par règle (sous-notes, note sans chaque règle) ; 11/11/2026 au soir : cas restants avec LOOP_FIRST (éperons de Castelldefels, grands axes des Corts)
-            [ "$DIAG_PART" = "rz5" ] && RELIEF_IDS="horta-guinardo;collbato" && NATURE_TRACE="horta-guinardo|1|facile;collbato|1|facile;collbato|2|facile" && RELIEF_VARIANT=g_req+i
+            [ "$DIAG_PART" = "rz5" ] && RELIEF_IDS="horta-guinardo;collbato" && NATURE_TRACE="horta-guinardo|1|facile;collbato|1|facile;collbato|2|facile"
             [ "$DIAG_PART" = "rz6" ] && RELIEF_IDS="cornella-de-llobregat;les-corts" && NATURE_TRACE="les-corts|4|modere;cornella-de-llobregat|2|facile" && RELIEF_VARIANT=g_req+i
             [ "$DIAG_PART" = "rx3" ] && NATURE_TRACE="les-corts|3|modere;terrassa|0.75|soutenu"
             [ "$DIAG_PART" = "rx4" ] && NATURE_TRACE="collbato|6|facile;manresa|6|facile"
