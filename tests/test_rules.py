@@ -44,7 +44,7 @@ def test_reglages_v17():
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
                "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
-               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT", "FALLBACK_REL"):
+               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT", "FALLBACK_REL", "PREV_EXACT"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -1053,6 +1053,13 @@ def test_fallback_rel():
             del g._TL.fallback_rel
     finally:
         del g._TL.fallback_best
+
+
+def test_prev_exact():
+    """PREV_EXACT : longueur d'un trajet GraphHopper ; règle éteinte par défaut."""
+    p = {"points": {"coordinates": [[2.0, 41.0], [2.0, 41.01], [2.0, 41.0]]}}
+    assert 2200 < g.path_length(p) < 2250
+    assert g.prev_exact() is False
 
 
 def test_prev_faithful(monkeypatch):

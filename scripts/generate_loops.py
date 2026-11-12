@@ -2727,6 +2727,13 @@ INDUSTRIAL_CLUSTER_DEG = 0.0006
 # Martí 45 min Sportif 14,2 km noté 50 devenu 14,8 km noté 20 ; Sants-Montjuïc 3 h, Sarrià 5 h, Sant Martí 6 h, Les
 # Corts 4 h) ; les boucles que Florent préférait ne pouvaient plus gagner.
 PREV_FAITHFUL = False
+# PREV_EXACT (essai, diagnostic rz5, 12/11/2026) : la boucle publiée de Horta 1 h Tranquille (14,7 km, notée 28 par les règles
+# d'essai) était recalculée en 16,9 km avec un éperon (notée 11,8) à partir de ses points tous les 500 m et du sens imposé ;
+# la variante gardait un aller-retour en ville. Allumée, si la longueur recalculée s'écarte de plus de PREV_EXACT_TOL de
+# l'originale, on retente sans sens imposé, puis avec un point tous les PREV_EXACT_STEP_M, et on garde la plus proche.
+PREV_EXACT = False
+PREV_EXACT_TOL = 0.03
+PREV_EXACT_STEP_M = 250.0
 # DEAD_END_ANY : un aller-retour « nature » ou « piste » d'au moins DEAD_END_MIN_M sans lieu remarquable au bout est un
 # cul-de-sac (DEAD_END) partout, plus seulement le long d'une rivière (Florent : Monistrol 45 min, 08/11/2026, « pas
 # désagréable mais peu d'intérêt : l'éviter si possible » ; Sants-Montjuïc 3 h, comparaison 6 : demi-tour sec de 2,7 km
@@ -2820,6 +2827,16 @@ def sport_short() -> bool:
 
 def industrial_cluster() -> bool:
     return _flag("industrial_cluster", INDUSTRIAL_CLUSTER)
+
+
+def path_length(path) -> float:
+    """Longueur (m) d'un trajet GraphHopper, d'après ses points."""
+    c = path["points"]["coordinates"]
+    return sum(haversine(c[i - 1][0], c[i - 1][1], c[i][0], c[i][1]) for i in range(1, len(c)))
+
+
+def prev_exact() -> bool:
+    return _flag("prev_exact", PREV_EXACT)
 
 
 def prev_faithful() -> bool:
@@ -6374,6 +6391,17 @@ def previous_candidates(gh, st, level, duration_h) -> list:
         _TL.faithful_route = prev_faithful()
         try:
             path = gh.via(way, profile, pass_through=True)
+            if prev_exact() and path:                      # recalcul fidèle à la longueur publiée (PREV_EXACT)
+                orig = sum(haversine(coords[i - 1][0], coords[i - 1][1], coords[i][0], coords[i][1]) for i in range(1, len(coords)))
+                gap = lambda p_: abs(path_length(p_) - orig) / max(orig, 1.0)   # noqa: E731
+                for w_ in ([q[:2] for q in way], route_waypoints(coords, step_m=PREV_EXACT_STEP_M)):
+                    if gap(path) <= PREV_EXACT_TOL:
+                        break
+                    w_ = [list(q[:2]) for q in w_]
+                    w_[0] = w_[-1] = [st["lon"], st["lat"]]
+                    p2 = gh.via(w_, profile, pass_through=True)
+                    if p2 and gap(p2) < gap(path):
+                        path = p2
         finally:
             _TL.faithful_route = False
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
