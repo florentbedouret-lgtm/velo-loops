@@ -160,8 +160,26 @@ jobs:
           # empreinte publiée par GitHub pour graphhopper-web-11.0.jar (audit du 08/10/2026) : à mettre à jour avec GH_VERSION
           echo "b59c024afe172ec6ec85b6327006c3138ec58c7d0bcd26253d0e42853f613def  graphhopper-web.jar" | sha256sum -c -             || { echo "graphhopper-web.jar ne correspond pas à l'empreinte attendue"; exit 1; }
 
+      - name: Date du jour (copie de secours de l'extrait OSM)
+        if: ${{ steps.resolve_mode.outputs.mode != 'site' }}
+        id: today
+        run: echo "day=$(date -u +%y%m%d)" >> "$GITHUB_OUTPUT"
+
+      # 21/11/2026 : Geofabrik injoignable depuis GitHub toute une matinée (connexion refusée puis 404), 6 runs perdus.
+      # Copie de secours dans le cache GitHub (gratuit, pas de droit d'écriture sur le dépôt) : la plus récente est
+      # restaurée, utilisée seulement si Geofabrik ne répond pas, et remplacée une fois par jour.
+      - name: Copie de secours de l'extrait OSM (cache)
+        if: ${{ steps.resolve_mode.outputs.mode != 'site' }}
+        id: osm_cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25   # v5 (version figée, audit 08/10/2026)
+        with:
+          path: data/osm-cache
+          key: osm-pbf-${{ steps.today.outputs.day }}
+          restore-keys: osm-pbf-
+
       - name: Télécharger l'extrait OSM (Geofabrik) et le découper
         if: ${{ steps.resolve_mode.outputs.mode != 'site' }}
+        id: osm_dl
         env:
           BBOX_INPUT: ${{ inputs.bbox }}
           MODE: ${{ steps.resolve_mode.outputs.mode }}
@@ -177,7 +195,18 @@ jobs:
               echo "Lien « latest » indisponible, essai de $DATED"
               if curl -fL --max-redirs 5 --retry 2 -o data/source.osm.pbf "$DATED"; then ok=1; break; fi
             done
-            [ -n "$ok" ] || { echo "Aucun extrait Geofabrik téléchargeable"; exit 1; }
+            if [ -z "$ok" ]; then
+              if [ -s data/osm-cache/source.osm.pbf ]; then
+                echo "::warning::Geofabrik indisponible : copie de secours de l'extrait utilisée ($(cat data/osm-cache/date.txt 2>/dev/null))"
+                cp data/osm-cache/source.osm.pbf data/source.osm.pbf
+              else
+                echo "Aucun extrait Geofabrik téléchargeable, et pas de copie de secours"; exit 1
+              fi
+            fi
+          fi
+          if [ -z "${ok+x}" ] || [ -n "$ok" ]; then          # extrait frais : copie de secours à remplacer
+            mkdir -p data/osm-cache && cp data/source.osm.pbf data/osm-cache/source.osm.pbf && date -u +%F > data/osm-cache/date.txt
+            echo "fresh=1" >> "$GITHUB_OUTPUT"
           fi
           BBOX="$BBOX_INPUT"
           if [ -z "$BBOX" ] || [ "$BBOX" = "auto" ]; then
@@ -189,6 +218,13 @@ jobs:
           osmium tags-filter data/region.osm.pbf n/place=city,town,village -o data/places.osm.pbf --overwrite
           osmium export data/places.osm.pbf -f geojson -o data/places.geojson --overwrite
           ls -lh data
+
+      - name: Enregistrer la copie de secours de l'extrait OSM (une fois par jour)
+        if: ${{ steps.osm_dl.outputs.fresh == '1' && steps.osm_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25   # v5 (version figée, audit 08/10/2026)
+        with:
+          path: data/osm-cache
+          key: osm-pbf-${{ steps.today.outputs.day }}
 
       - name: Plan de couverture des départs (par zone)
         if: ${{ steps.resolve_mode.outputs.mode != 'generate_names' && steps.resolve_mode.outputs.mode != 'site' && !startsWith(steps.resolve_mode.outputs.mode, 'landcover') }}
