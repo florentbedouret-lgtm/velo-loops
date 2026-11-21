@@ -1,6 +1,6 @@
 {
   "name": "province-de-barcelone",
-  "geofabrik_url": "https://download.geofabrik.de/europe/spain/cataluna-latest.osm.pbf",
+  "geofabrik_url": "https://download.geofabrik.de/europe/spain/cataluna/cataluna-latest.osm.pbf",
   "bbox": [1.30, 41.20, 2.75, 42.35],
   "durations_h": [1, 2, 3],
   "levels": ["facile", "modere", "soutenu"],

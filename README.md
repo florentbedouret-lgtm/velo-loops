@@ -139,7 +139,7 @@ Le script refuse de tourner si le serveur n'a pas d'altitude (sauf `--allow-no-e
 ## 8. Avancé (facultatif) : lancer sur son propre ordinateur
 Nécessite Java 21, Python 3.12 et osmium-tool. Inutile pour l'instant.
 ```bash
-curl -L -o data/source.osm.pbf https://download.geofabrik.de/europe/spain/cataluna-latest.osm.pbf
+curl -L -o data/source.osm.pbf https://download.geofabrik.de/europe/spain/cataluna/cataluna-latest.osm.pbf
 osmium extract --bbox 1.30,41.20,2.75,42.35 --strategy=smart data/source.osm.pbf -o data/region.osm.pbf
 osmium tags-filter data/region.osm.pbf n/place=city,town,village -o data/places.osm.pbf
 osmium export data/places.osm.pbf -f geojson -o data/places.geojson
