@@ -2739,6 +2739,12 @@ PREV_EXACT = False
 # time_ok et les autres filtres gardent seulement celles qui conviennent.
 PREV_LEVELS = False
 PREV_LEVELS_SPAN = (0.6, 1.3)
+# PREV_SHORT : une boucle publiée d'une autre allure (PREV_LEVELS) est gardée un peu courte (dès 80 % de la durée) et un
+# peu plus répétée (30 %) quand elle est sans terre (Florent, 21/11/2026 : Collbató 2 h Tranquille, Modéré 1 h 30
+# goudronnée de 26,2 km, ~1 h 40 et 27 % répétée, préférée aux zigzags des lotissements). Essai : désactivé en production.
+PREV_SHORT = False
+PREV_SHORT_MIN = 0.8
+PREV_SHORT_OVERLAP = 0.30
 PREV_EXACT_TOL = 0.03
 PREV_EXACT_STEP_M = 250.0
 # DEAD_END_ANY : un aller-retour « nature » ou « piste » d'au moins DEAD_END_MIN_M sans lieu remarquable au bout est un
@@ -2844,6 +2850,17 @@ def path_length(path) -> float:
 
 def prev_levels() -> bool:
     return _flag("prev_levels", PREV_LEVELS)
+
+
+def prev_short() -> bool:
+    return _flag("prev_short", PREV_SHORT)
+
+
+def prev_short_ok(loop, duration_h) -> bool:
+    """Boucle d'une autre allure acceptable bien qu'un peu courte ou un peu répétée (PREV_SHORT)."""
+    r = loop.time_s / (duration_h * 3600.0)
+    return (PREV_SHORT_MIN <= r <= 1.0 + TIME_TOLERANCE and min(loop.overlap, getattr(loop, "overlap_v16", 1.0))
+            <= PREV_SHORT_OVERLAP and loop.u_turns <= MAX_UTURNS and dirt_ok(loop))
 
 
 def prev_exact() -> bool:
@@ -6398,9 +6415,11 @@ def previous_candidates(gh, st, level, duration_h) -> list:
         items = prev.get((level, round(duration_h * 60)), [])
     if prev_levels():                                        # boucles des autres allures, à cette allure (PREV_LEVELS)
         lo_, hi_ = PREV_LEVELS_SPAN[0] * duration_h * 60, PREV_LEVELS_SPAN[1] * duration_h * 60
-        items = list(items) + [(LEVELS[level]["profiles"][0], c) for (lv, m), lst in sorted(prev.items())
-                               if lv != level and lo_ <= m <= hi_ for _, c in lst]
-    for profile, coords in items:
+        other = [(LEVELS[level]["profiles"][0], c) for (lv, m), lst in sorted(prev.items())
+                 if lv != level and lo_ <= m <= hi_ for _, c in lst]
+        items = list(items) + other
+    n_own = len(items) - (len(other) if prev_levels() else 0)
+    for i_item, (profile, coords) in enumerate(items):
         way = route_waypoints(coords, step_m=previous_step())
         way[0] = way[-1] = [st["lon"], st["lat"]]          # départ actuel (il a pu être déplacé : start_moves.json)
         _TL.faithful_route = prev_faithful()
@@ -6421,15 +6440,18 @@ def previous_candidates(gh, st, level, duration_h) -> list:
             _TL.faithful_route = False
         loop = analyse(path, level, profile, duration_h, 2000, None) if path else None
         detail = getattr(_TL, "trace_detail", None)            # traçage (nature_check) : pourquoi elle est écartée
-        if (loop is None or not time_ok(loop.time_s, duration_h) or not overlap_ok(loop)
-                or loop.u_turns > MAX_UTURNS or not dirt_ok(loop)):
+        short = (loop is not None and prev_short() and i_item >= n_own and prev_short_ok(loop, duration_h))
+        if not short and (loop is None or not time_ok(loop.time_s, duration_h) or not overlap_ok(loop)
+                          or loop.u_turns > MAX_UTURNS or not dirt_ok(loop)):
             if detail is not None:
                 detail.append("  boucle publiée écartée : " + ("pas de trajet" if loop is None else
                               f"{loop.distance_m / 1000:.1f} km, {loop.time_s / 60:.0f} min, répétée {loop.overlap:.0%}, "
                               f"{loop.u_turns} demi-tour(s), terre {'ok' if dirt_ok(loop) else 'non'}"))
             continue
         if detail is not None:
-            detail.append(f"  boucle publiée reprise : {loop.distance_m / 1000:.1f} km, note {loop.score:.1f}")
+            detail.append(f"  boucle publiée reprise : {loop.distance_m / 1000:.1f} km, note {loop.score:.1f}"
+                          + (" (autre allure, un peu courte ou répétée)" if short and not (time_ok(loop.time_s, duration_h)
+                                                                             and overlap_ok(loop)) else ""))
         out.append(loop)
     return out
 

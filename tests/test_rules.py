@@ -44,7 +44,7 @@ def test_reglages_v17():
     for f_ in ("SMALL_MODEL", "WATER_HUG", "DEST_HERITAGE", "TOWNS_PEN", "LOOP_SHAPE", "HAIRPINS", "VILLAGE_PLUS", "SHORTCUT", "TRACK_GRADE", "AR_SUM",
                "VILLAGE_VIA", "PLEASANT_AR", "WATER_AR", "PLEASANT_ORDER", "DEAD_END", "REPEAT_FIX",
                "FOOT_NO_BIKE", "AR_STRICT", "UTURN_STRICT", "SPORT_SHORT",
-               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT", "FALLBACK_REL", "PREV_EXACT", "PREV_LEVELS"):
+               "INDUSTRIAL_CLUSTER", "PREV_FAITHFUL", "DEAD_END_ANY", "LOOP_FIRST", "AXES_STRICT", "FALLBACK_REL", "PREV_EXACT", "PREV_LEVELS", "PREV_SHORT"):
         assert getattr(g, f_) is False                 # demandes de Florent (24/10/2026 ; comparaison 6), en essai
     assert g.GOAL_RETURN is False                      # v20 : retour qui évite l'aller, en essai
     assert g.FLOW_V2 is False                          # répétition pesée davantage, en essai
@@ -1084,6 +1084,21 @@ def test_prev_levels():
     finally:
         del g._TL.previous_any
 
+
+def test_prev_short():
+    """PREV_SHORT : boucle d'une autre allure gardée dès 80 % de la durée et jusqu'à 30 % répétée, sans terre."""
+    from types import SimpleNamespace as N
+    ok = lambda t, ov, u=0: N(time_s=t * 60, overlap=ov, overlap_v16=ov, u_turns=u, unpaved_m=0.0)  # noqa: E731
+    old = g.dirt_ok
+    g.dirt_ok = lambda l: True
+    try:
+        assert g.prev_short_ok(ok(101, 0.27), 2.0)                 # Collbató 2 h : 1 h 41, 27 %
+        assert not g.prev_short_ok(ok(90, 0.27), 2.0)              # trop courte (< 96 min)
+        assert not g.prev_short_ok(ok(110, 0.35), 2.0)             # trop répétée
+        assert not g.prev_short_ok(ok(110, 0.2, u=9), 2.0)         # demi-tours
+    finally:
+        g.dirt_ok = old
+    assert g.PREV_SHORT is False
 
 def test_prev_faithful(monkeypatch):
     """Boucle publiée retracée sans le modèle des règles d'essai (comparaison 6 : Sant Martí 45 min Sportif déformé)."""
