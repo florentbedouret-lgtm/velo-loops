@@ -2858,9 +2858,12 @@ def prev_short() -> bool:
 
 def prev_short_ok(loop, duration_h) -> bool:
     """Boucle d'une autre allure acceptable bien qu'un peu courte ou un peu répétée (PREV_SHORT)."""
+    # 22/11/2026 : sans demi-tour ni crochet (diag rz1/rz2 : Ciutat Vella 45 min Soutenu, 1 demi-tour et 1 crochet ;
+    # Castelldefels 4 h Tranquille, 2 demi-tours et 3 crochets, note 43 -> 20,4)
     r = loop.time_s / (duration_h * 3600.0)
     return (PREV_SHORT_MIN <= r <= 1.0 + TIME_TOLERANCE and min(loop.overlap, getattr(loop, "overlap_v16", 1.0))
-            <= PREV_SHORT_OVERLAP and loop.u_turns <= MAX_UTURNS and dirt_ok(loop))
+            <= PREV_SHORT_OVERLAP and loop.u_turns == 0 and not (getattr(loop, "detours", None) or [])
+            and dirt_ok(loop))
 
 
 def prev_exact() -> bool:
