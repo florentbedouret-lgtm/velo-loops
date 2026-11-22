@@ -6920,6 +6920,13 @@ def choose_options(gh, st: dict, level: str, duration_h: float, pool: list, prio
     picks = pick_options(pool, prior)
     if dead_end():
         log("    choix : " + ", ".join(f"{lab} {l.distance_m / 1000:.1f} km {l.score:.1f}" for lab, l in picks))
+        if len(picks) == 1 and getattr(_TL, "trace_detail", None) is not None:   # traçage : pourquoi pas de 2e option
+            b_ = picks[0][1]
+            for l in sorted((x for x in pool if x is not b_), key=lambda x: -x.score)[:6]:
+                log(f"      2e option écartée ? {l.distance_m / 1000:.1f} km note {l.score:.1f} "
+                    f"({l.score / max(b_.score, 0.1):.0%} de la 1re), semblable à {similarity(l, b_):.0%}, "
+                    f"doublon d'une allure inférieure {any(same_route(l, a) for a in (prior or []))}, "
+                    f"garde-fou {secondary_ok(l, b_)}")
     if lights_late() and picks:                              # feux en fin de boucle (LIGHTS_LATE)
         picks = lights_late_swap(gh, level, duration_h, picks, log)
     full = pick_options(pool)
