@@ -2742,8 +2742,10 @@ PREV_LEVELS_SPAN = (0.6, 1.3)
 # PREV_SHORT : une boucle publiée d'une autre allure (PREV_LEVELS) est gardée un peu courte (dès 80 % de la durée) et un
 # peu plus répétée (30 %) quand elle est sans terre (Florent, 21/11/2026 : Collbató 2 h Tranquille, Modéré 1 h 30
 # goudronnée de 26,2 km, ~1 h 40 et 27 % répétée, préférée aux zigzags des lotissements). Essai : désactivé en production.
+# 23/11/2026 : seuil 80 % -> 84 % (diag rz1/rz2/rz5/rz6 : 50 boucles de la variante sous 85 % de la durée, contre 28 au
+# 12/11 ; la plupart entre 80 et 84 %) ; la boucle de Collbató (101 min sur 120, 84,2 %) reste acceptée.
 PREV_SHORT = False
-PREV_SHORT_MIN = 0.8
+PREV_SHORT_MIN = 0.84
 PREV_SHORT_OVERLAP = 0.30
 PREV_EXACT_TOL = 0.03
 PREV_EXACT_STEP_M = 250.0

@@ -1086,7 +1086,7 @@ def test_prev_levels():
 
 
 def test_prev_short():
-    """PREV_SHORT : boucle d'une autre allure gardée dès 80 % de la durée et jusqu'à 30 % répétée, sans terre."""
+    """PREV_SHORT : boucle d'une autre allure gardée dès 84 % de la durée et jusqu'à 30 % répétée, sans terre."""
     from types import SimpleNamespace as N
     ok = lambda t, ov, u=0, d=(): N(time_s=t * 60, overlap=ov, overlap_v16=ov, u_turns=u, unpaved_m=0.0,  # noqa: E731
                                     detours=list(d))
@@ -1094,7 +1094,8 @@ def test_prev_short():
     g.dirt_ok = lambda l: True
     try:
         assert g.prev_short_ok(ok(101, 0.27), 2.0)                 # Collbató 2 h : 1 h 41, 27 %
-        assert not g.prev_short_ok(ok(90, 0.27), 2.0)              # trop courte (< 96 min)
+        assert not g.prev_short_ok(ok(90, 0.27), 2.0)              # trop courte
+        assert not g.prev_short_ok(ok(99, 0.1), 2.0)               # 82 % : trop courte (seuil 84 % depuis le 23/11)
         assert not g.prev_short_ok(ok(110, 0.35), 2.0)             # trop répétée
         assert not g.prev_short_ok(ok(110, 0.2, u=1), 2.0)         # un demi-tour suffit à l'écarter
         assert not g.prev_short_ok(ok(110, 0.2, d=[{"a": 1, "b": 5}]), 2.0)  # un crochet aussi
